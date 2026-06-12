@@ -69,21 +69,63 @@ Aether.app/Contents/MacOS/Aether --headless=new --disable-gpu \
 
 ## MCP (recommended for agents)
 
-`sdk/aether_mcp.py` is a zero-dependency MCP server (stdio). Register it and your
-agent gets native tools: `aether_tabs`, `aether_new_tab`, `aether_navigate`,
-`aether_read_text`, `aether_observe`, `aether_click`, `aether_type`,
-`aether_press`, `aether_screenshot`, `aether_eval`.
+`sdk/aether_mcp.py` is a zero-dependency MCP server (stdio, Python 3.9+, stdlib
+only — nothing to `pip install`). Register it once and your agent gets native
+tools: `aether_tabs`, `aether_new_tab`, `aether_navigate`, `aether_read_text`,
+`aether_observe`, `aether_click`, `aether_type`, `aether_press`,
+`aether_screenshot`, `aether_eval`. It auto-discovers the running browser via
+`~/.aether/gateway.json`, so there is no token or port to configure.
 
+First, note the absolute path to the server (substitute below):
+
+```sh
+AETHER_MCP="$(cd "$(dirname "$(git rev-parse --show-toplevel)")"; pwd)/aether/sdk/aether_mcp.py"
+# …or just: /full/path/to/aether/sdk/aether_mcp.py
+```
+
+### Claude Code
+```sh
+claude mcp add aether -- python3 /full/path/to/aether/sdk/aether_mcp.py
+claude mcp list           # verify it shows "aether"
+```
+
+### Cursor — `~/.cursor/mcp.json` (or a project `.cursor/mcp.json`)
 ```json
 { "mcpServers": {
     "aether": { "command": "python3",
-                "args": ["/path/to/aether/sdk/aether_mcp.py"] } } }
+                "args": ["/full/path/to/aether/sdk/aether_mcp.py"] } } }
 ```
 
-It auto-discovers the browser via `~/.aether/gateway.json` — nothing to
-configure. Typical loop: `aether_navigate` → `aether_observe` (get element
-`ref`s) → `aether_click` / `aether_type` / `aether_press` → `aether_read_text`.
-No CSS selectors or escaping required.
+### Grok CLI — add to its MCP config (`~/.grok/mcp.json` or via its MCP add command)
+```json
+{ "mcpServers": {
+    "aether": { "command": "python3",
+                "args": ["/full/path/to/aether/sdk/aether_mcp.py"] } } }
+```
+
+### Claude Desktop — `~/Library/Application Support/Claude/claude_desktop_config.json`
+```json
+{ "mcpServers": {
+    "aether": { "command": "python3",
+                "args": ["/full/path/to/aether/sdk/aether_mcp.py"] } } }
+```
+
+Any other MCP client: run `python3 /full/path/to/aether/sdk/aether_mcp.py` as a
+stdio server.
+
+**Verify** (no client needed) — this lists the tools straight from the server:
+```sh
+printf '%s\n' \
+ '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' \
+ '{"jsonrpc":"2.0","method":"notifications/initialized"}' \
+ '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' \
+ | python3 /full/path/to/aether/sdk/aether_mcp.py
+```
+
+Once registered, the typical loop is `aether_navigate` → `aether_observe` (get
+element `ref`s) → `aether_click` / `aether_type` / `aether_press` →
+`aether_read_text`. No CSS selectors or shell escaping required. (Start Aether
+first, or the tools return "Aether is not running".)
 
 ## Drive it (Python SDK)
 
