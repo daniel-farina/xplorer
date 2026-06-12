@@ -6,8 +6,10 @@
 #include <utility>
 
 #include "base/base64.h"
+#include "base/base_paths.h"
 #include "base/files/file_util.h"
 #include "base/functional/bind.h"
+#include "base/path_service.h"
 #include "base/logging.h"
 #include "base/message_loop/message_pump_type.h"
 #include "base/json/json_reader.h"
@@ -30,6 +32,8 @@
 #include "net/base/ip_endpoint.h"
 #include "net/base/net_errors.h"
 #include "net/server/http_server_request_info.h"
+#include "net/server/http_server_response_info.h"
+#include "net/http/http_status_code.h"
 #include "net/socket/tcp_server_socket.h"
 #include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
 #include "ui/base/window_open_disposition.h"
@@ -87,6 +91,24 @@ void AgentGateway::StartServerOnIOThread(int port) {
   port_ = addr.port();
   server_ = std::make_unique<net::HttpServer>(std::move(socket), this);
   VLOG(1) << "AgentGateway listening on 127.0.0.1:" << port_;
+
+  // Write a FIXED discovery file so any agent finds the gateway without
+  // knowing the profile path or branding. This is the canonical way to
+  // connect: read ~/.aether/gateway.json -> {port, token}. Solves the
+  // "where is the token?" problem that trips agents up.
+  base::FilePath home;
+  if (base::PathService::Get(base::DIR_HOME, &home)) {
+    base::FilePath dir = home.AppendASCII(".aether");
+    base::CreateDirectory(dir);
+    base::DictValue d;
+    d.Set("port", port_);
+    d.Set("token", token_);
+    d.Set("url", "http://127.0.0.1:" + base::NumberToString(port_));
+    d.Set("cdp_url", "ws://127.0.0.1:9333");
+    std::string json;
+    base::JSONWriter::Write(d, &json);
+    base::WriteFile(dir.AppendASCII("gateway.json"), json);
+  }
 }
 
 bool AgentGateway::CheckAuth(const net::HttpServerRequestInfo& info) {
@@ -98,8 +120,28 @@ void AgentGateway::OnConnect(int connection_id) {}
 
 void AgentGateway::OnHttpRequest(int connection_id,
                                  const net::HttpServerRequestInfo& info) {
+  // Unauthenticated discovery: GET /  tells an agent how to authenticate,
+  // without leaking the token. Lets a connecting agent orient itself.
+  if (info.path == "/" || info.path == "/whoami") {
+    net::HttpServerResponseInfo resp(net::HTTP_OK);
+    resp.SetBody(
+        "{\"service\":\"aether-agent-gateway\",\"auth\":\"Bearer token from "
+        "~/.aether/gateway.json\",\"docs\":\"https://github.com/daniel-farina/"
+        "aether/blob/master/AGENTS.md\"}",
+        "application/json");
+    server_->SendResponse(connection_id, resp, TRAFFIC_ANNOTATION_FOR_TESTS);
+    return;
+  }
   if (!CheckAuth(info)) {
-    server_->Send404(connection_id, TRAFFIC_ANNOTATION_FOR_TESTS);
+    // 401 (not 404) with a body that says exactly how to authenticate — a 404
+    // here made agents think the API was missing and gave up.
+    net::HttpServerResponseInfo resp(net::HTTP_UNAUTHORIZED);
+    resp.SetBody(
+        "{\"error\":\"missing or invalid bearer token\",\"fix\":\"read token "
+        "from ~/.aether/gateway.json and send 'Authorization: Bearer "
+        "<token>'\"}",
+        "application/json");
+    server_->SendResponse(connection_id, resp, TRAFFIC_ANNOTATION_FOR_TESTS);
     return;
   }
   // Command execution must happen on the UI thread; hop and reply async.

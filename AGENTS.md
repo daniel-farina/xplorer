@@ -43,9 +43,21 @@ automatically and listens on loopback:
 | 9334 | HTTP + WS | High-level Agent API (below) |
 | 9333 | CDP | Raw Chrome DevTools Protocol — point Playwright/Puppeteer here, no flags |
 
-**Auth token** is written to `<profile>/agent_token`
-(default `~/Library/Application Support/Aether/Default/agent_token`) or set
-`$AETHER_TOKEN`. Send it as `Authorization: Bearer <token>` on every request.
+### Connecting — start here
+
+**Read one fixed file: `~/.aether/gateway.json`.** Aether writes it at startup:
+
+```json
+{ "url": "http://127.0.0.1:9334", "token": "…", "cdp_url": "ws://127.0.0.1:9333" }
+```
+
+Send the token as `Authorization: Bearer <token>` on every request. Do **not**
+hunt for the token under the profile dir — always read `~/.aether/gateway.json`.
+(`GET /` is unauthenticated and tells you this; a missing/bad token returns
+**401** with a `fix` message, not a 404.)
+
+The **easiest** way to drive Aether is the bundled **MCP server** — your agent
+gets native `aether_*` tools and never touches curl/JSON. See "MCP" below.
 
 For headless / server use:
 ```sh
@@ -54,6 +66,24 @@ Aether.app/Contents/MacOS/Aether --headless=new --disable-gpu \
 ```
 
 ---
+
+## MCP (recommended for agents)
+
+`sdk/aether_mcp.py` is a zero-dependency MCP server (stdio). Register it and your
+agent gets native tools: `aether_tabs`, `aether_new_tab`, `aether_navigate`,
+`aether_read_text`, `aether_observe`, `aether_click`, `aether_type`,
+`aether_press`, `aether_screenshot`, `aether_eval`.
+
+```json
+{ "mcpServers": {
+    "aether": { "command": "python3",
+                "args": ["/path/to/aether/sdk/aether_mcp.py"] } } }
+```
+
+It auto-discovers the browser via `~/.aether/gateway.json` — nothing to
+configure. Typical loop: `aether_navigate` → `aether_observe` (get element
+`ref`s) → `aether_click` / `aether_type` / `aether_press` → `aether_read_text`.
+No CSS selectors or escaping required.
 
 ## Drive it (Python SDK)
 
