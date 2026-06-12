@@ -485,9 +485,17 @@ std::string BuildHudJs(const std::string& stats_json) {
       f++; host.__raf=requestAnimationFrame(draw);
     })();
     host.__last=Date.now();
-    // fade out if no agent activity for 6s
-    setInterval(()=>{host.style.opacity=(Date.now()-host.__last>6000)?'0':'1';
-      host.style.transition='opacity .6s';},800);
+    // The HUD PERSISTS — it never disappears when the agent stops. Instead it
+    // flips a live/idle indicator so the last metrics stay on screen.
+    setInterval(()=>{
+      const idle=Date.now()-host.__last>4000;
+      const sp=root.querySelector('.spark'),dot=root.querySelector('.dot');
+      if(sp){sp.textContent=idle?'◾ idle':'◼ live';
+        sp.style.color=idle?'#8a93bf':'#67e8ff';}
+      if(dot){dot.style.animation=idle?'none':'p 1.1s infinite';
+        dot.style.background=idle?'#8a93bf':'#67e8ff';
+        dot.style.boxShadow=idle?'none':'0 0 8px #67e8ff';}
+    },800);
   }
   const root=host.__root; host.__last=Date.now(); host.style.opacity='1';
   root.querySelector('.lbl').textContent='🤖 '+(S.model||'AI agent')+

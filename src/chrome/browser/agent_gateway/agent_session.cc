@@ -142,21 +142,31 @@ void AgentSession::Screenshot(ResultCallback cb) {
         gfx::Size(), /*stay_hidden=*/false, /*stay_awake=*/true,
         /*is_activity=*/true);
   }
-  base::DictValue params;
-  params.Set("format", "png");
-  // Capture the visible viewport only. captureBeyondViewport renders the whole
-  // (possibly enormous) page, which can take many seconds / time out on long
-  // results pages; the viewport is what an agent wants and is bounded in size.
-  params.Set("captureBeyondViewport", false);
-  // Release the capturer hold once the frame has been encoded and returned.
-  SendCommand(
-      "Page.captureScreenshot", std::move(params),
-      base::BindOnce(
-          [](AgentSession* self, ResultCallback cb, base::DictValue r) {
-            self->capture_hold_.RunAndReset();
-            std::move(cb).Run(std::move(r));
-          },
-          this, std::move(cb)));
+  // The HUD now PERSISTS on the page, so hide it just for this capture and
+  // restore it after — agent screenshots stay clean, the human still sees it.
+  Eval("(()=>{const h=document.getElementById('__aether_hud');"
+       "if(h)h.style.visibility='hidden';return 1;})()",
+       base::BindOnce(
+           [](AgentSession* self, ResultCallback cb, base::DictValue) {
+             base::DictValue params;
+             params.Set("format", "png");
+             params.Set("captureBeyondViewport", false);
+             self->SendCommand(
+                 "Page.captureScreenshot", std::move(params),
+                 base::BindOnce(
+                     [](AgentSession* self, ResultCallback cb,
+                        base::DictValue r) {
+                       self->capture_hold_.RunAndReset();
+                       self->Eval(
+                           "(()=>{const h=document.getElementById("
+                           "'__aether_hud');if(h)h.style.visibility='visible';"
+                           "return 1;})()",
+                           base::DoNothing());
+                       std::move(cb).Run(std::move(r));
+                     },
+                     self, std::move(cb)));
+           },
+           this, std::move(cb)));
 }
 
 void AgentSession::Click(const std::string& selector, ResultCallback cb) {
