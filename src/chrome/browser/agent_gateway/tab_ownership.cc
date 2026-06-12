@@ -12,6 +12,9 @@ namespace agent_gateway {
 // static
 const void* const TabOwnership::kKey = &TabOwnership::kKey;
 
+TabOwnership::TabOwnership() = default;
+TabOwnership::~TabOwnership() = default;
+
 // static
 TabOwnership* TabOwnership::GetOrCreate(content::WebContents* wc) {
   TabOwnership* info = Get(wc);

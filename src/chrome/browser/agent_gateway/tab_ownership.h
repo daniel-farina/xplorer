@@ -22,6 +22,9 @@ class TabOwnership : public base::SupportsUserData::Data {
  public:
   static const void* const kKey;
 
+  TabOwnership();
+  ~TabOwnership() override;
+
   // Returns the ownership record for |wc|, creating an empty one if absent.
   static TabOwnership* GetOrCreate(content::WebContents* wc);
   // Returns the record for |wc| or nullptr if the tab is unowned.
@@ -31,6 +34,22 @@ class TabOwnership : public base::SupportsUserData::Data {
   std::string owner;
   // Free-form label an agent can set to describe the tab's purpose.
   std::string label;
+  // The model driving this tab (e.g. "Grok"), from X-Agent-Model.
+  std::string model;
+  std::string last_action;
+
+  // Per-tab activity counters — what the in-tab HUD shows, so each tab
+  // reflects only the agent controlling it (not a global blend).
+  int64_t requests = 0;
+  int64_t bytes_in = 0;
+  int64_t bytes_out = 0;
+  int64_t navigations = 0;
+  int64_t clicks = 0;
+  int64_t types = 0;
+  int64_t presses = 0;
+  int64_t reads = 0;
+  int64_t screenshots = 0;
+  int64_t evals = 0;
 };
 
 }  // namespace agent_gateway

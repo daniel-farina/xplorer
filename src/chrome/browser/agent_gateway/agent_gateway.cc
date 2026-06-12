@@ -309,11 +309,21 @@ void AgentGateway::RouteRequest(int connection_id,
   // Sessions are cached per-connection in ws mode; HTTP mode is one-shot.
   auto session = std::make_unique<AgentSession>(wc);
   AgentSession* s = session.get();
-  // Keep the session alive until the callback fires.
+  // Keep the session alive until the callback fires; also tally this tab's
+  // outbound bytes for its HUD (guarded by a WeakPtr in case the tab closes).
   auto done = base::BindOnce(
-      [](std::unique_ptr<AgentSession>, decltype(reply) reply,
-         base::DictValue d) { std::move(reply).Run(std::move(d)); },
-      std::move(session), std::move(reply));
+      [](std::unique_ptr<AgentSession>,
+         base::WeakPtr<content::WebContents> wcw, decltype(reply) reply,
+         base::DictValue d) {
+        if (wcw) {
+          std::string j;
+          base::JSONWriter::Write(d, &j);
+          TabOwnership::GetOrCreate(wcw.get())->bytes_out +=
+              static_cast<int64_t>(j.size());
+        }
+        std::move(reply).Run(std::move(d));
+      },
+      std::move(session), wc->GetWeakPtr(), std::move(reply));
 
   const std::string verb = parts.size() > 2 ? parts[2] : "";
   auto body = base::JSONReader::ReadDict(info.data, base::JSON_PARSE_RFC);
@@ -322,30 +332,41 @@ void AgentGateway::RouteRequest(int connection_id,
     return v ? *v : std::string();
   };
 
+  // Per-tab metrics + identity: the HUD on this tab reflects only the agent
+  // driving THIS tab, not a global blend across agents.
+  TabOwnership* tm = TabOwnership::GetOrCreate(wc);
+  tm->requests++;
+  tm->bytes_in += static_cast<int64_t>(info.data.size());
+  if (!agent_id.empty() && tm->owner.empty())
+    tm->owner = agent_id;
+  if (auto it = info.headers.find("x-agent-model"); it != info.headers.end())
+    tm->model = it->second;
+  tm->last_action = verb;
+
   metrics_.last_action = verb;
   if (verb == "navigate") {
-    metrics_.navigations++;
+    metrics_.navigations++; tm->navigations++;
     s->Navigate(str("url"), std::move(done));
   } else if (verb == "text") {
-    metrics_.reads++;
+    metrics_.reads++; tm->reads++;
     s->ExtractText(std::move(done));
   } else if (verb == "axtree") {
-    metrics_.reads++;
+    metrics_.reads++; tm->reads++;
     s->AXTree(std::move(done));
   } else if (verb == "screenshot") {
-    metrics_.screenshots++;
+    metrics_.screenshots++; tm->screenshots++;
     s->Screenshot(std::move(done));
   } else if (verb == "click") {
-    metrics_.clicks++;
+    metrics_.clicks++; tm->clicks++;
     s->Click(str("selector"), std::move(done));
   } else if (verb == "type") {
-    metrics_.types++;
+    metrics_.types++; tm->types++;
     s->Type(str("selector"), str("text"), std::move(done));
   } else if (verb == "press") {
-    metrics_.presses++;
+    metrics_.presses++; tm->presses++;
     s->Press(str("key"), std::move(done));
   } else if (verb == "eval") {
-    metrics_.evals++;
+    metrics_.evals++; tm->evals++;
     s->Eval(str("expression"), std::move(done));
   } else {
     base::DictValue err;
@@ -490,8 +511,24 @@ std::string BuildHudJs(const std::string& stats_json) {
 }  // namespace
 
 void AgentGateway::PokeHud(content::WebContents* wc) {
+  // Build the HUD from THIS tab's own counters/identity, not the global blend.
+  TabOwnership* t = TabOwnership::GetOrCreate(wc);
+  base::DictValue d;
+  d.Set("model", t->model.empty() ? "AI agent" : t->model);
+  d.Set("agent", t->owner);
+  d.Set("requests", static_cast<int>(t->requests));
+  d.Set("kb_in", static_cast<double>(t->bytes_in) / 1024.0);
+  d.Set("kb_out", static_cast<double>(t->bytes_out) / 1024.0);
+  d.Set("navigations", static_cast<int>(t->navigations));
+  d.Set("clicks", static_cast<int>(t->clicks));
+  d.Set("types", static_cast<int>(t->types));
+  d.Set("presses", static_cast<int>(t->presses));
+  d.Set("reads", static_cast<int>(t->reads));
+  d.Set("screenshots", static_cast<int>(t->screenshots));
+  d.Set("evals", static_cast<int>(t->evals));
+  d.Set("last_action", t->last_action);
   std::string stats;
-  base::JSONWriter::Write(metrics_.ToDict(), &stats);
+  base::JSONWriter::Write(d, &stats);
   std::string js = BuildHudJs(stats);
   auto session = std::make_unique<AgentSession>(wc);
   AgentSession* s = session.get();
