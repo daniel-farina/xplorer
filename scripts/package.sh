@@ -1,16 +1,16 @@
 #!/bin/sh
-# Package a built Aether.app into distributable .zip + .dmg with checksums.
+# Package a built XBrowser.app into distributable .zip + .dmg with checksums.
 # Usage: ./scripts/package.sh [path-to-out-dir] [version]
 set -eu
 AETHER="$(cd "$(dirname "$0")/.." && pwd)"
 OUT="${1:-$AETHER/../chromium/src/out/aether}"
 VERSION="${2:-dev}"
-APP="$OUT/Aether.app"
+APP="$OUT/XBrowser.app"
 DIST="$AETHER/dist"
 ARCH="$(uname -m)"           # arm64 or x86_64
-NAME="Aether-macos-$ARCH"
+NAME="XBrowser-macos-$ARCH"
 
-[ -d "$APP" ] || { echo "No Aether.app at $APP — build first." >&2; exit 1; }
+[ -d "$APP" ] || { echo "No XBrowser.app at $APP — build first." >&2; exit 1; }
 mkdir -p "$DIST"
 
 echo "Zipping..."
@@ -20,7 +20,7 @@ echo "Building DMG..."
 TMP="$(mktemp -d)"
 cp -R "$APP" "$TMP/"
 ln -s /Applications "$TMP/Applications"
-hdiutil create -volname "Aether" -srcfolder "$TMP" -ov -format UDZO \
+hdiutil create -volname "XBrowser" -srcfolder "$TMP" -ov -format UDZO \
   "$DIST/$NAME.dmg" >/dev/null
 rm -rf "$TMP"
 

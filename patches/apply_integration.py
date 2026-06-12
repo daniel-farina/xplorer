@@ -92,14 +92,14 @@ def main(src: Path):
         "  }\n",
     )
 
-    # 4. Branding: rename the product from "Chromium" to "Aether".
+    # 4. Branding: rename the product from "Chromium" to "XBrowser".
     branding = src / "chrome/app/theme/chromium/BRANDING"
     b = branding.read_text()
-    if "PRODUCT_FULLNAME=Aether" not in b:
-        b = b.replace("PRODUCT_FULLNAME=Chromium", "PRODUCT_FULLNAME=Aether")
-        b = b.replace("PRODUCT_SHORTNAME=Chromium", "PRODUCT_SHORTNAME=Aether")
+    if "PRODUCT_FULLNAME=XBrowser" not in b:
+        b = b.replace("PRODUCT_FULLNAME=Chromium", "PRODUCT_FULLNAME=XBrowser")
+        b = b.replace("PRODUCT_SHORTNAME=Chromium", "PRODUCT_SHORTNAME=XBrowser")
         b = b.replace("MAC_BUNDLE_ID=org.chromium.Chromium",
-                      "MAC_BUNDLE_ID=org.aether.Aether")
+                      "MAC_BUNDLE_ID=org.xbrowser.XBrowser")
         branding.write_text(b)
         print(f"  edited: {branding}")
 
@@ -107,18 +107,18 @@ def main(src: Path):
     # in the (non-Google, non-CfT) else branch of chromium_strings.grd.
     grd = src / "chrome/app/chromium_strings.grd"
     g = grd.read_text()
-    if ">\n            Aether\n" not in g:
+    if ">\n            XBrowser\n" not in g:
         g = g.replace(
             'desc="The Chrome application name" translateable="false">\n'
             "            Chromium\n",
             'desc="The Chrome application name" translateable="false">\n'
-            "            Aether\n",
+            "            XBrowser\n",
         )
         g = g.replace(
             'desc="The Chrome application short name." translateable="false">\n'
             "            Chromium\n",
             'desc="The Chrome application short name." translateable="false">\n'
-            "            Aether\n",
+            "            XBrowser\n",
         )
         grd.write_text(g)
         print(f"  edited: {grd}")

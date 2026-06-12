@@ -1,6 +1,6 @@
-# Aether — the AI-native browser
+# XBrowser — the AI-native browser
 
-Aether is a full **Chromium fork** (Blink, V8, the multiprocess sandbox — the
+XBrowser is a full **Chromium fork** (Blink, V8, the multiprocess sandbox — the
 real engine, not Electron or a wrapper) modified at the C++ source level so any
 agent can connect and drive it fast. This file is the guide for **agents and
 the people wiring them up**.
@@ -11,11 +11,11 @@ the people wiring them up**.
 
 ### Option A — download a release (recommended)
 
-1. Grab the latest `Aether-macos-arm64.dmg` (or `.zip`) from the
+1. Grab the latest `XBrowser-macos-arm64.dmg` (or `.zip`) from the
    [Releases](../../releases) page.
-2. Open the DMG and drag **Aether** to Applications.
+2. Open the DMG and drag **XBrowser** to Applications.
 3. First launch: macOS Gatekeeper may warn (the build is self-signed). Right-
-   click → Open, or run `xattr -dr com.apple.quarantine /Applications/Aether.app`.
+   click → Open, or run `xattr -dr com.apple.quarantine /Applications/XBrowser.app`.
 
 ### Option B — build from source
 
@@ -25,17 +25,17 @@ You need macOS + Xcode, ~100 GB free disk, and a few hours.
 git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git
 export PATH="$PWD/depot_tools:$PATH"
 mkdir chromium && cd chromium && fetch --no-history chromium && cd ..
-git clone https://github.com/daniel-farina/aether.git
-./aether/apply.sh ./chromium/src      # overlay Aether onto Chromium
+git clone https://github.com/daniel-farina/xbrowser.git
+./aether/apply.sh ./chromium/src      # overlay XBrowser onto Chromium
 ./aether/build.sh ./chromium/src      # gn gen + autoninja  (the long step)
-open ./chromium/src/out/aether/Aether.app
+open ./chromium/src/out/aether/XBrowser.app
 ```
 
 ---
 
 ## Launch
 
-Aether is a normal browser — double-click it. The **Agent Gateway** starts
+XBrowser is a normal browser — double-click it. The **Agent Gateway** starts
 automatically and listens on loopback:
 
 | Port | Protocol | Use |
@@ -45,7 +45,7 @@ automatically and listens on loopback:
 
 ### Connecting — start here
 
-**Read one fixed file: `~/.aether/gateway.json`.** Aether writes it at startup:
+**Read one fixed file: `~/.aether/gateway.json`.** XBrowser writes it at startup:
 
 ```json
 { "url": "http://127.0.0.1:9334", "token": "…", "cdp_url": "ws://127.0.0.1:9333" }
@@ -56,12 +56,12 @@ hunt for the token under the profile dir — always read `~/.aether/gateway.json
 (`GET /` is unauthenticated and tells you this; a missing/bad token returns
 **401** with a `fix` message, not a 404.)
 
-The **easiest** way to drive Aether is the bundled **MCP server** — your agent
+The **easiest** way to drive XBrowser is the bundled **MCP server** — your agent
 gets native `aether_*` tools and never touches curl/JSON. See "MCP" below.
 
 For headless / server use:
 ```sh
-Aether.app/Contents/MacOS/Aether --headless=new --disable-gpu \
+XBrowser.app/Contents/MacOS/XBrowser --headless=new --disable-gpu \
   --user-data-dir=/tmp/aether --no-first-run
 ```
 
@@ -124,8 +124,8 @@ printf '%s\n' \
 
 Once registered, the typical loop is `aether_navigate` → `aether_observe` (get
 element `ref`s) → `aether_click` / `aether_type` / `aether_press` →
-`aether_read_text`. No CSS selectors or shell escaping required. (Start Aether
-first, or the tools return "Aether is not running".)
+`aether_read_text`. No CSS selectors or shell escaping required. (Start XBrowser
+first, or the tools return "XBrowser is not running".)
 
 ## Drive it (Python SDK)
 
@@ -170,7 +170,7 @@ Tab ids look like `"892053753:0"` (browser session id : tab index).
 
 ### Identify yourself (shows in the on-screen HUD)
 
-When an agent drives a tab, Aether shows a live overlay in that tab — an
+When an agent drives a tab, XBrowser shows a live overlay in that tab — an
 animated badge with the model name and a metrics bar (calls, KB in/out, clicks,
 reads…). It only appears while you're acting and fades after ~6s idle. To make
 it show **who** is driving, send these headers on every request:
@@ -186,7 +186,7 @@ also at `GET /stats`. (Via the MCP server, set `AETHER_AGENT_ID` /
 
 ### Live action highlighting
 
-While an agent works, Aether flashes a color-coded box over what it touches —
+While an agent works, XBrowser flashes a color-coded box over what it touches —
 **clicks** (pink), **typed** fields (blue), **read** regions (green), and every
 element it **scans/links** it identifies (cyan / gold). Toggle it from the
 **✦ highlights** button in the HUD badge (on by default, remembered per-site).
@@ -213,13 +213,13 @@ tabs show `owner: ""`.
 
 ## What makes it AI-native (built into the C++, no flags)
 
-- **Drive any tab while Aether is in the background** — control is pure CDP
+- **Drive any tab while XBrowser is in the background** — control is pure CDP
   against the renderer; the window need not be focused or visible.
 - **Many tabs in parallel** — background/occlusion throttling is disabled by
   default, so background tabs run full-speed.
 - **Screenshot hidden/occluded/inactive tabs** — the gateway holds a
   `WebContents::IncrementCapturerCount()` ref during capture, forcing frame
-  production. Stock Chrome hangs here; Aether doesn't.
+  production. Stock Chrome hangs here; XBrowser doesn't.
 - **First-class automation** — `navigator.webdriver` stays `false`; no
   "controlled by automation" banner.
 
