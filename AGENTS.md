@@ -168,6 +168,22 @@ Tab ids look like `"892053753:0"` (browser session id : tab index).
 | `POST /tabs/{id}/press` | `{key}` | a key (Enter, ArrowDown, Tab, …) |
 | `POST /tabs/{id}/eval` | `{expression}` | `Runtime.evaluate` |
 
+### Identify yourself (shows in the on-screen HUD)
+
+When an agent drives a tab, Aether shows a live overlay in that tab — an
+animated badge with the model name and a metrics bar (calls, KB in/out, clicks,
+reads…). It only appears while you're acting and fades after ~6s idle. To make
+it show **who** is driving, send these headers on every request:
+
+```
+X-Agent-Id: grok-cli         # your agent's name
+X-Agent-Model: Grok          # the model — shown on the badge
+```
+
+Without them the badge still appears but reads "🤖 AI agent". Live counters are
+also at `GET /stats`. (Via the MCP server, set `AETHER_AGENT_ID` /
+`AETHER_AGENT_MODEL` in the server's `env` and it sends these for you.)
+
 ### Multi-agent: ownership & context
 
 Send `X-Agent-Id: <name>` on requests. Tabs you open are stamped with you as

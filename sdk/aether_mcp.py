@@ -42,7 +42,13 @@ def api(method, path, body=None):
         g["url"] + path, method=method,
         data=json.dumps(body).encode() if body is not None else None,
         headers={"Authorization": "Bearer " + g["token"],
-                 "Content-Type": "application/json"})
+                 "Content-Type": "application/json",
+                 # Identify the agent so the in-tab HUD shows who/which model
+                 # is driving. Configure via env in your MCP server entry:
+                 #   "env": {"AETHER_AGENT_MODEL": "Grok", "AETHER_AGENT_ID": "grok-cli"}
+                 "X-Agent-Id": os.environ.get("AETHER_AGENT_ID", "mcp"),
+                 "X-Agent-Model": os.environ.get("AETHER_AGENT_MODEL",
+                                                  "AI agent")})
     with urllib.request.urlopen(req, timeout=60) as r:
         return json.load(r)
 

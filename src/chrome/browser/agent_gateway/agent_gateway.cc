@@ -164,6 +164,7 @@ void AgentGateway::RouteRequest(int connection_id,
           return;
         std::string json;
         base::JSONWriter::Write(d, &json);
+        self->metrics_.bytes_out += static_cast<int64_t>(json.size());
         self->server_thread_->task_runner()->PostTask(
             FROM_HERE,
             base::BindOnce(
@@ -175,18 +176,32 @@ void AgentGateway::RouteRequest(int connection_id,
       },
       weak_factory_.GetWeakPtr(), connection_id);
 
+  // Count every request flowing through the gateway.
+  metrics_.requests++;
+  metrics_.bytes_in += static_cast<int64_t>(info.data.size());
+
+  // Agent identity + model: any request may carry "X-Agent-Id" / "X-Agent-Model"
+  // to declare who is acting and which model. Header names arrive lowercased.
+  std::string agent_id;
+  if (auto it = info.headers.find("x-agent-id"); it != info.headers.end())
+    agent_id = it->second;
+  if (!agent_id.empty())
+    metrics_.agent = agent_id;
+  if (auto it = info.headers.find("x-agent-model"); it != info.headers.end())
+    metrics_.model = it->second;
+
+  // GET /stats — live metrics (also rendered in the in-tab HUD).
+  if (parts.size() == 1 && parts[0] == "stats") {
+    std::move(reply).Run(metrics_.ToDict());
+    return;
+  }
+
   if (parts.empty() || parts[0] != "tabs") {
     base::DictValue err;
     err.Set("error", "unknown route");
     std::move(reply).Run(std::move(err));
     return;
   }
-
-  // Agent identity: any request may carry "X-Agent-Id" to declare which agent
-  // is acting. Header names arrive lowercased.
-  std::string agent_id;
-  if (auto it = info.headers.find("x-agent-id"); it != info.headers.end())
-    agent_id = it->second;
 
   // GET /tabs — enumerate with full per-tab context for the agent.
   if (parts.size() == 1 && info.method == "GET") {
@@ -307,27 +322,42 @@ void AgentGateway::RouteRequest(int connection_id,
     return v ? *v : std::string();
   };
 
-  if (verb == "navigate")
+  metrics_.last_action = verb;
+  if (verb == "navigate") {
+    metrics_.navigations++;
     s->Navigate(str("url"), std::move(done));
-  else if (verb == "text")
+  } else if (verb == "text") {
+    metrics_.reads++;
     s->ExtractText(std::move(done));
-  else if (verb == "axtree")
+  } else if (verb == "axtree") {
+    metrics_.reads++;
     s->AXTree(std::move(done));
-  else if (verb == "screenshot")
+  } else if (verb == "screenshot") {
+    metrics_.screenshots++;
     s->Screenshot(std::move(done));
-  else if (verb == "click")
+  } else if (verb == "click") {
+    metrics_.clicks++;
     s->Click(str("selector"), std::move(done));
-  else if (verb == "type")
+  } else if (verb == "type") {
+    metrics_.types++;
     s->Type(str("selector"), str("text"), std::move(done));
-  else if (verb == "press")
+  } else if (verb == "press") {
+    metrics_.presses++;
     s->Press(str("key"), std::move(done));
-  else if (verb == "eval")
+  } else if (verb == "eval") {
+    metrics_.evals++;
     s->Eval(str("expression"), std::move(done));
-  else {
+  } else {
     base::DictValue err;
     err.Set("error", "unknown verb");
     std::move(done).Run(std::move(err));
+    return;
   }
+
+  // Refresh the "controlled by AI" HUD overlay in the tab being acted on.
+  // (Skip for screenshot to avoid the overlay appearing in captures.)
+  if (verb != "screenshot")
+    PokeHud(wc);
 }
 
 void AgentGateway::OnWebSocketRequest(int connection_id,
@@ -361,6 +391,113 @@ void AgentGateway::OnWebSocketMessage(int connection_id, std::string data) {
 
 void AgentGateway::OnClose(int connection_id) {
   ws_sessions_.erase(connection_id);
+}
+
+base::DictValue AgentGateway::Metrics::ToDict() const {
+  base::DictValue d;
+  d.Set("model", model.empty() ? "AI agent" : model);
+  d.Set("agent", agent);
+  d.Set("requests", static_cast<int>(requests));
+  d.Set("kb_in", static_cast<double>(bytes_in) / 1024.0);
+  d.Set("kb_out", static_cast<double>(bytes_out) / 1024.0);
+  d.Set("navigations", static_cast<int>(navigations));
+  d.Set("clicks", static_cast<int>(clicks));
+  d.Set("types", static_cast<int>(types));
+  d.Set("presses", static_cast<int>(presses));
+  d.Set("reads", static_cast<int>(reads));
+  d.Set("screenshots", static_cast<int>(screenshots));
+  d.Set("evals", static_cast<int>(evals));
+  d.Set("last_action", last_action);
+  return d;
+}
+
+namespace {
+
+// A self-contained, idempotent HUD injected into any tab an agent controls.
+// Renders a colorful animated pixel badge ("controlled by <model>") top-right
+// and a live metrics strip along the bottom. Marked data-aether-hud so the
+// gateway's own text extraction / observe skip it. Re-running just refreshes
+// the stats (passed as a JSON object literal) — the animation keeps running.
+std::string BuildHudJs(const std::string& stats_json) {
+  return R"JS((function(S){
+  const ID='__aether_hud';
+  let host=document.getElementById(ID);
+  if(!host){
+    host=document.createElement('div');
+    host.id=ID; host.setAttribute('data-aether-hud','1');
+    host.style.cssText='all:initial;position:fixed;inset:0;pointer-events:none;z-index:2147483647;';
+    (document.documentElement||document.body).appendChild(host);
+    const root=host.attachShadow?host.attachShadow({mode:'closed'}):host;
+    const wrap=document.createElement('div');
+    wrap.innerHTML=`
+      <style>
+        .badge{position:fixed;top:12px;right:12px;display:flex;align-items:center;gap:8px;
+          font:600 12px/1.2 -apple-system,system-ui,sans-serif;color:#e8ecff;
+          background:rgba(20,16,46,.82);backdrop-filter:blur(8px);
+          border:1px solid rgba(150,130,255,.45);border-radius:10px;padding:6px 10px;
+          box-shadow:0 4px 20px rgba(80,40,160,.4);}
+        .badge canvas{border-radius:5px;display:block;image-rendering:pixelated;}
+        .dot{width:7px;height:7px;border-radius:50%;background:#67e8ff;
+          box-shadow:0 0 8px #67e8ff;animation:p 1.1s infinite;}
+        @keyframes p{0%,100%{opacity:1}50%{opacity:.25}}
+        .bar{position:fixed;left:0;right:0;bottom:0;display:flex;gap:18px;
+          align-items:center;font:500 11px/1 ui-monospace,Menlo,monospace;
+          color:#cdd6ff;background:linear-gradient(90deg,rgba(18,14,40,.94),rgba(40,20,70,.94));
+          border-top:1px solid rgba(150,130,255,.4);padding:7px 14px;}
+        .bar b{color:#9b8cff;font-weight:700;} .bar .v{color:#fff;}
+        .spark{color:#67e8ff;}
+      </style>
+      <div class="badge"><canvas width="22" height="22"></canvas>
+        <span class="dot"></span><span class="lbl"></span></div>
+      <div class="bar"></div>`;
+    root.appendChild(wrap);
+    host.__root=root;
+    // colorful pixel animation
+    const cv=root.querySelector('canvas'),ctx=cv.getContext('2d'),N=11,P=2;
+    let f=0;
+    (function draw(){
+      for(let y=0;y<N;y++)for(let x=0;x<N;x++){
+        const h=((x*7+y*13+f*4)%360);
+        ctx.fillStyle='hsl('+h+',90%,'+(45+30*Math.sin((x+y+f/6)))+'%)';
+        ctx.fillRect(x*P,y*P,P,P);
+      }
+      f++; host.__raf=requestAnimationFrame(draw);
+    })();
+    host.__last=Date.now();
+    // fade out if no agent activity for 6s
+    setInterval(()=>{host.style.opacity=(Date.now()-host.__last>6000)?'0':'1';
+      host.style.transition='opacity .6s';},800);
+  }
+  const root=host.__root; host.__last=Date.now(); host.style.opacity='1';
+  root.querySelector('.lbl').textContent='🤖 '+(S.model||'AI agent')+
+    (S.agent?'  ·  '+S.agent:'');
+  const kb=n=>n.toFixed(n<10?2:0);
+  root.querySelector('.bar').innerHTML=
+    '<b>AETHER</b> <span class="spark">▮ live</span>'+
+    '<span><b>calls</b> <span class="v">'+S.requests+'</span></span>'+
+    '<span><b>↓</b> <span class="v">'+kb(S.kb_in)+'KB</span></span>'+
+    '<span><b>↑</b> <span class="v">'+kb(S.kb_out)+'KB</span></span>'+
+    '<span><b>nav</b> <span class="v">'+S.navigations+'</span></span>'+
+    '<span><b>clicks</b> <span class="v">'+S.clicks+'</span></span>'+
+    '<span><b>typed</b> <span class="v">'+S.types+'</span></span>'+
+    '<span><b>keys</b> <span class="v">'+S.presses+'</span></span>'+
+    '<span><b>reads</b> <span class="v">'+S.reads+'</span></span>'+
+    '<span><b>shots</b> <span class="v">'+S.screenshots+'</span></span>'+
+    '<span style="margin-left:auto;opacity:.7">last: '+(S.last_action||'-')+'</span>';
+})JS" + std::string(")(") + stats_json + ")";
+}
+
+}  // namespace
+
+void AgentGateway::PokeHud(content::WebContents* wc) {
+  std::string stats;
+  base::JSONWriter::Write(metrics_.ToDict(), &stats);
+  std::string js = BuildHudJs(stats);
+  auto session = std::make_unique<AgentSession>(wc);
+  AgentSession* s = session.get();
+  s->Eval(js, base::BindOnce([](std::unique_ptr<AgentSession>,
+                                base::DictValue) {},
+                             std::move(session)));
 }
 
 }  // namespace agent_gateway

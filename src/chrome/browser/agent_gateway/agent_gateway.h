@@ -10,7 +10,12 @@
 
 #include "base/memory/weak_ptr.h"
 #include "base/threading/thread.h"
+#include "base/values.h"
 #include "net/server/http_server.h"
+
+namespace content {
+class WebContents;
+}
 
 namespace agent_gateway {
 
@@ -60,15 +65,37 @@ class AgentGateway : public net::HttpServer::Delegate {
   void OnClose(int connection_id) override;
 
  private:
+  // Live counters for everything flowing through the gateway. Surfaced both at
+  // GET /stats and in the in-tab HUD overlay.
+  struct Metrics {
+    int64_t requests = 0;
+    int64_t bytes_in = 0;
+    int64_t bytes_out = 0;
+    int64_t navigations = 0;
+    int64_t clicks = 0;
+    int64_t types = 0;
+    int64_t presses = 0;
+    int64_t reads = 0;        // text + axtree
+    int64_t screenshots = 0;
+    int64_t evals = 0;
+    std::string model;        // declared via X-Agent-Model
+    std::string agent;        // declared via X-Agent-Id
+    std::string last_action;
+    base::DictValue ToDict() const;
+  };
+
   explicit AgentGateway(int port);
   void StartServerOnIOThread(int port);
   bool CheckAuth(const net::HttpServerRequestInfo& info);
   void RouteRequest(int connection_id,
                     const net::HttpServerRequestInfo& info);
+  // Injects/refreshes the "controlled by AI" HUD overlay in |wc|.
+  void PokeHud(content::WebContents* wc);
 
   std::unique_ptr<base::Thread> server_thread_;
   std::unique_ptr<net::HttpServer> server_;
   std::map<int, std::unique_ptr<AgentSession>> ws_sessions_;
+  Metrics metrics_;
   int port_ = 0;
   std::string token_;
   base::WeakPtrFactory<AgentGateway> weak_factory_{this};
