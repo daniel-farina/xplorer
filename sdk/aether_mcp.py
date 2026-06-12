@@ -83,17 +83,24 @@ def t_read_text(a):
 
 
 def t_observe(a):
-    """Return interactive elements (role + accessible name) — site-agnostic."""
+    """Return interactive elements (role + accessible name) — site-agnostic.
+    Optional: role (filter, e.g. 'gridcell'), limit (default 80)."""
     tab = a.get("tab") or _first_tab()
+    role = a.get("role", "")
+    limit = int(a.get("limit", 80))
     js = ("(()=>{const S='a,button,input,textarea,select,[role=button],"
-          "[role=link],[role=option],[role=tab],[role=combobox],[role=gridcell]';"
+          "[role=link],[role=option],[role=tab],[role=combobox],[role=gridcell],"
+          "[role=menuitem],[role=checkbox],[contenteditable=true]';"
+          "const FR=" + json.dumps(role) + ";const LIM=" + str(limit) + ";"
           "const out=[];let n=0;for(const e of document.querySelectorAll(S)){"
           "const r=e.getBoundingClientRect();if(r.width<=0||r.height<=0)continue;"
+          "const role=e.getAttribute('role')||e.tagName.toLowerCase();"
+          "if(FR&&role!==FR)continue;"
           "const nm=(e.getAttribute('aria-label')||e.innerText||e.value||"
           "e.placeholder||'').trim().replace(/\\s+/g,' ').slice(0,80);"
           "if(!nm)continue;e.setAttribute('data-aref',n);"
-          "out.push({ref:n++,role:e.getAttribute('role')||e.tagName.toLowerCase(),"
-          "name:nm});}return JSON.stringify(out.slice(0,60));})()")
+          "out.push({ref:n++,role:role,name:nm});if(out.length>=LIM)break;}"
+          "return JSON.stringify(out);})()")
     r = api("POST", f"/tabs/{tab}/eval", {"expression": js})
     return text(r.get("result", {}).get("value", "[]"))
 
@@ -107,8 +114,27 @@ def t_click(a):
 def t_type(a):
     tab = a.get("tab") or _first_tab()
     sel = a.get("selector") or f'[data-aref="{a["ref"]}"]'
-    return text(json.dumps(
-        api("POST", f"/tabs/{tab}/type", {"selector": sel, "text": a["text"]})))
+    # A trusted click focuses the page's REAL editable input — even when the
+    # target is a role=combobox wrapper that delegates to a hidden input
+    # (Google Flights does this). We then clear and type into document
+    # .activeElement rather than guessing a descendant, which is what made
+    # autocomplete fields land text in the wrong box.
+    api("POST", f"/tabs/{tab}/click", {"selector": sel})
+    prep = ("(()=>{const e=document.activeElement;"
+            "if(!e||!e.matches('input,textarea,[contenteditable=true]'))"
+            "return'no-input';document.querySelectorAll('[data-atype]')"
+            ".forEach(x=>x.removeAttribute('data-atype'));"
+            "e.setAttribute('data-atype','1');"
+            "const s=Object.getOwnPropertyDescriptor("
+            "window.HTMLInputElement.prototype,'value');if(s&&s.set){"
+            "s.set.call(e,'');e.dispatchEvent(new Event('input',{bubbles:true}));}"
+            "return e.getAttribute('aria-label')||'ok';})()")
+    r = api("POST", f"/tabs/{tab}/eval", {"expression": prep})
+    if r.get("result", {}).get("value") == "no-input":
+        return text("type: clicking the target did not focus a text input")
+    return text(json.dumps(api("POST", f"/tabs/{tab}/type",
+                               {"selector": '[data-atype="1"]',
+                                "text": a["text"]})))
 
 
 def t_press(a):
@@ -153,8 +179,13 @@ TOOLS = {
                          {"type": "object", "properties": {"tab": TAB}},
                          t_read_text),
     "aether_observe": ("List interactive elements (role + name + ref) on the "
-                       "page. Use the ref with aether_click/aether_type.",
-                       {"type": "object", "properties": {"tab": TAB}}, t_observe),
+                       "page. Use the ref with aether_click/aether_type. "
+                       "Optionally filter by role (e.g. 'gridcell','option').",
+                       {"type": "object", "properties": {
+                           "tab": TAB,
+                           "role": {"type": "string",
+                                    "description": "filter to this ARIA role"},
+                           "limit": {"type": "integer"}}}, t_observe),
     "aether_click": ("Click an element by ref (from aether_observe) or CSS "
                      "selector.", {"type": "object", "properties": {
                          "ref": {"type": "integer"},
