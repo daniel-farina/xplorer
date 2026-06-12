@@ -311,19 +311,26 @@ void AgentGateway::RouteRequest(int connection_id,
   AgentSession* s = session.get();
   // Keep the session alive until the callback fires; also tally this tab's
   // outbound bytes for its HUD (guarded by a WeakPtr in case the tab closes).
+  const std::string verb_for_hud = parts.size() > 2 ? parts[2] : "";
   auto done = base::BindOnce(
-      [](std::unique_ptr<AgentSession>,
-         base::WeakPtr<content::WebContents> wcw, decltype(reply) reply,
-         base::DictValue d) {
+      [](std::unique_ptr<AgentSession>, base::WeakPtr<AgentGateway> self,
+         base::WeakPtr<content::WebContents> wcw, std::string verb,
+         decltype(reply) reply, base::DictValue d) {
         if (wcw) {
           std::string j;
           base::JSONWriter::Write(d, &j);
           TabOwnership::GetOrCreate(wcw.get())->bytes_out +=
               static_cast<int64_t>(j.size());
+          // Refresh the HUD AFTER the action completes (so for navigate it
+          // lands on the freshly-loaded page, not the one being torn down).
+          // Skip screenshot so the overlay isn't captured.
+          if (self && verb != "screenshot")
+            self->PokeHud(wcw.get());
         }
         std::move(reply).Run(std::move(d));
       },
-      std::move(session), wc->GetWeakPtr(), std::move(reply));
+      std::move(session), weak_factory_.GetWeakPtr(), wc->GetWeakPtr(),
+      verb_for_hud, std::move(reply));
 
   const std::string verb = parts.size() > 2 ? parts[2] : "";
   auto body = base::JSONReader::ReadDict(info.data, base::JSON_PARSE_RFC);
@@ -374,11 +381,8 @@ void AgentGateway::RouteRequest(int connection_id,
     std::move(done).Run(std::move(err));
     return;
   }
-
-  // Refresh the "controlled by AI" HUD overlay in the tab being acted on.
-  // (Skip for screenshot to avoid the overlay appearing in captures.)
-  if (verb != "screenshot")
-    PokeHud(wc);
+  // HUD refresh now happens in the |done| callback above, after the action
+  // completes — so navigations re-show it on the loaded page.
 }
 
 void AgentGateway::OnWebSocketRequest(int connection_id,
