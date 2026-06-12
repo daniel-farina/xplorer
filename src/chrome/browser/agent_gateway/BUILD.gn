@@ -1,0 +1,20 @@
+# Copyright 2026 The Aether Authors.
+
+source_set("agent_gateway") {
+  sources = [
+    "agent_gateway.cc",
+    "agent_gateway.h",
+    "agent_session.cc",
+    "agent_session.h",
+    "tab_ownership.cc",
+    "tab_ownership.h",
+  ]
+  deps = [
+    "//base",
+    "//chrome/browser/profiles",
+    "//chrome/browser/ui",
+    "//content/public/browser",
+    "//net",
+    "//ui/base",
+  ]
+}
