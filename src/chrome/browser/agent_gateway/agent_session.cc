@@ -30,7 +30,42 @@ constexpr char kExtractTextJs[] = R"js(
   doc.querySelectorAll(kill).forEach(n => n.remove());
   const main = doc.querySelector('main,article,[role=main]') || doc.body;
   const text = (main ? main.innerText : '').replace(/\n{3,}/g, '\n\n').trim();
+  // Show the agent the region it's reading.
+  if (main && window.__aetherHL) { const r = main.getBoundingClientRect();
+    window.__aetherHL(r.x, r.y, r.width, Math.min(r.height, innerHeight), 'read'); }
   return JSON.stringify({title: document.title, url: location.href, text});
+})()
+)js";
+
+// Defines window.__aetherHL once: a live "agent is looking here" visualizer.
+// Draws a transient, color-coded box over a viewport rect — click=pink,
+// type=blue, read=green, scan=cyan, link=gold. Respects a per-site on/off
+// toggle in localStorage (on by default). Marked data-aether-hud so the
+// gateway's own text/observe reads skip it. Idempotent — safe to prepend to
+// any action's eval.
+constexpr char kHLEnsure[] = R"js(
+(() => {
+  if (window.__aetherHL) return;
+  const C = document.createElement('div');
+  C.setAttribute('data-aether-hud', '1');
+  C.style.cssText = 'all:initial;position:fixed;inset:0;pointer-events:none;'+
+    'z-index:2147483646';
+  (document.documentElement || document.body).appendChild(C);
+  const COL = {click:'#ff3da6', type:'#3da6ff', read:'#36e07f',
+               scan:'#67e8ff', link:'#ffd23d'};
+  window.__aetherHL = (x, y, w, h, kind) => {
+    try { if (localStorage.getItem('__aether_hl') === 'off') return; } catch(e){}
+    if (w <= 0 || h <= 0) return;
+    const c = COL[kind] || '#fff';
+    const b = document.createElement('div');
+    b.style.cssText = 'position:fixed;left:'+x+'px;top:'+y+'px;width:'+w+'px;'+
+      'height:'+h+'px;border:2px solid '+c+';border-radius:4px;box-sizing:border-box;'+
+      'box-shadow:0 0 12px '+c+';background:'+c+'1f;pointer-events:none;'+
+      'transition:opacity .7s ease;opacity:.95;';
+    C.appendChild(b);
+    setTimeout(() => { b.style.opacity = '0'; }, kind === 'scan' ? 450 : 600);
+    setTimeout(() => { b.remove(); }, 1300);
+  };
 })()
 )js";
 
@@ -122,7 +157,7 @@ void AgentSession::Eval(const std::string& expression, ResultCallback cb) {
 }
 
 void AgentSession::ExtractText(ResultCallback cb) {
-  Eval(kExtractTextJs, std::move(cb));
+  Eval(std::string(kHLEnsure) + ";" + kExtractTextJs, std::move(cb));
 }
 
 void AgentSession::AXTree(ResultCallback cb) {
@@ -172,10 +207,12 @@ void AgentSession::Screenshot(ResultCallback cb) {
 void AgentSession::Click(const std::string& selector, ResultCallback cb) {
   // Resolve the selector in-page and dispatch a trusted click via CDP input
   // events so it is indistinguishable from a user click.
-  Eval("(() => { const e = document.querySelector(" +
+  Eval(std::string(kHLEnsure) + ";(() => { const e = document.querySelector(" +
            base::GetQuotedJSONString(selector) +
            "); if (!e) return null; e.scrollIntoView({block:'center'});"
            "const r = e.getBoundingClientRect();"
+           "if (window.__aetherHL) window.__aetherHL(r.x,r.y,r.width,r.height,"
+           "'click');"
            "return JSON.stringify({x: r.x + r.width/2, y: r.y + r.height/2});"
            "})()",
        base::BindOnce(

@@ -105,6 +105,11 @@ def t_observe(a):
           "const nm=(e.getAttribute('aria-label')||e.innerText||e.value||"
           "e.placeholder||'').trim().replace(/\\s+/g,' ').slice(0,80);"
           "if(!nm)continue;e.setAttribute('data-aref',n);"
+          # Visualize what the agent is looking at: outline each element
+          # (links in gold, everything else cyan) if highlighting is on.
+          "if(window.__aetherHL){const r=e.getBoundingClientRect();"
+          "window.__aetherHL(r.x,r.y,r.width,r.height,"
+          "(role==='link'||e.tagName==='A')?'link':'scan');}"
           "out.push({ref:n++,role:role,name:nm});if(out.length>=LIM)break;}"
           "return JSON.stringify(out);})()")
     r = api("POST", f"/tabs/{tab}/eval", {"expression": js})

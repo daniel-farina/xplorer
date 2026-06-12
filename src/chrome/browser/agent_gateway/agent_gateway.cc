@@ -445,6 +445,20 @@ namespace {
 // the stats (passed as a JSON object literal) — the animation keeps running.
 std::string BuildHudJs(const std::string& stats_json) {
   return R"JS((function(S){
+  // Ensure the highlight visualizer exists (also defined by click/read evals).
+  if(!window.__aetherHL){
+    const HC=document.createElement('div');HC.setAttribute('data-aether-hud','1');
+    HC.style.cssText='all:initial;position:fixed;inset:0;pointer-events:none;z-index:2147483646';
+    (document.documentElement||document.body).appendChild(HC);
+    const COL={click:'#ff3da6',type:'#3da6ff',read:'#36e07f',scan:'#67e8ff',link:'#ffd23d'};
+    window.__aetherHL=(x,y,w,h,kind)=>{try{if(localStorage.getItem('__aether_hl')==='off')return;}catch(e){}
+      if(w<=0||h<=0)return;const c=COL[kind]||'#fff';const b=document.createElement('div');
+      b.style.cssText='position:fixed;left:'+x+'px;top:'+y+'px;width:'+w+'px;height:'+h+'px;'+
+        'border:2px solid '+c+';border-radius:4px;box-sizing:border-box;box-shadow:0 0 12px '+c+';'+
+        'background:'+c+'1f;pointer-events:none;transition:opacity .7s ease;opacity:.95;';
+      HC.appendChild(b);setTimeout(()=>{b.style.opacity='0';},kind==='scan'?450:600);
+      setTimeout(()=>{b.remove();},1300);};
+  }
   const ID='__aether_hud';
   let host=document.getElementById(ID);
   if(!host){
@@ -462,9 +476,15 @@ std::string BuildHudJs(const std::string& stats_json) {
           border:1px solid rgba(150,130,255,.45);border-radius:10px;padding:6px 10px;
           box-shadow:0 4px 20px rgba(80,40,160,.4);}
         .badge canvas{border-radius:5px;display:block;image-rendering:pixelated;}
+        .badge{pointer-events:auto;}
         .dot{width:7px;height:7px;border-radius:50%;background:#67e8ff;
           box-shadow:0 0 8px #67e8ff;animation:p 1.1s infinite;}
         @keyframes p{0%,100%{opacity:1}50%{opacity:.25}}
+        .set{cursor:pointer;background:rgba(103,232,255,.12);color:#cdd6ff;
+          border:1px solid rgba(150,130,255,.5);border-radius:6px;
+          font:600 10px -apple-system,system-ui,sans-serif;padding:3px 7px;
+          margin-left:2px;}
+        .set:hover{background:rgba(103,232,255,.25);}
         .bar{position:fixed;left:0;right:0;bottom:0;display:flex;gap:18px;
           align-items:center;font:500 11px/1 ui-monospace,Menlo,monospace;
           color:#cdd6ff;background:linear-gradient(90deg,rgba(18,14,40,.94),rgba(40,20,70,.94));
@@ -473,10 +493,19 @@ std::string BuildHudJs(const std::string& stats_json) {
         .spark{color:#67e8ff;}
       </style>
       <div class="badge"><canvas width="22" height="22"></canvas>
-        <span class="dot"></span><span class="lbl"></span></div>
+        <span class="dot"></span><span class="lbl"></span>
+        <button class="set" title="Toggle highlighting of what the agent clicks/reads"></button></div>
       <div class="bar"></div>`;
     root.appendChild(wrap);
     host.__root=root;
+    // Settings toggle: highlights on/off (on by default), stored per-site.
+    const setBtn=root.querySelector('.set');
+    const sync=()=>{let off=false;try{off=localStorage.getItem('__aether_hl')==='off';}catch(e){}
+      setBtn.textContent=off?'✦ highlights off':'✦ highlights on';
+      setBtn.style.opacity=off?'.55':'1';};
+    setBtn.addEventListener('click',()=>{try{const off=localStorage.getItem('__aether_hl')==='off';
+      localStorage.setItem('__aether_hl',off?'on':'off');}catch(e){}sync();});
+    sync();
     // colorful pixel animation
     const cv=root.querySelector('canvas'),ctx=cv.getContext('2d'),N=11,P=2;
     let f=0;

@@ -184,6 +184,14 @@ Without them the badge still appears but reads "🤖 AI agent". Live counters ar
 also at `GET /stats`. (Via the MCP server, set `AETHER_AGENT_ID` /
 `AETHER_AGENT_MODEL` in the server's `env` and it sends these for you.)
 
+### Live action highlighting
+
+While an agent works, Aether flashes a color-coded box over what it touches —
+**clicks** (pink), **typed** fields (blue), **read** regions (green), and every
+element it **scans/links** it identifies (cyan / gold). Toggle it from the
+**✦ highlights** button in the HUD badge (on by default, remembered per-site).
+It's purely visual and never appears in the agent's own screenshots.
+
 ### Multi-agent: ownership & context
 
 Send `X-Agent-Id: <name>` on requests. Tabs you open are stamped with you as
