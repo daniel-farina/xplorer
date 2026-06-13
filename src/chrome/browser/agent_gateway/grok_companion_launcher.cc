@@ -3,6 +3,8 @@
 
 #include "chrome/browser/agent_gateway/grok_companion_launcher.h"
 
+#include "chrome/browser/agent_gateway/grok_native.h"
+
 #include "base/base_paths.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
@@ -26,6 +28,9 @@ void WriteCompanionDiscovery(int gateway_port) {
   companion.Set("title", "Grok");
     companion.Set("model", "grok-composer-2.5-fast");
   companion.Set("native", true);
+  base::FilePath grok_bin = ResolveGrokBinary();
+  if (!grok_bin.empty() && grok_bin.value() != "grok")
+    companion.Set("grok_bin", grok_bin.value());
   std::string json;
   if (base::JSONWriter::Write(companion, &json))
     base::WriteFile(dir.AppendASCII("companion.json"), json);

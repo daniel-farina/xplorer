@@ -4,6 +4,7 @@
 #ifndef CHROME_BROWSER_AGENT_GATEWAY_GROK_NATIVE_H_
 #define CHROME_BROWSER_AGENT_GATEWAY_GROK_NATIVE_H_
 
+#include "base/files/file_path.h"
 #include "base/functional/callback.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/task/single_thread_task_runner.h"
@@ -12,6 +13,9 @@
 #include "net/server/http_server_request_info.h"
 
 namespace agent_gateway {
+
+// Resolves the grok CLI binary (GUI apps lack shell PATH).
+base::FilePath ResolveGrokBinary();
 
 // Native Grok companion: serves chat/search UI and proxies to the `grok` CLI.
 // Handled on the AgentGateway port (no separate Python process).

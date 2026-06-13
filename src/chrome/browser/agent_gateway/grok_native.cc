@@ -16,6 +16,7 @@
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
 #include "base/logging.h"
+#include "base/no_destructor.h"
 #include "base/path_service.h"
 #include "base/posix/eintr_wrapper.h"
 #include "base/process/launch.h"
@@ -46,6 +47,55 @@ namespace agent_gateway {
 namespace {
 
 constexpr char kGrokBin[] = "grok";
+
+}  // namespace
+
+base::FilePath ResolveGrokBinary() {
+  static const base::NoDestructor<base::FilePath> cached([] {
+    if (const char* env = getenv("GROK_BIN"); env && *env) {
+      base::FilePath from_env(env);
+      if (base::PathExists(from_env))
+        return from_env;
+    }
+    base::FilePath home;
+    if (base::PathService::Get(base::DIR_HOME, &home) && home.empty())
+      home = base::FilePath();
+    if (home.empty()) {
+      if (const char* h = getenv("HOME"); h && *h)
+        home = base::FilePath(h);
+    }
+    if (!home.empty()) {
+      std::string companion_json;
+      if (base::ReadFileToString(home.AppendASCII(".aether/companion.json"),
+                                 &companion_json)) {
+        if (auto parsed =
+                base::JSONReader::ReadDict(companion_json, base::JSON_PARSE_RFC)) {
+          if (const std::string* bin = parsed->FindString("grok_bin");
+              bin && !bin->empty()) {
+            base::FilePath from_cfg(*bin);
+            if (base::PathExists(from_cfg))
+              return from_cfg;
+          }
+        }
+      }
+      for (const char* rel : {".grok/bin/grok", ".local/bin/grok"}) {
+        base::FilePath candidate = home.AppendASCII(rel);
+        if (base::PathExists(candidate))
+          return base::MakeAbsoluteFilePath(candidate);
+      }
+    }
+    for (const char* abs :
+         {"/opt/homebrew/bin/grok", "/usr/local/bin/grok"}) {
+      base::FilePath candidate(abs);
+      if (base::PathExists(candidate))
+        return candidate;
+    }
+    return base::FilePath(kGrokBin);
+  }());
+  return *cached;
+}
+
+namespace {
 
 base::FilePath UiDir() {
   const char* env = getenv("XBROWSER_COMPANION_UI");
@@ -240,7 +290,7 @@ base::ListValue DefaultModelList() {
 
 base::ListValue ListGrokModels() {
   base::CommandLine cmd(base::CommandLine::NO_PROGRAM);
-  cmd.SetProgram(base::FilePath(kGrokBin));
+  cmd.SetProgram(ResolveGrokBinary());
   cmd.AppendArg("models");
   std::string output;
   if (!base::GetAppOutput(cmd, &output) || output.empty())
@@ -328,7 +378,7 @@ base::CommandLine BuildGrokSearchCommand(const std::string& query,
   std::string prompt = std::string(SearchPromptForMode(mode, has_image)) +
                        "\n\nQuery: " + user_query;
   base::CommandLine cmd(base::CommandLine::NO_PROGRAM);
-  cmd.SetProgram(base::FilePath(kGrokBin));
+  cmd.SetProgram(ResolveGrokBinary());
   if (has_image) {
     base::ListValue blocks;
     base::DictValue img;
@@ -543,8 +593,11 @@ void PumpGrokStream(net::HttpServer* server,
   if (!process.IsValid()) {
     close(pipe_fds[0]);
     io_task_runner->PostTask(
-        FROM_HERE, base::BindOnce(&SendStreamError, server, connection_id,
-                                  "failed to launch grok"));
+        FROM_HERE,
+        base::BindOnce(
+            &SendStreamError, server, connection_id,
+            "failed to launch grok at " + cmd.GetProgram().MaybeAsASCII() +
+                " — run `grok login` or set GROK_BIN in ~/.aether/companion.json"));
     return;
   }
 
@@ -751,7 +804,7 @@ base::CommandLine BuildGrokChatCommand(const std::string& message,
                                        const std::string& model,
                                        bool streaming) {
   base::CommandLine cmd(base::CommandLine::NO_PROGRAM);
-  cmd.SetProgram(base::FilePath(kGrokBin));
+  cmd.SetProgram(ResolveGrokBinary());
   cmd.AppendArg("-p");
   cmd.AppendArg(message);
   cmd.AppendArg("--output-format");
@@ -947,7 +1000,7 @@ bool GrokNative::TryHandleRequest(
     d.Set("ok", true);
     d.Set("native", true);
     d.Set("port", gateway_port);
-    d.Set("grok", kGrokBin);
+    d.Set("grok", ResolveGrokBinary().value());
     d.Set("model", model);
     d.Set("model_label", ModelDisplayName(model));
     d.Set("models", ListGrokModels());
