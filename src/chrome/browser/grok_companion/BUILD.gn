@@ -4,9 +4,12 @@ source_set("grok_companion") {
   sources = [
     "grok_companion_util.cc",
     "grok_companion_util.h",
+    "grok_web_bar.cc",
+    "grok_web_bar.h",
   ]
   deps = [
     "//base",
+    "//chrome/common",
     "//chrome/browser/agent_gateway",
     "//chrome/browser/profiles",
     "//chrome/browser/ui",

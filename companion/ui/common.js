@@ -102,9 +102,9 @@ async function initSearchHomeToggle(container, { onSwitch } = {}) {
         setActive(saved);
         if (onSwitch) onSwitch(saved, updated);
         else if (saved === SEARCH_HOME_WEB) {
-          window.location.href = updated.grok_web_url || 'https://grok.com/';
+          window.location.href = `${window.location.origin}/switch-home?mode=web`;
         } else {
-          window.location.href = updated.grok_build_url || '/search';
+          window.location.href = `${window.location.origin}/switch-home?mode=build`;
         }
       } catch (e) {
         alert(`Could not save preference: ${e.message}`);

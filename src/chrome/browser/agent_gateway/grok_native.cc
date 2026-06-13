@@ -1047,6 +1047,25 @@ bool GrokNative::TryHandleRequest(
     return ServeUiFile(server, connection_id, "search.html");
   }
 
+  if (info.method == "GET" &&
+      (path == "/switch-home" || base::StartsWith(path, "/switch-home?"))) {
+    const std::map<std::string, std::string> params = QueryParams(info.path);
+    auto it = params.find("mode");
+    const std::string mode =
+        (it != params.end() && it->second == kSearchHomeWeb) ? kSearchHomeWeb
+                                                             : kSearchHomeBuild;
+    SetSearchHomeMode(mode);
+    std::string dest =
+        mode == kSearchHomeWeb
+            ? "https://grok.com/"
+            : base::StringPrintf("http://127.0.0.1:%d/search", gateway_port);
+    net::HttpServerResponseInfo resp(net::HTTP_FOUND);
+    resp.AddHeader("Location", dest);
+    resp.AddHeader("Cache-Control", "no-store");
+    server->SendResponse(connection_id, resp, TRAFFIC_ANNOTATION_FOR_TESTS);
+    return true;
+  }
+
   if (info.method == "GET" && path == "/api/status") {
     const std::string model = GetConfiguredModel();
     base::DictValue d;

@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license.
 
 #include "chrome/browser/grok_companion/grok_companion_util.h"
+#include "chrome/browser/grok_companion/grok_web_bar.h"
 
 #include <memory>
 #include <utility>
@@ -137,6 +138,7 @@ GURL GetDefaultSearchHomeURL() {
 void RegisterGrokSidePanel(BrowserWindowInterface* browser) {
   if (!browser)
     return;
+  RegisterGrokWebBar(browser);
   SidePanelRegistry* registry = SidePanelRegistry::From(browser);
   if (!registry)
     return;
