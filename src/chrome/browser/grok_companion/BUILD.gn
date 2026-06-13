@@ -1,0 +1,21 @@
+# Copyright 2026 The Aether Authors.
+
+source_set("grok_companion") {
+  sources = [
+    "grok_companion_util.cc",
+    "grok_companion_util.h",
+  ]
+  deps = [
+    "//base",
+    "//chrome/browser/agent_gateway",
+    "//chrome/browser/profiles",
+    "//chrome/browser/ui",
+    "//components/tabs:public",
+    "//chrome/browser/ui/views/side_panel",
+    "//content/public/browser",
+    "//ui/base",
+    "//ui/gfx",
+    "//ui/views",
+    "//url",
+  ]
+}
