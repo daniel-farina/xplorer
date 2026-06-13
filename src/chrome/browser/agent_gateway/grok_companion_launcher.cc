@@ -1,0 +1,46 @@
+// Copyright 2026 The Aether Authors.
+// Use of this source code is governed by a BSD-style license.
+
+#include "chrome/browser/agent_gateway/grok_companion_launcher.h"
+
+#include "base/base_paths.h"
+#include "base/files/file_path.h"
+#include "base/files/file_util.h"
+#include "base/json/json_reader.h"
+#include "base/json/json_writer.h"
+#include "base/path_service.h"
+#include "base/strings/string_number_conversions.h"
+
+namespace agent_gateway {
+
+void WriteCompanionDiscovery(int gateway_port) {
+  base::FilePath home;
+  if (!base::PathService::Get(base::DIR_HOME, &home))
+    return;
+  base::FilePath dir = home.AppendASCII(".aether");
+  base::CreateDirectory(dir);
+
+  base::DictValue companion;
+  companion.Set("url",
+                "http://127.0.0.1:" + base::NumberToString(gateway_port));
+  companion.Set("title", "Grok");
+    companion.Set("model", "grok-composer-2.5-fast");
+  companion.Set("native", true);
+  std::string json;
+  if (base::JSONWriter::Write(companion, &json))
+    base::WriteFile(dir.AppendASCII("companion.json"), json);
+
+  base::FilePath gw = dir.AppendASCII("gateway.json");
+  std::string gw_json;
+  if (base::ReadFileToString(gw, &gw_json)) {
+    if (auto parsed = base::JSONReader::ReadDict(gw_json, base::JSON_PARSE_RFC)) {
+      parsed->Set("companion_url",
+                    "http://127.0.0.1:" + base::NumberToString(gateway_port));
+      std::string out;
+      if (base::JSONWriter::Write(*parsed, &out))
+        base::WriteFile(gw, out);
+    }
+  }
+}
+
+}  // namespace agent_gateway

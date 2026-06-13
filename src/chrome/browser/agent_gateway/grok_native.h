@@ -1,0 +1,31 @@
+// Copyright 2026 The Aether Authors.
+// Use of this source code is governed by a BSD-style license.
+
+#ifndef CHROME_BROWSER_AGENT_GATEWAY_GROK_NATIVE_H_
+#define CHROME_BROWSER_AGENT_GATEWAY_GROK_NATIVE_H_
+
+#include "base/functional/callback.h"
+#include "base/memory/scoped_refptr.h"
+#include "base/task/single_thread_task_runner.h"
+#include "base/values.h"
+#include "net/server/http_server.h"
+#include "net/server/http_server_request_info.h"
+
+namespace agent_gateway {
+
+// Native Grok companion: serves chat/search UI and proxies to the `grok` CLI.
+// Handled on the AgentGateway port (no separate Python process).
+class GrokNative {
+ public:
+  // Returns true if |info| was handled (response sent or async work started).
+  static bool TryHandleRequest(
+      int connection_id,
+      const net::HttpServerRequestInfo& info,
+      net::HttpServer* server,
+      int gateway_port,
+      scoped_refptr<base::SingleThreadTaskRunner> io_task_runner);
+};
+
+}  // namespace agent_gateway
+
+#endif  // CHROME_BROWSER_AGENT_GATEWAY_GROK_NATIVE_H_

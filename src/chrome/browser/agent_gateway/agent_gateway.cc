@@ -3,6 +3,10 @@
 
 #include "chrome/browser/agent_gateway/agent_gateway.h"
 
+#include "chrome/browser/agent_gateway/browser_api.h"
+#include "chrome/browser/agent_gateway/grok_companion_launcher.h"
+#include "chrome/browser/agent_gateway/grok_native.h"
+
 #include <utility>
 
 #include "base/base64.h"
@@ -105,10 +109,13 @@ void AgentGateway::StartServerOnIOThread(int port) {
     d.Set("token", token_);
     d.Set("url", "http://127.0.0.1:" + base::NumberToString(port_));
     d.Set("cdp_url", "ws://127.0.0.1:9333");
+    d.Set("companion_url",
+          "http://127.0.0.1:" + base::NumberToString(port_));
     std::string json;
     base::JSONWriter::Write(d, &json);
     base::WriteFile(dir.AppendASCII("gateway.json"), json);
   }
+  WriteCompanionDiscovery(port_);
 }
 
 bool AgentGateway::CheckAuth(const net::HttpServerRequestInfo& info) {
@@ -120,6 +127,11 @@ void AgentGateway::OnConnect(int connection_id) {}
 
 void AgentGateway::OnHttpRequest(int connection_id,
                                  const net::HttpServerRequestInfo& info) {
+  // Native Grok UI + search/chat API (no auth — localhost browser UI only).
+  if (GrokNative::TryHandleRequest(connection_id, info, server_.get(), port_,
+                                   server_thread_->task_runner()))
+    return;
+
   // Unauthenticated discovery: GET /  tells an agent how to authenticate,
   // without leaking the token. Lets a connecting agent orient itself.
   if (info.path == "/" || info.path == "/whoami") {
@@ -196,12 +208,107 @@ void AgentGateway::RouteRequest(int connection_id,
     return;
   }
 
+  auto browser_reply = base::BindOnce(
+      [](base::WeakPtr<AgentGateway> self, int cid, decltype(reply) reply,
+         base::DictValue d) {
+        if (!self)
+          return;
+        std::move(reply).Run(std::move(d));
+      },
+      weak_factory_.GetWeakPtr(), connection_id, std::move(reply));
+
+  // GET /bookmarks — full bookmark tree (bar + other).
+  if (parts.size() == 1 && parts[0] == "bookmarks" && info.method == "GET") {
+    BrowserApi::ListBookmarks(std::move(browser_reply));
+    return;
+  }
+  // POST /bookmarks {"url", "title", "parent_id"?}
+  if (parts.size() == 1 && parts[0] == "bookmarks" && info.method == "POST") {
+    auto body = base::JSONReader::ReadDict(info.data, base::JSON_PARSE_RFC);
+    const std::string* url = body ? body->FindString("url") : nullptr;
+    const std::string* title = body ? body->FindString("title") : nullptr;
+    const std::string* parent = body ? body->FindString("parent_id") : nullptr;
+    BrowserApi::AddBookmark(url ? *url : "", title ? *title : "",
+                            parent ? *parent : "", std::move(browser_reply));
+    return;
+  }
+  // DELETE /bookmarks/{id}
+  if (parts.size() == 2 && parts[0] == "bookmarks" && info.method == "DELETE") {
+    BrowserApi::RemoveBookmark(parts[1], std::move(browser_reply));
+    return;
+  }
+  // GET/POST /history — recent visits; body {"query","limit"} on POST.
+  if (parts.size() == 1 && parts[0] == "history" &&
+      (info.method == "GET" || info.method == "POST")) {
+    std::string query;
+    int limit = 50;
+    if (auto body = base::JSONReader::ReadDict(info.data, base::JSON_PARSE_RFC)) {
+      if (const std::string* q = body->FindString("query"))
+        query = *q;
+      if (std::optional<int> lim = body->FindInt("limit"))
+        limit = *lim;
+    }
+    BrowserApi::QueryHistory(query, limit, std::move(browser_reply));
+    return;
+  }
+  // GET /theme / POST /theme {"color_scheme": "dark"|"light"|"system"}
+  if (parts.size() == 1 && parts[0] == "theme") {
+    if (info.method == "GET") {
+      BrowserApi::GetTheme(std::move(browser_reply));
+      return;
+    }
+    if (info.method == "POST") {
+      auto body = base::JSONReader::ReadDict(info.data, base::JSON_PARSE_RFC);
+      const std::string* scheme =
+          body ? body->FindString("color_scheme") : nullptr;
+      BrowserApi::SetTheme(scheme ? *scheme : "system",
+                           std::move(browser_reply));
+      return;
+    }
+  }
+  // POST /tabs/group {"tab_ids": [...], "title": "..."}
+  if (parts.size() == 2 && parts[0] == "tabs" && parts[1] == "group" &&
+      info.method == "POST") {
+    auto body = base::JSONReader::ReadDict(info.data, base::JSON_PARSE_RFC);
+    std::vector<std::string> ids;
+    if (body) {
+      if (const base::ListValue* list = body->FindList("tab_ids")) {
+        for (const auto& v : *list) {
+          if (v.is_string())
+            ids.push_back(v.GetString());
+        }
+      }
+    }
+    const std::string* title = body ? body->FindString("title") : nullptr;
+    BrowserApi::GroupTabs(ids, title ? *title : "", std::move(browser_reply));
+    return;
+  }
+
   if (parts.empty() || parts[0] != "tabs") {
     base::DictValue err;
     err.Set("error", "unknown route");
-    std::move(reply).Run(std::move(err));
+    std::move(browser_reply).Run(std::move(err));
     return;
   }
+
+  // Re-bind reply for tab routes (browser_reply consumed the original).
+  reply = base::BindOnce(
+      [](base::WeakPtr<AgentGateway> self, int cid, base::DictValue d) {
+        if (!self)
+          return;
+        std::string json;
+        base::JSONWriter::Write(d, &json);
+        self->metrics_.bytes_out += static_cast<int64_t>(json.size());
+        self->server_thread_->task_runner()->PostTask(
+            FROM_HERE,
+            base::BindOnce(
+                [](net::HttpServer* s, int cid, std::string body) {
+                  s->Send200(cid, body, "application/json",
+                             TRAFFIC_ANNOTATION_FOR_TESTS);
+                },
+                self->server_.get(), cid, std::move(json)));
+      },
+      weak_factory_.GetWeakPtr(), connection_id);
 
   // GET /tabs — enumerate with full per-tab context for the agent.
   if (parts.size() == 1 && info.method == "GET") {
@@ -288,6 +395,33 @@ void AgentGateway::RouteRequest(int connection_id,
     return;
   }
 
+  // DELETE /tabs/{id} — close tab.
+  if (parts.size() == 2 && info.method == "DELETE") {
+    BrowserApi::CloseTab(parts[1],
+                         base::BindOnce([](decltype(reply) r, base::DictValue d) {
+                           std::move(r).Run(std::move(d));
+                         }, std::move(reply)));
+    return;
+  }
+
+  // POST /tabs/{id}/activate — focus a tab.
+  if (parts.size() > 2 && parts[2] == "activate" && info.method == "POST") {
+    BrowserApi::ActivateTab(parts[1],
+                            base::BindOnce([](decltype(reply) r, base::DictValue d) {
+                              std::move(r).Run(std::move(d));
+                            }, std::move(reply)));
+    return;
+  }
+  // POST /tabs/{id}/split {"layout": "side_by_side"|"stacked"}
+  if (parts.size() > 2 && parts[2] == "split" && info.method == "POST") {
+    auto body = base::JSONReader::ReadDict(info.data, base::JSON_PARSE_RFC);
+    const std::string* layout = body ? body->FindString("layout") : nullptr;
+    BrowserApi::SplitTab(parts[1], layout ? *layout : "side_by_side",
+                         base::BindOnce([](decltype(reply) r, base::DictValue d) {
+                           std::move(r).Run(std::move(d));
+                         }, std::move(reply)));
+    return;
+  }
   // POST /tabs/{id}/own — claim/label an existing tab. Lets an agent take
   // ownership of a tab the user (or another agent) created, or relabel its
   // own. Handled here without a CDP session since it only stamps metadata.
