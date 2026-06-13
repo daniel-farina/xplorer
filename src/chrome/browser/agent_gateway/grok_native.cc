@@ -34,6 +34,7 @@
 #include "chrome/browser/ui/browser_window/public/browser_window_interface_iterator.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "content/public/browser/browser_task_traits.h"
+#include "ui/base/base_window.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/web_contents.h"
 #include "net/http/http_status_code.h"
@@ -688,6 +689,27 @@ content::WebContents* FindActiveWebContents() {
   return nullptr;
 }
 
+void PrepareTabForCapture(content::WebContents* wc) {
+  if (!wc)
+    return;
+  wc->WasShown();
+  wc->Focus();
+  for (BrowserWindowInterface* browser : GetAllBrowserWindowInterfaces()) {
+    TabStripModel* model = browser->GetTabStripModel();
+    for (int i = 0; i < model->count(); ++i) {
+      if (model->GetWebContentsAt(i) != wc)
+        continue;
+      model->ActivateTabAt(i);
+      if (ui::BaseWindow* window = browser->GetWindow()) {
+        if (!window->IsVisible())
+          window->Show();
+        window->Activate();
+      }
+      return;
+    }
+  }
+}
+
 void CaptureScreenshot(
     content::WebContents* wc,
     base::OnceCallback<void(base::DictValue)> callback) {
@@ -697,6 +719,7 @@ void CaptureScreenshot(
     std::move(callback).Run(std::move(err));
     return;
   }
+  PrepareTabForCapture(wc);
   auto session = std::make_unique<AgentSession>(wc);
   AgentSession* s = session.get();
   s->Screenshot(base::BindOnce(

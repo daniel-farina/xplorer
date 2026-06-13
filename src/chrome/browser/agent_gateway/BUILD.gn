@@ -25,7 +25,10 @@ source_set("agent_gateway") {
     "//components/tab_groups",
     "//content/public/browser",
     "//net",
+    "//skia",
     "//ui/base",
+    "//ui/gfx/codec",
+    "//ui/gfx/geometry",
     "//url",
   ]
 }

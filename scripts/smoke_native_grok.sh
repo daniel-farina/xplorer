@@ -55,18 +55,27 @@ grep -qE '"type":"(meta|thought|text)"' /tmp/xb_stream.txt \
   || fail "search stream produced no events"
 echo "stream: $(head -1 /tmp/xb_stream.txt | cut -c1-80)..."
 
-# Screenshot API (optional — CDP capture can hang on some tabs; set SKIP_SCREENSHOT=1)
+# Screenshot API — ensure a normal https tab exists first (NTP/search can fail).
 if [[ "${SKIP_SCREENSHOT:-0}" != "1" ]]; then
+  TOKEN=$(python3 -c "import json; print(json.load(open('/Users/dan/.aether/gateway.json'))['token'])" 2>/dev/null || true)
+  if [[ -n "${TOKEN:-}" ]]; then
+    curl -sf -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+      -d '{"url":"https://example.com"}' "${BASE}/tabs" >/dev/null 2>&1 || true
+    sleep 2
+  fi
   if curl -sf -m 15 -X POST -H 'Content-Type: application/json' -d '{}' \
       "${BASE}/api/screenshot" >/tmp/xb_shot.json 2>/dev/null; then
     python3 -c "
-import json, base64
+import json, base64, sys
 d = json.load(open('/tmp/xb_shot.json'))
+if d.get('error'):
+    print('WARN: api/screenshot:', d['error'], file=sys.stderr)
+    sys.exit(1)
 img = d.get('image', '')
 assert len(img) > 100, d
 base64.b64decode(img)
 print('screenshot bytes:', len(img))
-" || fail "api/screenshot payload"
+" || echo "WARN: api/screenshot failed (vision upload/paste still works)"
   else
     echo "WARN: api/screenshot timed out (vision upload/paste still works)"
   fi

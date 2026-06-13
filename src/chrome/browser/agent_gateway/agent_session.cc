@@ -5,6 +5,9 @@
 
 #include <utility>
 
+#include <memory>
+
+#include "base/base64.h"
 #include "base/containers/span.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
@@ -13,8 +16,14 @@
 #include "base/json/json_writer.h"
 #include "base/json/string_escape.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/time/time.h"
+#include "base/timer/timer.h"
+#include "components/viz/common/frame_sinks/copy_output_result.h"
 #include "content/public/browser/devtools_agent_host.h"
+#include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
+#include "ui/gfx/codec/png_codec.h"
+#include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
 
 namespace agent_gateway {
@@ -166,42 +175,86 @@ void AgentSession::AXTree(ResultCallback cb) {
 }
 
 void AgentSession::Screenshot(ResultCallback cb) {
-  // AI-native capture: force the renderer to produce compositor frames for the
-  // duration of the capture, exactly like tab/video mirroring does. Without
-  // this, macOS (and Chromium's own occlusion tracking) suspend compositing
-  // for occluded or backgrounded windows and Page.captureScreenshot hangs
-  // forever waiting for a frame. Holding a capturer ref means an agent can
-  // screenshot ANY tab on demand, visible or not, with no launch flags.
-  if (web_contents_) {
-    capture_hold_ = web_contents_->IncrementCapturerCount(
-        gfx::Size(), /*stay_hidden=*/false, /*stay_awake=*/true,
-        /*is_activity=*/true);
+  if (!web_contents_) {
+    base::DictValue err;
+    err.Set("error", "no web contents");
+    std::move(cb).Run(std::move(err));
+    return;
   }
-  // The HUD now PERSISTS on the page, so hide it just for this capture and
-  // restore it after — agent screenshots stay clean, the human still sees it.
-  Eval("(()=>{const h=document.getElementById('__aether_hud');"
-       "if(h)h.style.visibility='hidden';return 1;})()",
-       base::BindOnce(
-           [](AgentSession* self, ResultCallback cb, base::DictValue) {
-             base::DictValue params;
-             params.Set("format", "png");
-             params.Set("captureBeyondViewport", false);
-             self->SendCommand(
-                 "Page.captureScreenshot", std::move(params),
-                 base::BindOnce(
-                     [](AgentSession* self, ResultCallback cb,
-                        base::DictValue r) {
-                       self->capture_hold_.RunAndReset();
-                       self->Eval(
-                           "(()=>{const h=document.getElementById("
-                           "'__aether_hud');if(h)h.style.visibility='visible';"
-                           "return 1;})()",
-                           base::DoNothing());
-                       std::move(cb).Run(std::move(r));
-                     },
-                     self, std::move(cb)));
-           },
-           this, std::move(cb)));
+
+  struct ScreenshotCtx {
+    bool done = false;
+    ResultCallback cb;
+    base::OneShotTimer timer;
+    base::ScopedClosureRunner capture_hold;
+  };
+  auto ctx = std::make_shared<ScreenshotCtx>();
+  ctx->capture_hold = web_contents_->IncrementCapturerCount(
+      gfx::Size(), /*stay_hidden=*/false, /*stay_awake=*/true,
+      /*is_activity=*/true);
+
+  auto finish = base::BindOnce(
+      [](std::shared_ptr<ScreenshotCtx> ctx, base::DictValue result) {
+        if (ctx->done)
+          return;
+        ctx->done = true;
+        ctx->timer.Stop();
+        ctx->capture_hold.RunAndReset();
+        std::move(ctx->cb).Run(std::move(result));
+      },
+      ctx);
+
+  ctx->cb = std::move(cb);
+  ctx->timer.Start(
+      FROM_HERE, base::Seconds(12),
+      base::BindOnce(
+          [](std::shared_ptr<ScreenshotCtx> ctx) {
+            if (ctx->done)
+              return;
+            ctx->done = true;
+            ctx->capture_hold.RunAndReset();
+            base::DictValue err;
+            err.Set("error", "screenshot timeout");
+            std::move(ctx->cb).Run(std::move(err));
+          },
+          ctx));
+
+  content::RenderWidgetHostView* view = web_contents_->GetRenderWidgetHostView();
+  if (!view) {
+    ctx->timer.Stop();
+    ctx->capture_hold.RunAndReset();
+    base::DictValue err;
+    err.Set("error", "no render view");
+    std::move(ctx->cb).Run(std::move(err));
+    return;
+  }
+
+  view->EnsureSurfaceSynchronizedForWebTest();
+  // Empty rect + size captures the full visible surface (extensions API).
+  view->CopyFromSurface(gfx::Rect(), gfx::Size(), base::Seconds(8),
+                        base::BindOnce(
+                            [](decltype(finish) finish,
+                               const content::CopyFromSurfaceResult& result) {
+                              base::DictValue out;
+                              if (!result.has_value() ||
+                                  result->bitmap.drawsNothing()) {
+                                out.Set("error", "capture failed");
+                                std::move(finish).Run(std::move(out));
+                                return;
+                              }
+                              std::optional<std::vector<uint8_t>> png =
+                                  gfx::PNGCodec::EncodeBGRASkBitmap(
+                                      result->bitmap,
+                                      /*discard_transparency=*/false);
+                              if (!png || png->empty()) {
+                                out.Set("error", "png encode failed");
+                                std::move(finish).Run(std::move(out));
+                                return;
+                              }
+                              out.Set("data", base::Base64Encode(*png));
+                              std::move(finish).Run(std::move(out));
+                            },
+                            std::move(finish)));
 }
 
 void AgentSession::Click(const std::string& selector, ResultCallback cb) {
