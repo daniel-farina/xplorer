@@ -177,11 +177,11 @@ async function pollStatus() {
     const s = await api('/api/status');
     const gw = s.gateway?.running ? `${s.gateway.tabs} tabs` : 'browser online';
     statusEl.textContent = gw;
-    statusEl.className = 'badge' + (s.gateway?.running ? ' ok' : ' ok');
+    statusEl.className = 'grok-model-badge' + (s.gateway?.running ? ' ok' : ' ok');
     if (s.model_label) updateModelBadge(modelBadge, s.model || activeModel, s.model_label);
   } catch {
     statusEl.textContent = 'offline';
-    statusEl.className = 'badge';
+    statusEl.className = 'grok-model-badge';
   }
 }
 

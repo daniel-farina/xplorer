@@ -45,9 +45,20 @@ GURL SwitchHomeURL(const std::string& mode) {
                                  kCompanionHost, GatewayPort(), mode.c_str()));
 }
 
+GURL SearchPageURL(const char* search_mode) {
+  std::string path = "/search";
+  if (search_mode && *search_mode)
+    path += std::string("?mode=") + search_mode;
+  return GURL(base::StringPrintf("http://%s:%d%s", kCompanionHost,
+                                 GatewayPort(), path.c_str()));
+}
+
 std::string BuildInjectScript(const std::string& active_mode) {
   const std::string build_href = SwitchHomeURL(kSearchHomeBuild).spec();
   const std::string web_href = SwitchHomeURL(kSearchHomeWeb).spec();
+  const std::string search_href = SearchPageURL("").spec();
+  const std::string images_href = SearchPageURL("images").spec();
+  const std::string videos_href = SearchPageURL("videos").spec();
   const std::string build_active =
       active_mode == kSearchHomeBuild ? " active" : "";
   const std::string web_active = active_mode == kSearchHomeWeb ? " active" : "";
@@ -61,26 +72,36 @@ std::string BuildInjectScript(const std::string& active_mode) {
     'position:fixed;top:0;left:0;right:0;z-index:2147483647;',
     'display:flex;align-items:center;gap:12px;padding:10px 16px;',
     'font:13px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;',
-    'border-bottom:1px solid var(--xb-border,#e5e5e5);',
-    'background:var(--xb-surface,#fff);color:var(--xb-text,#111);',
-    'box-shadow:0 1px 0 rgba(0,0,0,.06);}',
-    '#xbrowser-grok-bar .xb-logo{font-weight:700;font-size:16px;color:var(--xb-accent,#111);}',
-    '#xbrowser-grok-bar .xb-toggle{display:inline-flex;border:1px solid var(--xb-border,#e5e5e5);',
-    'border-radius:999px;overflow:hidden;background:var(--xb-elevated,#f5f5f5);}',
-    '#xbrowser-grok-bar .xb-opt{padding:5px 12px;text-decoration:none;color:var(--xb-muted,#666);',
+    '--xb-border:#333;--xb-surface:#161616;--xb-text:#f2f2f2;',
+    '--xb-muted:#aaa;--xb-elevated:#222;--xb-accent:#f2f2f2;--xb-accent-soft:#2a2a2a;',
+    'border-bottom:1px solid var(--xb-border);background:var(--xb-surface);',
+    'color:var(--xb-text);box-shadow:0 1px 0 rgba(0,0,0,.25);}',
+    '#xbrowser-grok-bar .xb-logo{font-weight:700;font-size:16px;color:var(--xb-accent);',
+    'text-decoration:none;white-space:nowrap;}',
+    '#xbrowser-grok-bar .xb-modes{display:inline-flex;gap:2px;flex-wrap:wrap;}',
+    '#xbrowser-grok-bar .xb-mode{padding:5px 12px;text-decoration:none;color:var(--xb-muted);',
+    'font-size:12px;border-radius:999px;white-space:nowrap;}',
+    '#xbrowser-grok-bar .xb-mode:hover{color:var(--xb-text);background:var(--xb-elevated);}',
+    '#xbrowser-grok-bar .xb-spacer{flex:1;min-width:8px;}',
+    '#xbrowser-grok-bar .xb-toggle{display:inline-flex;border:1px solid var(--xb-border);',
+    'border-radius:999px;overflow:hidden;background:var(--xb-elevated);}',
+    '#xbrowser-grok-bar .xb-opt{padding:5px 12px;text-decoration:none;color:var(--xb-muted);',
     'font-size:12px;white-space:nowrap;}',
-    '#xbrowser-grok-bar .xb-opt:hover{color:var(--xb-text,#111);background:var(--xb-surface,#fff);}',
-    '#xbrowser-grok-bar .xb-opt.active{background:var(--xb-accent-soft,#eee);',
-    'color:var(--xb-accent,#111);font-weight:500;}',
-    '@media (prefers-color-scheme:dark){',
-    '#xbrowser-grok-bar{--xb-border:#333;--xb-surface:#161616;--xb-text:#f2f2f2;',
-    '--xb-muted:#aaa;--xb-elevated:#222;--xb-accent:#f2f2f2;--xb-accent-soft:#2a2a2a;}}'
+    '#xbrowser-grok-bar .xb-opt:hover{color:var(--xb-text);background:var(--xb-surface);}',
+    '#xbrowser-grok-bar .xb-opt.active{background:var(--xb-accent-soft);',
+    'color:var(--xb-accent);font-weight:500;}'
   ].join('');
   document.documentElement.appendChild(style);
   var bar = document.createElement('div');
   bar.id = 'xbrowser-grok-bar';
   bar.innerHTML = [
-    '<span class="xb-logo">✦ Grok</span>',
+    '<a class="xb-logo" href="%s">✦ Grok</a>',
+    '<nav class="xb-modes">',
+    '<a class="xb-mode" href="%s">All</a>',
+    '<a class="xb-mode" href="%s">Images</a>',
+    '<a class="xb-mode" href="%s">Videos</a>',
+    '</nav>',
+    '<span class="xb-spacer"></span>',
     '<div class="xb-toggle">',
     '<a class="xb-opt%s" href="%s">Grok Build</a>',
     '<a class="xb-opt%s" href="%s">Grok Web</a>',
@@ -90,8 +111,9 @@ std::string BuildInjectScript(const std::string& active_mode) {
   var pad = (bar.getBoundingClientRect().height || 44) + 'px';
   document.documentElement.style.setProperty('padding-top', pad, 'important');
 })();)",
-      build_active.c_str(), build_href.c_str(), web_active.c_str(),
-      web_href.c_str());
+      search_href.c_str(), search_href.c_str(), images_href.c_str(),
+      videos_href.c_str(), build_active.c_str(), build_href.c_str(),
+      web_active.c_str(), web_href.c_str());
 }
 
 class GrokWebBarInjector : public content::WebContentsObserver {

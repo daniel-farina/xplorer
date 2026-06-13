@@ -1,28 +1,33 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="grok-build">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Grok — XBrowser</title>
   <link rel="stylesheet" href="/theme.css">
+  <link rel="stylesheet" href="/toolbar.css">
   <link rel="stylesheet" href="/style.css">
 </head>
 <body>
-  <header class="top">
-    <div class="brand">
-      <span class="logo">✦</span>
-      <span class="name">Grok</span>
-      <span class="badge" id="status">connecting…</span>
-      <label class="model-wrap">
-        <select id="model-select" class="model-select" title="Model"></select>
-      </label>
-      <span id="model-badge" class="model-badge"></span>
-      <div class="home-toggle" id="home-toggle" title="Default Grok home page">
-        <button type="button" class="home-opt active" data-home="build">Grok Build</button>
-        <button type="button" class="home-opt" data-home="web">Grok Web</button>
+  <header class="grok-toolbar">
+    <a class="grok-logo" href="/search">✦ Grok</a>
+    <nav class="grok-modes">
+      <a class="grok-mode" href="/search?mode=web">All</a>
+      <a class="grok-mode" href="/search?mode=images">Images</a>
+      <a class="grok-mode" href="/search?mode=videos">Videos</a>
+      <a class="grok-mode" href="/search?mode=imagine">Imagine</a>
+    </nav>
+    <div class="grok-toolbar-spacer"></div>
+    <div class="grok-toolbar-actions">
+      <span class="grok-model-badge" id="status">connecting…</span>
+      <div class="grok-toggle" id="home-toggle" title="Grok home">
+        <button type="button" class="grok-toggle-opt active" data-home="build">Grok Build</button>
+        <button type="button" class="grok-toggle-opt" data-home="web">Grok Web</button>
       </div>
+      <span id="model-badge" class="grok-model-badge"></span>
+      <select id="model-select" class="grok-model-select" title="Model"></select>
+      <button type="button" class="grok-toolbar-btn" id="new-chat" title="New conversation">+ Chat</button>
     </div>
-    <button id="new-chat" title="New conversation">+</button>
   </header>
   <aside class="sidebar">
     <div class="sidebar-label">Conversations</div>

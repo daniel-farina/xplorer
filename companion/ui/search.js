@@ -36,9 +36,9 @@ function applyModeModel() {
   }
 }
 
-modes?.querySelectorAll('.mode').forEach((btn) => {
+modes?.querySelectorAll('.grok-mode').forEach((btn) => {
   btn.onclick = () => {
-    modes.querySelectorAll('.mode').forEach((b) => b.classList.remove('active'));
+    modes.querySelectorAll('.grok-mode').forEach((b) => b.classList.remove('active'));
     btn.classList.add('active');
     mode = btn.dataset.mode;
     updateModeUi();
@@ -415,11 +415,21 @@ function renderResults(query, data) {
 initSearchHomeToggle($('#home-toggle'));
 
 startThemeWatcher();
-initModels();
 updateModeUi();
 
-const params = new URLSearchParams(location.search);
-if (params.get('q')) {
-  input.value = params.get('q');
-  form.requestSubmit();
-}
+const urlParams = new URLSearchParams(location.search);
+initModels().then(() => {
+  const modeParam = urlParams.get('mode');
+  if (modeParam && ['web', 'images', 'videos', 'imagine'].includes(modeParam)) {
+    mode = modeParam;
+    modes?.querySelectorAll('.grok-mode').forEach((b) => {
+      b.classList.toggle('active', b.dataset.mode === mode);
+    });
+    updateModeUi();
+    applyModeModel();
+  }
+  if (urlParams.get('q')) {
+    input.value = urlParams.get('q');
+    form.requestSubmit();
+  }
+});
