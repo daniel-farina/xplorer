@@ -5,7 +5,10 @@
 
 #include <unistd.h>
 
+#include <cstring>
+
 #include <map>
+#include <set>
 #include <utility>
 
 #include "base/base_paths.h"
@@ -366,39 +369,239 @@ struct SearchImageInput {
   std::string mime = "image/png";
 };
 
+std::string TrimUrlTrailingPunct(std::string url) {
+  while (!url.empty()) {
+    const char c = url.back();
+    if (c == ')' || c == ']' || c == '}' || c == '.' || c == ',' ||
+        c == ';' || c == '"' || c == '\'' || c == '>' || c == '<')
+      url.pop_back();
+    else
+      break;
+  }
+  return url;
+}
+
+bool IsHttpUrl(const std::string& url) {
+  return base::StartsWith(url, "http://") || base::StartsWith(url, "https://");
+}
+
+std::string DetectProvider(const std::string& url) {
+  if (url.find("youtube.com") != std::string::npos ||
+      url.find("youtu.be") != std::string::npos)
+    return "youtube";
+  if (url.find("vimeo.com") != std::string::npos)
+    return "vimeo";
+  if (url.find("dailymotion.com") != std::string::npos)
+    return "dailymotion";
+  if (url.find("twitch.tv") != std::string::npos)
+    return "twitch";
+  return "";
+}
+
+std::string YouTubeVideoId(const std::string& url) {
+  const std::string kWatch = "youtube.com/watch";
+  auto vpos = url.find("v=");
+  if (url.find(kWatch) != std::string::npos && vpos != std::string::npos) {
+    size_t start = vpos + 2;
+    size_t end = url.find_first_of("&?#", start);
+    if (end == std::string::npos)
+      end = url.size();
+    return url.substr(start, end - start);
+  }
+  const std::string kShort = "youtu.be/";
+  auto spos = url.find(kShort);
+  if (spos != std::string::npos) {
+    size_t start = spos + kShort.size();
+    size_t end = url.find_first_of("?#&/", start);
+    if (end == std::string::npos)
+      end = url.size();
+    return url.substr(start, end - start);
+  }
+  return "";
+}
+
+std::string VideoThumbnailForUrl(const std::string& url) {
+  const std::string provider = DetectProvider(url);
+  if (provider == "youtube") {
+    const std::string id = YouTubeVideoId(url);
+    if (!id.empty())
+      return "https://img.youtube.com/vi/" + id + "/mqdefault.jpg";
+  }
+  return "";
+}
+
+void EnrichMediaItem(base::DictValue* item) {
+  if (!item)
+    return;
+  const std::string* url = item->FindString("url");
+  if (!url || url->empty())
+    return;
+  if (!item->FindString("provider")) {
+    const std::string provider = DetectProvider(*url);
+    if (!provider.empty())
+      item->Set("provider", provider);
+  }
+  if (!item->FindString("thumbnail")) {
+    const std::string thumb = VideoThumbnailForUrl(*url);
+    if (!thumb.empty())
+      item->Set("thumbnail", thumb);
+  }
+}
+
+void AddUniqueLink(const std::string& url,
+                   const std::string& title,
+                   const std::string& snippet,
+                   const std::string& kind,
+                   base::ListValue* out,
+                   std::set<std::string>* seen) {
+  std::string clean = TrimUrlTrailingPunct(url);
+  if (!IsHttpUrl(clean) || seen->count(clean))
+    return;
+  seen->insert(clean);
+  base::DictValue item;
+  item.Set("url", clean);
+  item.Set("title", title.empty() ? clean : title);
+  if (!snippet.empty())
+    item.Set("snippet", snippet);
+  if (!kind.empty())
+    item.Set("kind", kind);
+  EnrichMediaItem(&item);
+  out->Append(std::move(item));
+}
+
+std::string TitleBeforeUrl(const std::string& text, size_t url_pos) {
+  size_t line_start = text.rfind('\n', url_pos);
+  if (line_start == std::string::npos)
+    line_start = 0;
+  else
+    ++line_start;
+  const std::string line = text.substr(line_start, url_pos - line_start);
+  size_t bold = line.find("**");
+  if (bold != std::string::npos) {
+    size_t bold_end = line.find("**", bold + 2);
+    if (bold_end != std::string::npos)
+      return line.substr(bold + 2, bold_end - bold - 2);
+  }
+  size_t bracket = line.rfind("](", url_pos - line_start);
+  if (bracket != std::string::npos && bracket > 0 && line[bracket - 1] == ']') {
+    size_t open = line.rfind('[', bracket - 1);
+    if (open != std::string::npos && open + 1 < bracket)
+      return line.substr(open + 1, bracket - open - 1);
+  }
+  return "";
+}
+
+void ExtractUrlsFromText(const std::string& text,
+                         const std::string& kind,
+                         base::ListValue* out,
+                         std::set<std::string>* seen) {
+  for (const char* scheme : {"https://", "http://"}) {
+    size_t pos = 0;
+    while ((pos = text.find(scheme, pos)) != std::string::npos) {
+      size_t end = text.find_first_of(" \n\r\t\"')<>", pos);
+      if (end == std::string::npos)
+        end = text.size();
+      const std::string url = text.substr(pos, end - pos);
+      const std::string title = TitleBeforeUrl(text, pos);
+      AddUniqueLink(url, title, "", kind, out, seen);
+      pos = end;
+    }
+  }
+}
+
+std::string ExtractJsonPayload(const std::string& text) {
+  size_t fence = text.find("```json");
+  if (fence != std::string::npos) {
+    size_t start = text.find('\n', fence);
+    if (start != std::string::npos) {
+      ++start;
+      const size_t end = text.find("```", start);
+      if (end != std::string::npos)
+        return text.substr(start, end - start);
+    }
+  }
+  for (const char* key :
+       {"{\"videos\"", "{\"links\"", "{\"images\"", "{\"answer\""}) {
+    size_t pos = text.rfind(key);
+    if (pos != std::string::npos)
+      return text.substr(pos);
+  }
+  const size_t pos = text.rfind("\n{");
+  if (pos != std::string::npos)
+    return text.substr(pos + 1);
+  return "";
+}
+
+void AppendParsedItems(const base::ListValue* src,
+                       const std::string& kind,
+                       base::ListValue* links,
+                       base::ListValue* images,
+                       base::ListValue* videos,
+                       std::set<std::string>* seen) {
+  if (!src)
+    return;
+  for (const auto& entry : *src) {
+    if (!entry.is_dict())
+      continue;
+    base::DictValue item = entry.GetDict().Clone();
+    const std::string* url = item.FindString("url");
+    if (!url || url->empty())
+      continue;
+    std::string clean = TrimUrlTrailingPunct(*url);
+    if (!IsHttpUrl(clean) || seen->count(clean))
+      continue;
+    seen->insert(clean);
+    item.Set("url", clean);
+    if (!item.FindString("kind"))
+      item.Set("kind", kind);
+    EnrichMediaItem(&item);
+    if (kind == "video" && videos)
+      videos->Append(item.Clone());
+    else if (kind == "image" && images)
+      images->Append(item.Clone());
+    else if (links)
+      links->Append(std::move(item));
+  }
+}
+
 const char* SearchPromptForMode(const std::string& mode, bool has_image) {
   if (mode == "images" && has_image) {
     return "You are Grok Vision Search for XBrowser. Analyze the attached "
-           "image. The user may want a description, text/OCR extraction, "
-           "explanation of what is shown, or help finding similar images "
-           "online — use web search when useful. Be specific. End with JSON: "
-           "{\"answer\":\"...\",\"links\":[{\"title\":\"...\",\"url\":"
-           "\"https://...\",\"snippet\":\"...\"}],"
-           "\"images\":[{\"url\":\"https://...\",\"title\":\"...\","
-           "\"description\":\"...\"}]}";
+           "image; use web search for similar images. Give a short answer, "
+           "then end with ONLY a ```json code block:\n"
+           "{\"answer\":\"...\",\"images\":[{\"title\":\"...\",\"url\":"
+           "\"https://...\",\"thumbnail\":\"https://...\",\"source\":"
+           "\"...\"}],\"links\":[{\"title\":\"...\",\"url\":\"https://..."
+           ",\"snippet\":\"...\"}]}\n"
+           "Include up to 20 image results.";
   }
   if (mode == "images") {
-    return "You are Grok Image Search for XBrowser. Describe and list image "
-           "search results for the text query. End with JSON: "
-           "{\"answer\":\"...\",\"links\":[{\"title\":\"...\",\"url\":"
-           "\"https://...\",\"snippet\":\"...\"}],"
-           "\"images\":[{\"url\":\"https://...\",\"title\":\"...\","
-           "\"description\":\"...\"}]}";
+    return "You are Grok Image Search for XBrowser. Use web search for image "
+           "results across multiple sites. Short summary, then ONLY ```json:\n"
+           "{\"answer\":\"...\",\"images\":[{\"title\":\"...\",\"url\":"
+           "\"https://...\",\"thumbnail\":\"https://...\",\"source\":"
+           "\"...\"}],\"links\":[{\"title\":\"...\",\"url\":\"https://..."
+           ",\"snippet\":\"...\"}]}\n"
+           "Include up to 20 images.";
   }
   if (mode == "videos") {
-    return "You are Grok Video Search for XBrowser. Summarize video results "
-           "with titles and URLs. End with JSON: "
-           "{\"links\":[{\"title\":\"...\",\"url\":\"https://...\","
-           "\"snippet\":\"...\"}]}";
+    return "You are Grok Video Search for XBrowser. Use web search. Find videos "
+           "on YouTube, Vimeo, and Dailymotion. Brief summary, then ONLY "
+           "```json:\n"
+           "{\"videos\":[{\"title\":\"...\",\"url\":\"https://...\","
+           "\"provider\":\"youtube|vimeo|dailymotion\",\"snippet\":\"...\"}]}"
+           "\n"
+           "Include 12-20 videos from multiple providers when available.";
   }
   if (mode == "imagine") {
     return "Generate an image for this prompt. Return a brief caption then "
            "any image URLs produced.";
   }
-  return "You are Grok Search for XBrowser. Answer the web search query using "
-         "current web knowledge. End with a JSON block: "
+  return "You are Grok Search for XBrowser. Use web search. Give a concise "
+         "formatted answer with citations, then ONLY ```json:\n"
          "{\"links\":[{\"title\":\"...\",\"url\":\"https://...\","
-         "\"snippet\":\"...\"}]} with up to 5 relevant links.";
+         "\"snippet\":\"...\"}]}\n"
+         "Include up to 20 diverse, high-quality sources.";
 }
 
 base::CommandLine BuildGrokSearchCommand(const std::string& query,
@@ -449,43 +652,56 @@ base::DictValue ParseSearchText(const std::string& text,
                                const std::string& mode) {
   base::ListValue links;
   base::ListValue images;
-  size_t json_start = text.rfind("{\"links\"");
-  if (json_start == std::string::npos)
-    json_start = text.rfind("{\"answer\"");
-  if (json_start == std::string::npos)
-    json_start = text.rfind("{\"images\"");
-  if (json_start == std::string::npos)
-    json_start = text.rfind("\n{");
-  if (json_start != std::string::npos && text[json_start] == '\n')
-    json_start++;
+  base::ListValue videos;
+  std::set<std::string> seen;
+
   std::string answer = text;
-  if (json_start != std::string::npos) {
-    answer = std::string(base::TrimWhitespaceASCII(
-        text.substr(0, json_start), base::TRIM_TRAILING));
-    while (base::EndsWith(answer, "`"))
-      answer.pop_back();
-    answer = std::string(
-        base::TrimWhitespaceASCII(answer, base::TRIM_TRAILING));
-    if (base::EndsWith(answer, "```json"))
-      answer.resize(answer.size() - 7);
-    else if (base::EndsWith(answer, "```"))
-      answer.resize(answer.size() - 3);
-    answer = std::string(
-        base::TrimWhitespaceASCII(answer, base::TRIM_TRAILING));
+  const std::string json_blob = ExtractJsonPayload(text);
+  if (!json_blob.empty()) {
+    size_t json_start = text.find(json_blob);
+    if (json_start != std::string::npos) {
+      answer = std::string(base::TrimWhitespaceASCII(
+          text.substr(0, json_start), base::TRIM_TRAILING));
+      while (base::EndsWith(answer, "`"))
+        answer.pop_back();
+      answer = std::string(
+          base::TrimWhitespaceASCII(answer, base::TRIM_TRAILING));
+      if (base::EndsWith(answer, "```json"))
+        answer.resize(answer.size() - 7);
+      else if (base::EndsWith(answer, "```"))
+        answer.resize(answer.size() - 3);
+      answer = std::string(
+          base::TrimWhitespaceASCII(answer, base::TRIM_TRAILING));
+    }
     if (auto link_json =
-            base::JSONReader::ReadDict(text.substr(json_start),
-                                       base::JSON_PARSE_RFC)) {
-      if (const base::ListValue* list = link_json->FindList("links"))
-        links = list->Clone();
-      if (const base::ListValue* imgs = link_json->FindList("images"))
-        images = imgs->Clone();
+            base::JSONReader::ReadDict(json_blob, base::JSON_PARSE_RFC)) {
+      AppendParsedItems(link_json->FindList("videos"), "video", &links,
+                        &images, &videos, &seen);
+      AppendParsedItems(link_json->FindList("images"), "image", &links,
+                        &images, &videos, &seen);
+      AppendParsedItems(link_json->FindList("links"), "link", &links, &images,
+                        &videos, &seen);
     }
   }
+
+  const std::string kind =
+      mode == "videos" ? "video" : mode == "images" ? "image" : "link";
+  if (links.empty() && videos.empty())
+    ExtractUrlsFromText(text, kind, &links, &seen);
+  if (mode == "videos" && videos.empty()) {
+    for (const auto& entry : links) {
+      if (entry.is_dict())
+        videos.Append(entry.GetDict().Clone());
+    }
+  }
+
   base::DictValue result;
   result.Set("mode", mode);
   result.Set("answer", answer);
   result.Set("text", answer);
   result.Set("links", std::move(links));
+  if (!videos.empty())
+    result.Set("videos", std::move(videos));
   if (!images.empty())
     result.Set("images", std::move(images));
   if (mode == "imagine" && images.empty()) {
@@ -519,6 +735,31 @@ void SendHttpChunk(net::HttpServer* server,
   frame.append(data);
   frame.append("\r\n");
   server->SendRaw(connection_id, frame, TRAFFIC_ANNOTATION_FOR_TESTS);
+}
+
+void SendStreamItem(net::HttpServer* server,
+                    int connection_id,
+                    base::DictValue item) {
+  item.Set("type", "item");
+  std::string line;
+  base::JSONWriter::Write(item, &line);
+  line.push_back('\n');
+  SendHttpChunk(server, connection_id, line);
+}
+
+void EmitNewItemsFromText(net::HttpServer* server,
+                          int connection_id,
+                          const std::string& text,
+                          const std::string& mode,
+                          std::set<std::string>* seen) {
+  base::ListValue batch;
+  const std::string kind =
+      mode == "videos" ? "video" : mode == "images" ? "image" : "link";
+  ExtractUrlsFromText(text, kind, &batch, seen);
+  for (const auto& entry : batch) {
+    if (entry.is_dict())
+      SendStreamItem(server, connection_id, entry.GetDict().Clone());
+  }
 }
 
 void BeginNdjsonStream(net::HttpServer* server, int connection_id) {
@@ -661,6 +902,7 @@ void PumpGrokStream(net::HttpServer* server,
   std::string buffer;
   std::string full_text;
   std::string session_id;
+  std::set<std::string> emitted_urls;
   char read_buf[4096];
   while (true) {
     int n = HANDLE_EINTR(
@@ -680,8 +922,13 @@ void PumpGrokStream(net::HttpServer* server,
               base::JSONReader::ReadDict(line, base::JSON_PARSE_RFC)) {
         const std::string* type = parsed->FindString("type");
         if (type && *type == "text") {
-          if (const std::string* data = parsed->FindString("data"))
+          if (const std::string* data = parsed->FindString("data")) {
             full_text += *data;
+            if (kind == GrokStreamKind::kSearch) {
+              EmitNewItemsFromText(server, connection_id, full_text, mode,
+                                   &emitted_urls);
+            }
+          }
         } else if (type && *type == "end") {
           if (const std::string* sid = parsed->FindString("sessionId"))
             session_id = *sid;
@@ -727,6 +974,8 @@ void PumpGrokStream(net::HttpServer* server,
     result_event.Set("mode", mode);
     if (const base::ListValue* links = parsed.FindList("links"))
       result_event.Set("links", links->Clone());
+    if (const base::ListValue* videos = parsed.FindList("videos"))
+      result_event.Set("videos", videos->Clone());
     if (const base::ListValue* images = parsed.FindList("images"))
       result_event.Set("images", images->Clone());
   } else {

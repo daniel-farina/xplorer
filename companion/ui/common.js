@@ -220,6 +220,78 @@ function safeUrl(url) {
   }
 }
 
+/** Detect video/content provider from URL. */
+function detectProvider(url) {
+  try {
+    const h = new URL(url).hostname.replace(/^www\./, '');
+    if (h === 'youtu.be' || h.endsWith('youtube.com')) return 'youtube';
+    if (h.endsWith('vimeo.com')) return 'vimeo';
+    if (h.endsWith('dailymotion.com')) return 'dailymotion';
+    if (h.endsWith('twitch.tv')) return 'twitch';
+  } catch { /* ignore */ }
+  return '';
+}
+
+function youtubeVideoId(url) {
+  try {
+    const u = new URL(url);
+    if (u.hostname.includes('youtu.be')) return u.pathname.slice(1).split('/')[0];
+    return u.searchParams.get('v') || '';
+  } catch {
+    return '';
+  }
+}
+
+/** Best-effort thumbnail for video URLs (YouTube supported natively). */
+function mediaThumbnail(item) {
+  if (item.thumbnail) return safeUrl(item.thumbnail);
+  const url = safeUrl(item.url);
+  if (!url) return '';
+  const provider = item.provider || detectProvider(url);
+  if (provider === 'youtube') {
+    const id = youtubeVideoId(url);
+    if (id) return `https://img.youtube.com/vi/${id}/mqdefault.jpg`;
+  }
+  return '';
+}
+
+function domainFromUrl(url) {
+  try {
+    return new URL(url).hostname.replace(/^www\./, '');
+  } catch {
+    return url;
+  }
+}
+
+function normalizeResultItem(raw, kind) {
+  const url = safeUrl(typeof raw === 'string' ? raw : raw?.url);
+  if (!url) return null;
+  const title = typeof raw === 'string'
+    ? url
+    : (raw.title || raw.name || domainFromUrl(url));
+  return {
+    kind: raw?.kind || kind,
+    url,
+    title,
+    snippet: raw?.snippet || raw?.description || '',
+    thumbnail: mediaThumbnail({ ...raw, url }),
+    provider: raw?.provider || detectProvider(url),
+    source: raw?.source || domainFromUrl(url),
+  };
+}
+
+/** Merge result items, dedupe by URL. */
+function mergeResultItems(existing, incoming, kind) {
+  const seen = new Set(existing.map((i) => i.url));
+  for (const raw of incoming) {
+    const item = normalizeResultItem(raw, kind);
+    if (!item || seen.has(item.url)) continue;
+    seen.add(item.url);
+    existing.push(item);
+  }
+  return existing;
+}
+
 /** Extract [[n]](url) and [title](url) citations from grok web-search text. */
 function extractMarkdownLinks(text) {
   const links = [];
@@ -239,6 +311,30 @@ function extractMarkdownLinks(text) {
     }
   }
   return links;
+}
+
+/** Pull structured items from streaming answer text (URLs + markdown titles). */
+function extractResultsFromText(text, mode) {
+  const kind = mode === 'videos' ? 'video' : mode === 'images' ? 'image' : 'link';
+  const items = [];
+  const patterns = [
+    /\*\*([^*]+)\*\*\s*[—–-]\s*(https?:\/\/[^\s<>"')]+)/g,
+    /\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g,
+    /(https?:\/\/[^\s<>"')]+)/g,
+  ];
+  const seen = new Set();
+  for (const re of patterns) {
+    let m;
+    while ((m = re.exec(text)) !== null) {
+      const title = m.length > 2 ? m[1] : '';
+      const url = m[m.length - 1];
+      const item = normalizeResultItem({ title, url }, kind);
+      if (!item || seen.has(item.url)) continue;
+      seen.add(item.url);
+      items.push(item);
+    }
+  }
+  return items;
 }
 
 /** Lightweight markdown → HTML (escaped input). */

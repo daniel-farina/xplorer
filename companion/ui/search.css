@@ -312,6 +312,132 @@ html, body {
 
 .results { margin-top: 28px; }
 
+.results-grid-panel {
+  margin-bottom: 16px;
+}
+
+.results-grid-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.results-grid-label .count {
+  font-weight: 500;
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--surface-elevated);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+}
+
+.results-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.results-grid:has(.video-card),
+.results-grid:has(.link-card) {
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+}
+
+.results-grid:has(.image-card) {
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+}
+
+.media-card {
+  display: flex;
+  flex-direction: column;
+  text-decoration: none;
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--surface);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.media-card:hover {
+  border-color: var(--accent);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.video-card {
+  flex-direction: row;
+  min-height: 96px;
+}
+
+.video-card .card-thumb {
+  width: 168px;
+  min-width: 168px;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  background: var(--surface-elevated);
+}
+
+.video-card .card-thumb.placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+  color: var(--text-secondary);
+}
+
+.image-card .card-thumb {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  background: var(--surface-elevated);
+}
+
+.card-body {
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.card-provider {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--accent);
+}
+
+.card-body h3,
+.card-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.35;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.card-snippet {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-secondary);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.link-card .card-body {
+  padding: 14px;
+}
+
 .result-card {
   background: var(--surface);
   border: 1px solid var(--border);

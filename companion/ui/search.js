@@ -159,24 +159,30 @@ form?.addEventListener('submit', async (e) => {
   await streamSearch(q, mode);
 });
 
-function buildStreamingShell(hasImage) {
+function resultsPanelLabel(mode) {
+  if (mode === 'videos') return 'Videos';
+  if (mode === 'images') return 'Images';
+  return 'Results';
+}
+
+function buildStreamingShell(hasImage, searchMode) {
   const preview = hasImage && attachedImage?.previewUrl
     ? `<div class="query-image"><img src="${attachedImage.previewUrl}" alt="Query image"></div>`
     : '';
   results.innerHTML = `
     ${preview}
+    <div class="results-grid-panel hidden">
+      <div class="results-grid-label">${escapeHtml(resultsPanelLabel(searchMode))}</div>
+      <div class="results-grid" id="live-results-grid"></div>
+    </div>
     <div class="result-card streaming">
       <details class="thinking-panel" open>
         <summary>✦ Thinking</summary>
         <div class="thinking-text">${hasImage ? 'Grok is analyzing the image…' : 'Grok is searching…'}</div>
       </details>
       <div class="answer-panel hidden">
-        <div class="answer-label">Answer</div>
+        <div class="answer-label">Summary</div>
         <div class="answer markdown"></div>
-      </div>
-      <div class="sources-panel hidden">
-        <div class="sources-label">Sources</div>
-        <div class="sources-list"></div>
       </div>
     </div>`;
   return {
@@ -184,28 +190,64 @@ function buildStreamingShell(hasImage) {
     thinkingText: results.querySelector('.thinking-text'),
     answerPanel: results.querySelector('.answer-panel'),
     answerEl: results.querySelector('.answer'),
-    sourcesPanel: results.querySelector('.sources-panel'),
-    sourcesList: results.querySelector('.sources-list'),
+    gridPanel: results.querySelector('.results-grid-panel'),
+    gridEl: results.querySelector('#live-results-grid'),
+    items: [],
   };
 }
 
-function renderSourceLinks(container, links) {
-  if (!container || !links?.length) return;
-  container.innerHTML = links.map((l) =>
-    `<a class="source-link" href="${escapeHtml(l.url)}" target="_blank" rel="noopener">
-      <span class="source-title">${escapeHtml(l.title || l.url)}</span>
-      <span class="source-url">${escapeHtml(l.url)}</span>
-    </a>`,
-  ).join('');
+function renderResultCard(item, mode) {
+  const url = escapeHtml(item.url);
+  const title = escapeHtml(item.title || item.url);
+  const snippet = item.snippet ? `<p class="card-snippet">${escapeHtml(item.snippet)}</p>` : '';
+  const provider = item.provider
+    ? `<span class="card-provider">${escapeHtml(item.provider)}</span>`
+    : `<span class="card-provider">${escapeHtml(item.source || domainFromUrl(item.url))}</span>`;
+
+  if (mode === 'videos' || item.kind === 'video') {
+    const thumb = item.thumbnail
+      ? `<img class="card-thumb" src="${escapeHtml(item.thumbnail)}" alt="" loading="lazy">`
+      : `<div class="card-thumb placeholder">▶</div>`;
+    return `<a class="media-card video-card" href="${url}" target="_blank" rel="noopener">
+      ${thumb}
+      <div class="card-body">${provider}<h3>${title}</h3>${snippet}</div>
+    </a>`;
+  }
+
+  if (mode === 'images' || item.kind === 'image') {
+    const imgUrl = escapeHtml(item.thumbnail || item.url);
+    return `<a class="media-card image-card" href="${url}" target="_blank" rel="noopener">
+      <img class="card-thumb" src="${imgUrl}" alt="${title}" loading="lazy">
+      <div class="card-body">${provider}<span class="card-title">${title}</span></div>
+    </a>`;
+  }
+
+  return `<a class="media-card link-card" href="${url}" target="_blank" rel="noopener">
+    <div class="card-body">${provider}<h3>${title}</h3>${snippet}</div>
+  </a>`;
+}
+
+function renderResultsGrid(container, items, mode) {
+  if (!container || !items?.length) return;
+  container.innerHTML = items.map((item) => renderResultCard(item, mode)).join('');
+}
+
+function appendResultItems(ui, newItems, searchMode) {
+  if (!newItems.length) return;
+  mergeResultItems(ui.items, newItems, searchMode === 'videos' ? 'video' : searchMode === 'images' ? 'image' : 'link');
+  ui.gridPanel?.classList.remove('hidden');
+  renderResultsGrid(ui.gridEl, ui.items, searchMode);
 }
 
 async function streamSearch(query, searchMode) {
   const hasImage = !!attachedImage?.data;
-  const ui = buildStreamingShell(hasImage);
+  const ui = buildStreamingShell(hasImage, searchMode);
   let thinkingText = '';
   let answerText = '';
   let links = [];
+  let videos = [];
   let images = [];
+  const seenUrls = new Set();
   const searchModel = modelForSearchMode(searchMode, activeModel, models);
   let streamModel = searchModel;
   let streamModelLabel = modelLabel(searchModel, models);
@@ -258,6 +300,12 @@ async function streamSearch(query, searchMode) {
           sawThought = true;
           thinkingText += evt.data || '';
           ui.thinkingText.textContent = thinkingText;
+        } else if (evt.type === 'item') {
+          const item = normalizeResultItem(evt, searchMode === 'videos' ? 'video' : searchMode === 'images' ? 'image' : 'link');
+          if (item && !seenUrls.has(item.url)) {
+            seenUrls.add(item.url);
+            appendResultItems(ui, [item], searchMode);
+          }
         } else if (evt.type === 'text') {
           if (!answerText) {
             ui.answerPanel.classList.remove('hidden');
@@ -265,16 +313,15 @@ async function streamSearch(query, searchMode) {
           }
           answerText += evt.data || '';
           ui.answerEl.innerHTML = renderMarkdown(answerText);
-          const inlineLinks = extractMarkdownLinks(answerText);
-          if (inlineLinks.length) {
-            links = inlineLinks;
-            ui.sourcesPanel?.classList.remove('hidden');
-            renderSourceLinks(ui.sourcesList, links);
-          }
+          const fresh = extractResultsFromText(answerText, searchMode)
+            .filter((i) => !seenUrls.has(i.url));
+          fresh.forEach((i) => seenUrls.add(i.url));
+          if (fresh.length) appendResultItems(ui, fresh, searchMode);
         } else if (evt.type === 'result') {
           if (evt.answer) answerText = evt.answer;
           if (evt.text && !answerText) answerText = evt.text;
           if (evt.links) links = evt.links;
+          if (evt.videos) videos = evt.videos;
           if (evt.images) images = evt.images;
           if (evt.model) streamModel = evt.model;
           if (evt.model_label) streamModelLabel = evt.model_label;
@@ -290,7 +337,9 @@ async function streamSearch(query, searchMode) {
       text: answerText,
       thinking: thinkingText,
       links,
+      videos,
       images,
+      items: ui.items,
       model: streamModel,
       model_label: streamModelLabel,
       queryImage: hasImage ? attachedImage?.previewUrl : null,
@@ -302,20 +351,20 @@ async function streamSearch(query, searchMode) {
   }
 }
 
-function renderImageGrid(images) {
-  if (!images?.length) return '';
-  const items = images.map((img) => {
-    const url = typeof img === 'string' ? img : img.url;
-    const title = typeof img === 'string' ? '' : (img.title || img.description || '');
-    if (!url) return '';
-    return `<a class="similar-image" href="${escapeHtml(url)}" target="_blank" rel="noopener">
-      <img src="${escapeHtml(url)}" alt="${escapeHtml(title || 'similar image')}" loading="lazy">
-      ${title ? `<span>${escapeHtml(title)}</span>` : ''}
-    </a>`;
-  }).join('');
-  return items
-    ? `<div class="similar-section"><h3>Similar images</h3><div class="similar-grid">${items}</div></div>`
-    : '';
+function collectFinalItems(data) {
+  if (data.items?.length) return data.items;
+  const kind = data.mode === 'videos' ? 'video' : data.mode === 'images' ? 'image' : 'link';
+  let raw = [];
+  if (data.mode === 'videos' && data.videos?.length) raw = data.videos;
+  else if (data.mode === 'images' && data.images?.length) raw = data.images;
+  else if (data.links?.length) raw = data.links;
+  else raw = extractMarkdownLinks(data.answer || data.text || '');
+  const items = [];
+  mergeResultItems(items, raw, kind);
+  if (!items.length) {
+    mergeResultItems(items, extractResultsFromText(data.answer || data.text || '', data.mode), kind);
+  }
+  return items;
 }
 
 function renderResults(query, data) {
@@ -343,25 +392,24 @@ function renderResults(query, data) {
        </details>`
     : '';
 
-  const allLinks = (data.links?.length ? data.links : extractMarkdownLinks(text));
-  const sourcesBlock = allLinks.length
-    ? `<div class="result-card sources-card"><h3>Sources</h3><div class="sources-list">${allLinks.map((l) =>
-        `<a class="source-link" href="${escapeHtml(l.url)}" target="_blank" rel="noopener">
-          <span class="source-title">${escapeHtml(l.title || l.url)}</span>
-          <span class="source-url">${escapeHtml(l.url)}</span>
-        </a>`).join('')}</div></div>`
+  const items = collectFinalItems(data);
+  const gridLabel = resultsPanelLabel(data.mode);
+  const gridBlock = items.length
+    ? `<div class="results-grid-panel">
+        <div class="results-grid-label">${escapeHtml(gridLabel)} <span class="count">${items.length}</span></div>
+        <div class="results-grid">${items.map((item) => renderResultCard(item, data.mode)).join('')}</div>
+      </div>`
     : '';
 
   const meta = data.model_label
     ? `<div class="result-meta">Model: ${escapeHtml(data.model_label)}</div>`
     : '';
 
-  results.innerHTML =
-    queryImage +
-    thinkingBlock +
-    sourcesBlock +
-    `<div class="result-card result-body"><div class="markdown">${renderMarkdown(text)}</div>${meta}</div>` +
-    renderImageGrid(data.images);
+  const summary = text.trim()
+    ? `<div class="result-card result-body"><div class="markdown">${renderMarkdown(text)}</div>${meta}</div>`
+    : (meta ? `<div class="result-card result-body">${meta}</div>` : '');
+
+  results.innerHTML = queryImage + gridBlock + thinkingBlock + summary;
 }
 
 initSearchHomeToggle($('#home-toggle'));
