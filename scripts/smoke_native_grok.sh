@@ -48,7 +48,7 @@ print('models:', len(ids))
 # Streaming search — grab first lines with a hard timeout.
 set +e
 curl -sfN -m "${STREAM_TIMEOUT}" -X POST -H 'Content-Type: application/json' \
-  -d '{"query":"2+2","mode":"web","model":"grok-composer-2.5-fast"}' \
+  -d '{"query":"2+2","mode":"web","model":"grok-build"}' \
   "${BASE}/api/search/stream" 2>/dev/null | head -5 >/tmp/xb_stream.txt
 set -e
 grep -qE '"type":"(meta|thought|text)"' /tmp/xb_stream.txt \

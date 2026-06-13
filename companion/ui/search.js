@@ -14,7 +14,7 @@ const previewImg = $('#preview-img');
 
 let mode = 'web';
 let models = [];
-let activeModel = getStoredModel();
+let activeModel = getStoredSearchModel();
 let attachedImage = null; // { data, mime, previewUrl, source }
 
 function updateModeUi() {
@@ -27,12 +27,22 @@ function updateModeUi() {
     'Search with Grok…';
 }
 
+function applyModeModel() {
+  const next = modelForSearchMode(mode, activeModel, models);
+  if (next !== activeModel) {
+    activeModel = next;
+    populateModelSelect(modelSelect, models, activeModel);
+    updateModelBadge(modelBadge, activeModel, modelLabel(activeModel, models));
+  }
+}
+
 modes?.querySelectorAll('.mode').forEach((btn) => {
   btn.onclick = () => {
     modes.querySelectorAll('.mode').forEach((b) => b.classList.remove('active'));
     btn.classList.add('active');
     mode = btn.dataset.mode;
     updateModeUi();
+    applyModeModel();
   };
 });
 
@@ -122,8 +132,10 @@ form?.addEventListener('drop', async (e) => {
 
 async function initModels() {
   models = await fetchModels();
+  activeModel = modelForSearchMode(mode, activeModel, models);
   if (!models.some((m) => m.id === activeModel)) {
-    activeModel = models[0]?.id || DEFAULT_MODEL;
+    activeModel = models.find((m) => m.id === SEARCH_DEFAULT_MODEL)?.id
+      || models[0]?.id || SEARCH_DEFAULT_MODEL;
   }
   populateModelSelect(modelSelect, models, activeModel);
   updateModelBadge(modelBadge, activeModel, modelLabel(activeModel, models));
@@ -131,7 +143,7 @@ async function initModels() {
 
 modelSelect?.addEventListener('change', async () => {
   activeModel = modelSelect.value;
-  persistModel(activeModel);
+  persistSearchModel(activeModel);
   updateModelBadge(modelBadge, activeModel, modelLabel(activeModel, models));
   try {
     await fetch('/api/settings', {
@@ -182,16 +194,16 @@ async function streamSearch(query, searchMode) {
   let answerText = '';
   let links = [];
   let images = [];
-  let streamModel = activeModel;
-  let streamModelLabel = modelLabel(activeModel, models);
+  const searchModel = modelForSearchMode(searchMode, activeModel, models);
+  let streamModel = searchModel;
+  let streamModelLabel = modelLabel(searchModel, models);
   let sawThought = false;
 
   if (submitBtn) submitBtn.disabled = true;
-
   const body = {
     query: query || (hasImage ? 'Describe this image and find similar images' : ''),
     mode: searchMode,
-    model: activeModel,
+    model: searchModel,
   };
   if (hasImage) {
     body.image = attachedImage.data;

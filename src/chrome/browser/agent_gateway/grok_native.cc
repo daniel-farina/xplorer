@@ -217,6 +217,8 @@ void SaveSessions(const base::DictValue& data) {
 }
 
 constexpr char kDefaultModel[] = "grok-composer-2.5-fast";
+constexpr char kSearchModel[] = "grok-build";
+constexpr char kComposerModel[] = "grok-composer-2.5-fast";
 
 base::FilePath SettingsFile() {
   base::FilePath home;
@@ -265,6 +267,21 @@ std::string ResolveModel(const std::string* request_model) {
   if (request_model && !request_model->empty())
     return *request_model;
   return GetConfiguredModel();
+}
+
+bool SearchModeNeedsWebTools(const std::string& mode) {
+  return mode == "web" || mode == "videos";
+}
+
+// Composer has no web search; route web/video search through grok-build.
+std::string ResolveSearchModel(const std::string& mode,
+                               const std::string* request_model) {
+  std::string model = ResolveModel(request_model);
+  if (SearchModeNeedsWebTools(mode) && model == kComposerModel)
+    return kSearchModel;
+  if (SearchModeNeedsWebTools(mode) && model == kDefaultModel)
+    return kSearchModel;
+  return model;
 }
 
 std::string ModelDisplayName(const std::string& model) {
@@ -1073,9 +1090,13 @@ bool GrokNative::TryHandleRequest(
     auto params = QueryParams(info.path);
     std::string query = params["q"];
     std::string mode = params.count("mode") ? params["mode"] : "web";
-    std::string model = GetConfiguredModel();
-    if (auto mit = params.find("model"); mit != params.end() && !mit->second.empty())
-      model = mit->second;
+    const std::string* model_param = nullptr;
+    std::string model_override;
+    if (auto mit = params.find("model"); mit != params.end() && !mit->second.empty()) {
+      model_override = mit->second;
+      model_param = &model_override;
+    }
+    std::string model = ResolveSearchModel(mode, model_param);
     if (query.empty()) {
       base::DictValue err;
       err.Set("error",
@@ -1170,7 +1191,7 @@ bool GrokNative::TryHandleRequest(
     const std::string search_query = query ? *query : std::string();
     const std::string search_mode = mode ? *mode : "web";
     const std::string* model_body = body ? body->FindString("model") : nullptr;
-    std::string model = ResolveModel(model_body);
+    std::string model = ResolveSearchModel(search_mode, model_body);
     SearchImageInput image;
     ExtractSearchImage(body ? &*body : nullptr, &image);
     const bool stream =

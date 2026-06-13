@@ -1,7 +1,10 @@
 /** Shared utilities for Grok companion UI (search + chat). */
 
 const DEFAULT_MODEL = 'grok-composer-2.5-fast';
+/** Web/video search needs grok-build (Composer has no web search tools). */
+const SEARCH_DEFAULT_MODEL = 'grok-build';
 const MODEL_STORAGE_KEY = 'grok_model';
+const SEARCH_MODEL_STORAGE_KEY = 'grok_search_model';
 
 function getStoredModel() {
   try {
@@ -15,6 +18,30 @@ function persistModel(model) {
   try {
     localStorage.setItem(MODEL_STORAGE_KEY, model);
   } catch { /* ignore */ }
+}
+
+function getStoredSearchModel() {
+  try {
+    return localStorage.getItem(SEARCH_MODEL_STORAGE_KEY) || SEARCH_DEFAULT_MODEL;
+  } catch {
+    return SEARCH_DEFAULT_MODEL;
+  }
+}
+
+function persistSearchModel(model) {
+  try {
+    localStorage.setItem(SEARCH_MODEL_STORAGE_KEY, model);
+  } catch { /* ignore */ }
+}
+
+/** Pick the right model for a search mode (web/videos → grok-build). */
+function modelForSearchMode(mode, selectedModel, models) {
+  const needsWeb = mode === 'web' || mode === 'videos';
+  if (needsWeb && selectedModel === DEFAULT_MODEL) {
+    const grok = (models || []).find((m) => m.id === SEARCH_DEFAULT_MODEL);
+    return grok ? grok.id : SEARCH_DEFAULT_MODEL;
+  }
+  return selectedModel;
 }
 
 function modelLabel(id, models) {
