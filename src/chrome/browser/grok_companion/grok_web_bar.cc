@@ -7,17 +7,24 @@
 #include <memory>
 #include <string>
 
+#include "base/base_paths.h"
+#include "base/files/file_util.h"
 #include "base/functional/bind.h"
-#include "base/values.h"
+#include "base/json/json_writer.h"
+#include "base/path_service.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/time/time.h"
+#include "base/values.h"
 #include "chrome/browser/agent_gateway/agent_gateway.h"
 #include "chrome/browser/grok_companion/grok_companion_util.h"
-#include "chrome/common/chrome_isolated_world_ids.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/profiles/profile_manager.h"
+#include "chrome/browser/themes/theme_service.h"
+#include "chrome/browser/themes/theme_service_factory.h"
+#include "chrome/common/chrome_isolated_world_ids.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "content/public/browser/navigation_handle.h"
@@ -59,75 +66,111 @@ GURL SearchPageURL(const char* search_mode) {
                                  GatewayPort(), path.c_str()));
 }
 
+base::FilePath CompanionUiDir() {
+  const char* env = getenv("XBROWSER_COMPANION_UI");
+  if (env && *env)
+    return base::FilePath(env);
+  base::FilePath home;
+  if (base::PathService::Get(base::DIR_HOME, &home)) {
+    base::FilePath candidate =
+        home.AppendASCII("cli_experiment/aether/companion/ui");
+    if (base::DirectoryExists(candidate))
+      return candidate;
+  }
+  return base::FilePath();
+}
+
+std::string LoadToolbarCss() {
+  base::FilePath css_file = CompanionUiDir().AppendASCII("toolbar.css");
+  std::string css;
+  if (!base::ReadFileToString(css_file, &css))
+    return "";
+  return css;
+}
+
+std::string JsonStringLiteral(const std::string& value) {
+  std::string json;
+  base::JSONWriter::Write(base::Value(value), &json);
+  return json;
+}
+
+std::string BrowserThemeAttribute() {
+  Profile* profile = ProfileManager::GetLastUsedProfile();
+  if (!profile)
+    return "";
+  ThemeService* theme = ThemeServiceFactory::GetForProfile(profile);
+  if (!theme)
+    return "";
+  switch (theme->GetBrowserColorScheme()) {
+    case ThemeService::BrowserColorScheme::kDark:
+      return "dark";
+    case ThemeService::BrowserColorScheme::kLight:
+      return "light";
+    default:
+      return "";
+  }
+}
+
 std::string BuildInjectScript(const std::string& active_mode) {
   const std::string build_href = SwitchHomeURL(kSearchHomeBuild).spec();
   const std::string web_href = SwitchHomeURL(kSearchHomeWeb).spec();
   const std::string search_href = SearchPageURL("").spec();
   const std::string images_href = SearchPageURL("images").spec();
   const std::string videos_href = SearchPageURL("videos").spec();
+  const std::string imagine_href = SearchPageURL("imagine").spec();
   const std::string build_active =
       active_mode == kSearchHomeBuild ? " active" : "";
   const std::string web_active = active_mode == kSearchHomeWeb ? " active" : "";
 
+  const std::string toolbar_css = LoadToolbarCss();
+  const std::string css_json = JsonStringLiteral(toolbar_css);
+
+  const std::string html = base::StringPrintf(
+      R"(<a class="grok-logo" href="%s">&#10022; Grok</a>)"
+      R"(<nav class="grok-modes">)"
+      R"(<a class="grok-mode" href="%s">All</a>)"
+      R"(<a class="grok-mode" href="%s">Images</a>)"
+      R"(<a class="grok-mode" href="%s">Videos</a>)"
+      R"(<a class="grok-mode" href="%s">Imagine</a>)"
+      R"(</nav>)"
+      R"(<div class="grok-toolbar-spacer"></div>)"
+      R"(<div class="grok-toolbar-actions">)"
+      R"(<div class="grok-toggle">)"
+      R"(<a class="grok-toggle-opt%s" href="%s">Grok Build</a>)"
+      R"(<a class="grok-toggle-opt%s" href="%s">Grok Web</a>)"
+      R"(</div></div>)",
+      search_href.c_str(), search_href.c_str(), images_href.c_str(),
+      videos_href.c_str(), imagine_href.c_str(), build_active.c_str(),
+      build_href.c_str(), web_active.c_str(), web_href.c_str());
+  const std::string html_json = JsonStringLiteral(html);
+
+  const std::string theme = BrowserThemeAttribute();
+  const std::string theme_js =
+      theme.empty()
+          ? ""
+          : base::StringPrintf(
+                "document.documentElement.setAttribute('data-theme','%s');",
+                theme.c_str());
+
   return base::StringPrintf(
       R"((function(){
   if (document.getElementById('xbrowser-grok-bar')) return;
+  %s
   var style = document.createElement('style');
-  style.textContent = [
-    '#xbrowser-grok-bar{',
-    'position:fixed;top:0;left:0;right:0;z-index:2147483647;',
-    'display:flex;align-items:center;gap:12px;padding:10px 16px;',
-    'font:13px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;',
-    'border-bottom:1px solid var(--xb-border);background:var(--xb-surface);',
-    'color:var(--xb-text);box-shadow:0 1px 0 var(--xb-shadow);}',
-    '#xbrowser-grok-bar .xb-logo{font-weight:700;font-size:16px;color:var(--xb-accent);',
-    'text-decoration:none;white-space:nowrap;}',
-    '#xbrowser-grok-bar .xb-modes{display:inline-flex;gap:2px;flex-wrap:wrap;}',
-    '#xbrowser-grok-bar .xb-mode{padding:5px 12px;text-decoration:none;color:var(--xb-muted);',
-    'font-size:12px;border-radius:999px;white-space:nowrap;}',
-    '#xbrowser-grok-bar .xb-mode:hover{color:var(--xb-text);background:var(--xb-elevated);}',
-    '#xbrowser-grok-bar .xb-spacer{flex:1;min-width:8px;}',
-    '#xbrowser-grok-bar .xb-toggle{display:inline-flex;border:1px solid var(--xb-border);',
-    'border-radius:999px;overflow:hidden;background:var(--xb-elevated);}',
-    '#xbrowser-grok-bar .xb-opt{padding:5px 12px;text-decoration:none;color:var(--xb-muted);',
-    'font-size:12px;white-space:nowrap;}',
-    '#xbrowser-grok-bar .xb-opt:hover{color:var(--xb-text);background:var(--xb-surface);}',
-    '#xbrowser-grok-bar .xb-opt.active{background:var(--xb-accent-soft);',
-    'color:var(--xb-accent);font-weight:500;}',
-    '@media (prefers-color-scheme:light){',
-    '#xbrowser-grok-bar{--xb-border:#dadce0;--xb-surface:#f8f9fa;--xb-text:#202124;',
-    '--xb-muted:#5f6368;--xb-elevated:#f1f3f4;--xb-accent:#1a73e8;',
-    '--xb-accent-soft:rgba(26,115,232,.12);--xb-shadow:rgba(60,64,67,.12);}}',
-    '@media (prefers-color-scheme:dark){',
-    '#xbrowser-grok-bar{--xb-border:#333;--xb-surface:#161616;--xb-text:#f2f2f2;',
-    '--xb-muted:#aaa;--xb-elevated:#222;--xb-accent:#f2f2f2;',
-    '--xb-accent-soft:#2a2a2a;--xb-shadow:rgba(0,0,0,.25);}}'
-  ].join('');
+  style.textContent = %s;
   document.documentElement.appendChild(style);
-  var bar = document.createElement('div');
+  var bar = document.createElement('header');
   bar.id = 'xbrowser-grok-bar';
-  bar.innerHTML = [
-    '<a class="xb-logo" href="%s">✦ Grok</a>',
-    '<nav class="xb-modes">',
-    '<a class="xb-mode" href="%s">All</a>',
-    '<a class="xb-mode" href="%s">Images</a>',
-    '<a class="xb-mode" href="%s">Videos</a>',
-    '</nav>',
-    '<span class="xb-spacer"></span>',
-    '<div class="xb-toggle">',
-    '<a class="xb-opt%s" href="%s">Grok Build</a>',
-    '<a class="xb-opt%s" href="%s">Grok Web</a>',
-    '</div>'
-  ].join('');
+  bar.className = 'grok-toolbar';
+  bar.innerHTML = %s;
   var root = document.body || document.documentElement;
   root.insertBefore(bar, root.firstChild);
-  var pad = (bar.getBoundingClientRect().height || 44) + 'px';
+  var h = bar.getBoundingClientRect().height || 44;
+  var pad = h + 'px';
   document.documentElement.style.setProperty('padding-top', pad, 'important');
   if (document.body) document.body.style.setProperty('padding-top', pad, 'important');
 })();)",
-      search_href.c_str(), search_href.c_str(), images_href.c_str(),
-      videos_href.c_str(), build_active.c_str(), build_href.c_str(),
-      web_active.c_str(), web_href.c_str());
+      theme_js.c_str(), css_json.c_str(), html_json.c_str());
 }
 
 class GrokWebBarInjector : public content::WebContentsObserver {

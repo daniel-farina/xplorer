@@ -12,6 +12,7 @@ source_set("grok_companion") {
     "//chrome/common",
     "//chrome/browser/agent_gateway",
     "//chrome/browser/profiles",
+    "//chrome/browser/themes",
     "//chrome/browser/ui",
     "//components/tabs:public",
     "//chrome/browser/ui/views/side_panel",

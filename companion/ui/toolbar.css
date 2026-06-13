@@ -1,30 +1,83 @@
-/* Shared Grok toolbar — follows XBrowser light/dark theme via theme.css */
+/* Shared Grok toolbar — identical on Grok Build and Grok Web overlay */
 
 :root {
-  --toolbar-bg: var(--surface);
-  --toolbar-border: var(--border);
-  --toolbar-text: var(--text);
-  --toolbar-muted: var(--text-secondary);
-  --toolbar-elevated: var(--surface-elevated);
-  --toolbar-accent: var(--accent);
-  --toolbar-accent-soft: var(--accent-soft);
-  --toolbar-input-bg: var(--input-bg);
+  --toolbar-height: 44px;
+  --toolbar-bg: #f8f9fa;
+  --toolbar-border: #dadce0;
+  --toolbar-text: #202124;
+  --toolbar-muted: #5f6368;
+  --toolbar-elevated: #f1f3f4;
+  --toolbar-accent: #1a73e8;
+  --toolbar-accent-soft: rgba(26, 115, 232, 0.12);
+  --toolbar-input-bg: #ffffff;
+  --toolbar-shadow: rgba(60, 64, 67, 0.12);
+}
+
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme="light"]) {
+    --toolbar-bg: #161616;
+    --toolbar-border: #333333;
+    --toolbar-text: #f2f2f2;
+    --toolbar-muted: #aaaaaa;
+    --toolbar-elevated: #222222;
+    --toolbar-accent: #f2f2f2;
+    --toolbar-accent-soft: #2a2a2a;
+    --toolbar-input-bg: #222222;
+    --toolbar-shadow: rgba(0, 0, 0, 0.25);
+  }
+}
+
+html[data-theme="dark"] {
+  --toolbar-bg: #161616;
+  --toolbar-border: #333333;
+  --toolbar-text: #f2f2f2;
+  --toolbar-muted: #aaaaaa;
+  --toolbar-elevated: #222222;
+  --toolbar-accent: #f2f2f2;
+  --toolbar-accent-soft: #2a2a2a;
+  --toolbar-input-bg: #222222;
+  --toolbar-shadow: rgba(0, 0, 0, 0.25);
+}
+
+html[data-theme="light"] {
+  --toolbar-bg: #f8f9fa;
+  --toolbar-border: #dadce0;
+  --toolbar-text: #202124;
+  --toolbar-muted: #5f6368;
+  --toolbar-elevated: #f1f3f4;
+  --toolbar-accent: #1a73e8;
+  --toolbar-accent-soft: rgba(26, 115, 232, 0.12);
+  --toolbar-input-bg: #ffffff;
+  --toolbar-shadow: rgba(60, 64, 67, 0.12);
 }
 
 .grok-toolbar {
-  position: sticky;
-  top: 0;
-  z-index: 100;
   display: flex;
   align-items: center;
   gap: 12px;
+  min-height: var(--toolbar-height);
+  box-sizing: border-box;
   padding: 10px 16px;
   font: 13px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   background: var(--toolbar-bg);
   color: var(--toolbar-text);
   border-bottom: 1px solid var(--toolbar-border);
-  box-shadow: 0 1px 0 var(--shadow);
-  flex-wrap: wrap;
+  box-shadow: 0 1px 0 var(--toolbar-shadow);
+  flex-wrap: nowrap;
+}
+
+header.grok-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+#xbrowser-grok-bar.grok-toolbar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 2147483647;
 }
 
 .grok-toolbar-spacer {
@@ -35,6 +88,7 @@
 .grok-logo {
   font-weight: 700;
   font-size: 16px;
+  line-height: 1;
   color: var(--toolbar-accent);
   text-decoration: none;
   white-space: nowrap;
@@ -46,8 +100,9 @@
 
 .grok-modes {
   display: inline-flex;
+  align-items: center;
   gap: 2px;
-  flex-wrap: wrap;
+  flex-shrink: 0;
 }
 
 .grok-mode {
@@ -59,6 +114,7 @@
   cursor: pointer;
   font: inherit;
   font-size: 12px;
+  line-height: 1.4;
   text-decoration: none;
   white-space: nowrap;
 }
@@ -78,11 +134,12 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  flex-wrap: wrap;
+  flex-shrink: 0;
 }
 
 .grok-toggle {
   display: inline-flex;
+  align-items: center;
   border: 1px solid var(--toolbar-border);
   border-radius: 999px;
   overflow: hidden;
@@ -96,6 +153,7 @@
   padding: 5px 12px;
   font: inherit;
   font-size: 12px;
+  line-height: 1.4;
   cursor: pointer;
   text-decoration: none;
   white-space: nowrap;
@@ -114,6 +172,7 @@
 
 .grok-model-badge {
   font-size: 11px;
+  line-height: 1.4;
   padding: 4px 8px;
   border-radius: 10px;
   background: var(--toolbar-elevated);
@@ -136,8 +195,10 @@
   background: var(--toolbar-input-bg);
   color: var(--toolbar-text);
   font-size: 12px;
+  line-height: 1.4;
   cursor: pointer;
   max-width: 160px;
+  height: 28px;
 }
 
 .grok-toolbar-btn {
@@ -149,7 +210,9 @@
   cursor: pointer;
   font-weight: 500;
   font-size: 12px;
+  line-height: 1.4;
   white-space: nowrap;
+  height: 28px;
 }
 
 .grok-toolbar-btn:hover {
