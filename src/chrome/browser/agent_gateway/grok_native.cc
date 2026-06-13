@@ -544,6 +544,21 @@ void EndNdjsonStream(net::HttpServer* server, int connection_id) {
   server->SendRaw(connection_id, "0\r\n\r\n", TRAFFIC_ANNOTATION_FOR_TESTS);
 }
 
+std::string StripAnsiEscapes(std::string s) {
+  std::string out;
+  out.reserve(s.size());
+  for (size_t i = 0; i < s.size(); ++i) {
+    if (s[i] == '\x1b' && i + 1 < s.size() && s[i + 1] == '[') {
+      i += 2;
+      while (i < s.size() && s[i] != 'm')
+        ++i;
+      continue;
+    }
+    out.push_back(s[i]);
+  }
+  return out;
+}
+
 void SendStreamError(net::HttpServer* server,
                      int connection_id,
                      const std::string& message) {
@@ -602,8 +617,9 @@ void PumpGrokStream(net::HttpServer* server,
   }
 
   base::LaunchOptions options;
+  // Only stream stdout (streaming-json). Merging stderr injects ANSI logs like
+  // "[2m2026-..." that break NDJSON parsing in the companion UI.
   options.fds_to_remap.emplace_back(pipe_fds[1], STDOUT_FILENO);
-  options.fds_to_remap.emplace_back(pipe_fds[1], STDERR_FILENO);
   base::Process process = base::LaunchProcess(cmd, options);
   close(pipe_fds[1]);
 
@@ -636,9 +652,11 @@ void PumpGrokStream(net::HttpServer* server,
     buffer.append(read_buf, n);
     size_t newline = std::string::npos;
     while ((newline = buffer.find('\n')) != std::string::npos) {
-      std::string line = buffer.substr(0, newline);
+      std::string line =
+          StripAnsiEscapes(buffer.substr(0, newline));
       buffer.erase(0, newline + 1);
-      if (line.empty())
+      base::TrimWhitespaceASCII(line, base::TRIM_ALL, &line);
+      if (line.empty() || line[0] != '{')
         continue;
       if (auto parsed =
               base::JSONReader::ReadDict(line, base::JSON_PARSE_RFC)) {

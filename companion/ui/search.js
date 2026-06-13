@@ -176,7 +176,11 @@ function buildStreamingShell(hasImage) {
       </details>
       <div class="answer-panel hidden">
         <div class="answer-label">Answer</div>
-        <div class="answer"></div>
+        <div class="answer markdown"></div>
+      </div>
+      <div class="sources-panel hidden">
+        <div class="sources-label">Sources</div>
+        <div class="sources-list"></div>
       </div>
     </div>`;
   return {
@@ -184,7 +188,19 @@ function buildStreamingShell(hasImage) {
     thinkingText: results.querySelector('.thinking-text'),
     answerPanel: results.querySelector('.answer-panel'),
     answerEl: results.querySelector('.answer'),
+    sourcesPanel: results.querySelector('.sources-panel'),
+    sourcesList: results.querySelector('.sources-list'),
   };
+}
+
+function renderSourceLinks(container, links) {
+  if (!container || !links?.length) return;
+  container.innerHTML = links.map((l) =>
+    `<a class="source-link" href="${escapeHtml(l.url)}" target="_blank" rel="noopener">
+      <span class="source-title">${escapeHtml(l.title || l.url)}</span>
+      <span class="source-url">${escapeHtml(l.url)}</span>
+    </a>`,
+  ).join('');
 }
 
 async function streamSearch(query, searchMode) {
@@ -236,7 +252,8 @@ async function streamSearch(query, searchMode) {
         buffer = buffer.slice(idx + 1);
         if (!line) continue;
 
-        const evt = JSON.parse(line);
+        const evt = parseStreamLine(line);
+        if (!evt) continue;
         if (evt.type === 'meta') {
           if (evt.model) streamModel = evt.model;
           if (evt.model_label) streamModelLabel = evt.model_label;
@@ -251,7 +268,13 @@ async function streamSearch(query, searchMode) {
             if (sawThought) ui.thinkingPanel.removeAttribute('open');
           }
           answerText += evt.data || '';
-          ui.answerEl.textContent = answerText;
+          ui.answerEl.innerHTML = renderMarkdown(answerText);
+          const inlineLinks = extractMarkdownLinks(answerText);
+          if (inlineLinks.length) {
+            links = inlineLinks;
+            ui.sourcesPanel?.classList.remove('hidden');
+            renderSourceLinks(ui.sourcesList, links);
+          }
         } else if (evt.type === 'result') {
           if (evt.answer) answerText = evt.answer;
           if (evt.text && !answerText) answerText = evt.text;
@@ -324,9 +347,14 @@ function renderResults(query, data) {
        </details>`
     : '';
 
-  const links = (data.links || []).map((l) =>
-    `<div class="result-card"><h3><a href="${escapeHtml(l.url)}" target="_blank" rel="noopener">${escapeHtml(l.title || l.url)}</a></h3>
-     <p>${escapeHtml(l.snippet || '')}</p></div>`).join('');
+  const allLinks = (data.links?.length ? data.links : extractMarkdownLinks(text));
+  const sourcesBlock = allLinks.length
+    ? `<div class="result-card sources-card"><h3>Sources</h3><div class="sources-list">${allLinks.map((l) =>
+        `<a class="source-link" href="${escapeHtml(l.url)}" target="_blank" rel="noopener">
+          <span class="source-title">${escapeHtml(l.title || l.url)}</span>
+          <span class="source-url">${escapeHtml(l.url)}</span>
+        </a>`).join('')}</div></div>`
+    : '';
 
   const meta = data.model_label
     ? `<div class="result-meta">Model: ${escapeHtml(data.model_label)}</div>`
@@ -335,9 +363,9 @@ function renderResults(query, data) {
   results.innerHTML =
     queryImage +
     thinkingBlock +
-    `<div class="result-card result-body">${escapeHtml(text)}${meta}</div>` +
-    renderImageGrid(data.images) +
-    links;
+    sourcesBlock +
+    `<div class="result-card result-body"><div class="markdown">${renderMarkdown(text)}</div>${meta}</div>` +
+    renderImageGrid(data.images);
 }
 
 startThemeWatcher();

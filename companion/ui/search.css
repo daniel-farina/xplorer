@@ -371,8 +371,121 @@ html, body {
 }
 
 .answer {
-  white-space: pre-wrap;
   line-height: 1.6;
+}
+
+.markdown {
+  line-height: 1.65;
+  word-wrap: break-word;
+}
+
+.markdown h2 {
+  font-size: 1.15rem;
+  font-weight: 600;
+  margin: 1.25em 0 0.5em;
+  color: var(--text);
+}
+
+.markdown h3 {
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 1em 0 0.4em;
+  color: var(--text);
+}
+
+.markdown p {
+  margin: 0.65em 0;
+}
+
+.markdown ul {
+  margin: 0.5em 0 0.75em;
+  padding-left: 1.4em;
+}
+
+.markdown li {
+  margin: 0.35em 0;
+}
+
+.markdown strong {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.markdown code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.9em;
+  background: var(--surface-elevated);
+  padding: 0.15em 0.35em;
+  border-radius: 4px;
+}
+
+.markdown a,
+.markdown a.cite {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.markdown a:hover {
+  text-decoration: underline;
+}
+
+.markdown hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 1em 0;
+}
+
+.sources-panel,
+.sources-card {
+  margin-bottom: 12px;
+}
+
+.sources-label,
+.sources-card h3 {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin: 0 0 8px;
+}
+
+.sources-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.source-link {
+  display: block;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface-elevated);
+  text-decoration: none;
+  color: inherit;
+  transition: border-color 0.15s;
+}
+
+.source-link:hover {
+  border-color: var(--accent);
+}
+
+.source-title {
+  display: block;
+  font-weight: 500;
+  font-size: 14px;
+  color: var(--text);
+  margin-bottom: 2px;
+}
+
+.source-url {
+  display: block;
+  font-size: 12px;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .result-meta {

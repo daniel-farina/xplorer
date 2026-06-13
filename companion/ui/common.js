@@ -115,6 +115,100 @@ function escapeHtml(s) {
     .replace(/>/g, '&gt;');
 }
 
+/** Remove terminal ANSI color codes (e.g. \x1b[2m) from grok stderr leakage. */
+function stripAnsi(s) {
+  return String(s).replace(/\x1b\[[0-9;]*m/g, '');
+}
+
+/** Parse one NDJSON stream line; returns null for noise/non-JSON. */
+function parseStreamLine(line) {
+  const cleaned = stripAnsi(line).trim();
+  if (!cleaned || cleaned[0] !== '{') return null;
+  try {
+    return JSON.parse(cleaned);
+  } catch {
+    return null;
+  }
+}
+
+/** Safe http(s) URLs only. */
+function safeUrl(url) {
+  try {
+    const u = new URL(url);
+    return u.protocol === 'http:' || u.protocol === 'https:' ? u.href : '';
+  } catch {
+    return '';
+  }
+}
+
+/** Extract [[n]](url) and [title](url) citations from grok web-search text. */
+function extractMarkdownLinks(text) {
+  const links = [];
+  const seen = new Set();
+  const patterns = [
+    /\[\[(\d+)\]\]\(([^)]+)\)/g,
+    /\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g,
+  ];
+  for (const re of patterns) {
+    let m;
+    while ((m = re.exec(text)) !== null) {
+      const href = safeUrl(m[2]);
+      if (!href || seen.has(href)) continue;
+      seen.add(href);
+      const title = m[1] && !/^\d+$/.test(m[1]) ? m[1] : href;
+      links.push({ title, url: href, snippet: '' });
+    }
+  }
+  return links;
+}
+
+/** Lightweight markdown → HTML (escaped input). */
+function renderMarkdown(raw) {
+  if (!raw) return '';
+  let s = escapeHtml(raw);
+
+  s = s.replace(
+    /\[\[(\d+)\]\]\((https?:\/\/[^)\s]+)\)/g,
+    (_, n, url) => {
+      const href = safeUrl(url);
+      return href
+        ? `<a href="${href}" target="_blank" rel="noopener" class="cite">[${n}]</a>`
+        : `[${n}](${url})`;
+    },
+  );
+
+  s = s.replace(
+    /\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g,
+    (_, label, url) => {
+      const href = safeUrl(url);
+      return href
+        ? `<a href="${href}" target="_blank" rel="noopener">${label}</a>`
+        : `[${label}](${url})`;
+    },
+  );
+
+  s = s.replace(/^### (.+)$/gm, '<h3>$1</h3>');
+  s = s.replace(/^## (.+)$/gm, '<h2>$1</h2>');
+  s = s.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');
+  s = s.replace(/`([^`\n]+)`/g, '<code>$1</code>');
+  s = s.replace(/^---$/gm, '<hr>');
+  s = s.replace(/^- (.+)$/gm, '<li>$1</li>');
+  s = s.replace(/(?:<li>[\s\S]*?<\/li>\n?)+/g, (block) => `<ul>${block}</ul>`);
+
+  const parts = s.split(/\n{2,}/);
+  s = parts
+    .map((p) => {
+      const t = p.trim();
+      if (!t) return '';
+      if (/^<(h[23]|ul|hr)/.test(t)) return t;
+      return `<p>${t.replace(/\n/g, '<br>')}</p>`;
+    })
+    .filter(Boolean)
+    .join('\n');
+
+  return s;
+}
+
 /** Resize/compress image for vision API (keeps CLI args under limits). */
 async function compressImageForVision(fileOrBlob, maxDim = 1280, quality = 0.82) {
   const blob = fileOrBlob instanceof Blob ? fileOrBlob : fileOrBlob;

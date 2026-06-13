@@ -112,7 +112,8 @@ async function sendMessage(text) {
         const line = buffer.slice(0, idx).trim();
         buffer = buffer.slice(idx + 1);
         if (!line) continue;
-        const evt = JSON.parse(line);
+        const evt = parseStreamLine(line);
+        if (!evt) continue;
         if (evt.type === 'meta') {
           if (evt.model_label) streamModelLabel = evt.model_label;
           updateModelBadge(modelBadge, evt.model || activeModel, streamModelLabel);
@@ -128,7 +129,8 @@ async function sendMessage(text) {
               messagesEl.appendChild(el);
               return el;
             })();
-          div.textContent = reply;
+          div.innerHTML = renderMarkdown(reply);
+          div.classList.add('markdown');
           messagesEl.scrollTop = messagesEl.scrollHeight;
         } else if (evt.type === 'result') {
           if (evt.reply) reply = evt.reply;
