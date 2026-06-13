@@ -14,12 +14,15 @@ source_set("agent_gateway") {
     "grok_native.h",
     "tab_ownership.cc",
     "tab_ownership.h",
+    "tab_screenshot.cc",
+    "tab_screenshot.h",
   ]
   deps = [
     "//base",
     "//chrome/browser/profiles",
     "//chrome/browser/themes",
     "//chrome/browser/ui",
+    "//ui/snapshot",
     "//components/bookmarks/browser",
     "//components/history/core/browser",
     "//components/tab_groups",

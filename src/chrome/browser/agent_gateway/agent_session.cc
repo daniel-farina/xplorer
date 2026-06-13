@@ -7,7 +7,8 @@
 
 #include <memory>
 
-#include "base/base64.h"
+#include "chrome/browser/agent_gateway/tab_screenshot.h"
+
 #include "base/containers/span.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
@@ -16,14 +17,8 @@
 #include "base/json/json_writer.h"
 #include "base/json/string_escape.h"
 #include "base/strings/string_number_conversions.h"
-#include "base/time/time.h"
-#include "base/timer/timer.h"
-#include "components/viz/common/frame_sinks/copy_output_result.h"
 #include "content/public/browser/devtools_agent_host.h"
-#include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
-#include "ui/gfx/codec/png_codec.h"
-#include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
 
 namespace agent_gateway {
@@ -175,86 +170,7 @@ void AgentSession::AXTree(ResultCallback cb) {
 }
 
 void AgentSession::Screenshot(ResultCallback cb) {
-  if (!web_contents_) {
-    base::DictValue err;
-    err.Set("error", "no web contents");
-    std::move(cb).Run(std::move(err));
-    return;
-  }
-
-  struct ScreenshotCtx {
-    bool done = false;
-    ResultCallback cb;
-    base::OneShotTimer timer;
-    base::ScopedClosureRunner capture_hold;
-  };
-  auto ctx = std::make_shared<ScreenshotCtx>();
-  ctx->capture_hold = web_contents_->IncrementCapturerCount(
-      gfx::Size(), /*stay_hidden=*/false, /*stay_awake=*/true,
-      /*is_activity=*/true);
-
-  auto finish = base::BindOnce(
-      [](std::shared_ptr<ScreenshotCtx> ctx, base::DictValue result) {
-        if (ctx->done)
-          return;
-        ctx->done = true;
-        ctx->timer.Stop();
-        ctx->capture_hold.RunAndReset();
-        std::move(ctx->cb).Run(std::move(result));
-      },
-      ctx);
-
-  ctx->cb = std::move(cb);
-  ctx->timer.Start(
-      FROM_HERE, base::Seconds(12),
-      base::BindOnce(
-          [](std::shared_ptr<ScreenshotCtx> ctx) {
-            if (ctx->done)
-              return;
-            ctx->done = true;
-            ctx->capture_hold.RunAndReset();
-            base::DictValue err;
-            err.Set("error", "screenshot timeout");
-            std::move(ctx->cb).Run(std::move(err));
-          },
-          ctx));
-
-  content::RenderWidgetHostView* view = web_contents_->GetRenderWidgetHostView();
-  if (!view) {
-    ctx->timer.Stop();
-    ctx->capture_hold.RunAndReset();
-    base::DictValue err;
-    err.Set("error", "no render view");
-    std::move(ctx->cb).Run(std::move(err));
-    return;
-  }
-
-  view->EnsureSurfaceSynchronizedForWebTest();
-  // Empty rect + size captures the full visible surface (extensions API).
-  view->CopyFromSurface(gfx::Rect(), gfx::Size(), base::Seconds(8),
-                        base::BindOnce(
-                            [](decltype(finish) finish,
-                               const content::CopyFromSurfaceResult& result) {
-                              base::DictValue out;
-                              if (!result.has_value() ||
-                                  result->bitmap.drawsNothing()) {
-                                out.Set("error", "capture failed");
-                                std::move(finish).Run(std::move(out));
-                                return;
-                              }
-                              std::optional<std::vector<uint8_t>> png =
-                                  gfx::PNGCodec::EncodeBGRASkBitmap(
-                                      result->bitmap,
-                                      /*discard_transparency=*/false);
-                              if (!png || png->empty()) {
-                                out.Set("error", "png encode failed");
-                                std::move(finish).Run(std::move(out));
-                                return;
-                              }
-                              out.Set("data", base::Base64Encode(*png));
-                              std::move(finish).Run(std::move(out));
-                            },
-                            std::move(finish)));
+  CaptureTabScreenshot(web_contents_.get(), std::move(cb));
 }
 
 void AgentSession::Click(const std::string& selector, ResultCallback cb) {

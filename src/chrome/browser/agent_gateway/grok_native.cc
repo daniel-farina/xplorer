@@ -28,15 +28,16 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/task/thread_pool.h"
-#include "chrome/browser/agent_gateway/agent_session.h"
 #include "chrome/browser/agent_gateway/browser_api.h"
+#include "chrome/browser/agent_gateway/tab_screenshot.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface_iterator.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "content/public/browser/browser_task_traits.h"
-#include "ui/base/base_window.h"
+
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/web_contents.h"
+#include "url/gurl.h"
 #include "net/http/http_status_code.h"
 #include "net/server/http_server_response_info.h"
 #include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
@@ -689,25 +690,28 @@ content::WebContents* FindActiveWebContents() {
   return nullptr;
 }
 
-void PrepareTabForCapture(content::WebContents* wc) {
-  if (!wc)
-    return;
-  wc->WasShown();
-  wc->Focus();
+bool IsCompanionUrl(const GURL& url) {
+  return url.host() == "127.0.0.1" && url.port() == "9334";
+}
+
+// Prefer a real browsing tab over the Grok Search companion page.
+content::WebContents* FindScreenshotTargetWebContents() {
+  content::WebContents* fallback = nullptr;
   for (BrowserWindowInterface* browser : GetAllBrowserWindowInterfaces()) {
     TabStripModel* model = browser->GetTabStripModel();
     for (int i = 0; i < model->count(); ++i) {
-      if (model->GetWebContentsAt(i) != wc)
+      content::WebContents* wc = model->GetWebContentsAt(i);
+      if (!wc)
         continue;
-      model->ActivateTabAt(i);
-      if (ui::BaseWindow* window = browser->GetWindow()) {
-        if (!window->IsVisible())
-          window->Show();
-        window->Activate();
-      }
-      return;
+      const GURL url = wc->GetLastCommittedURL();
+      if (IsCompanionUrl(url) || url.SchemeIs("chrome"))
+        continue;
+      if (model->GetActiveWebContents() == wc)
+        return wc;
+      fallback = wc;
     }
   }
+  return fallback ? fallback : FindActiveWebContents();
 }
 
 void CaptureScreenshot(
@@ -719,28 +723,27 @@ void CaptureScreenshot(
     std::move(callback).Run(std::move(err));
     return;
   }
-  PrepareTabForCapture(wc);
-  auto session = std::make_unique<AgentSession>(wc);
-  AgentSession* s = session.get();
-  s->Screenshot(base::BindOnce(
-      [](std::unique_ptr<AgentSession> session,
-         base::OnceCallback<void(base::DictValue)> callback,
-         content::WebContents* wc, base::DictValue result) {
-        const std::string* data = result.FindString("data");
-        if (!data || data->empty()) {
-          base::DictValue err;
-          err.Set("error", "screenshot failed");
-          std::move(callback).Run(std::move(err));
-          return;
-        }
-        base::DictValue ok;
-        ok.Set("image", *data);
-        ok.Set("mime_type", "image/png");
-        ok.Set("url", wc->GetLastCommittedURL().spec());
-        ok.Set("title", base::UTF16ToUTF8(wc->GetTitle()));
-        std::move(callback).Run(std::move(ok));
-      },
-      std::move(session), std::move(callback), wc));
+  CaptureTabScreenshot(
+      wc,
+      base::BindOnce(
+          [](base::OnceCallback<void(base::DictValue)> callback,
+             content::WebContents* wc, base::DictValue result) {
+            const std::string* data = result.FindString("data");
+            if (!data || data->empty()) {
+              const std::string* err_msg = result.FindString("error");
+              base::DictValue err;
+              err.Set("error", err_msg ? *err_msg : "screenshot failed");
+              std::move(callback).Run(std::move(err));
+              return;
+            }
+            base::DictValue ok;
+            ok.Set("image", *data);
+            ok.Set("mime_type", "image/png");
+            ok.Set("url", wc->GetLastCommittedURL().spec());
+            ok.Set("title", base::UTF16ToUTF8(wc->GetTitle()));
+            std::move(callback).Run(std::move(ok));
+          },
+          std::move(callback), wc));
 }
 
 base::CommandLine BuildGrokChatCommand(const std::string& message,
@@ -1075,7 +1078,7 @@ bool GrokNative::TryHandleRequest(
               if (!tab.empty())
                 wc = FindWebContentsByTabId(tab);
               if (!wc)
-                wc = FindActiveWebContents();
+                wc = FindScreenshotTargetWebContents();
               CaptureScreenshot(
                   wc,
                   base::BindOnce(
