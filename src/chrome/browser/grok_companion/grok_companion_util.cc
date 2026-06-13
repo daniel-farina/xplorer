@@ -7,7 +7,9 @@
 #include <utility>
 
 #include "base/files/file_util.h"
+#include "base/files/file_path.h"
 #include "base/functional/bind.h"
+#include "base/json/json_writer.h"
 #include "base/json/json_reader.h"
 #include "base/path_service.h"
 #include "base/strings/string_number_conversions.h"
@@ -54,6 +56,34 @@ GURL MakeURL(const char* path) {
               base::NumberToString(GatewayPort()) + path);
 }
 
+base::FilePath GrokSettingsFile() {
+  base::FilePath home;
+  if (!base::PathService::Get(base::DIR_HOME, &home))
+    return base::FilePath();
+  return home.AppendASCII(".aether/grok_settings.json");
+}
+
+base::DictValue LoadGrokSettings() {
+  base::FilePath path = GrokSettingsFile();
+  if (path.empty())
+    return base::DictValue();
+  std::string json;
+  if (!base::ReadFileToString(path, &json))
+    return base::DictValue();
+  auto parsed = base::JSONReader::ReadDict(json, base::JSON_PARSE_RFC);
+  return parsed ? std::move(*parsed) : base::DictValue();
+}
+
+void SaveGrokSettings(const base::DictValue& settings) {
+  base::FilePath path = GrokSettingsFile();
+  if (path.empty())
+    return;
+  base::CreateDirectory(path.DirName());
+  std::string json;
+  if (base::JSONWriter::Write(settings, &json))
+    base::WriteFile(path, json);
+}
+
 std::unique_ptr<views::View> CreateGrokCompanionView(
     BrowserWindowInterface* browser,
     Profile* profile,
@@ -80,6 +110,28 @@ GURL GetCompanionURL() {
 
 GURL GetSearchURL() {
   return MakeURL(kSearchPath);
+}
+
+std::string GetSearchHomeMode() {
+  base::DictValue settings = LoadGrokSettings();
+  if (const std::string* mode = settings.FindString("search_home");
+      mode && *mode == kSearchHomeWeb) {
+    return kSearchHomeWeb;
+  }
+  return kSearchHomeBuild;
+}
+
+void SetSearchHomeMode(const std::string& mode) {
+  base::DictValue settings = LoadGrokSettings();
+  settings.Set("search_home",
+               mode == kSearchHomeWeb ? kSearchHomeWeb : kSearchHomeBuild);
+  SaveGrokSettings(settings);
+}
+
+GURL GetDefaultSearchHomeURL() {
+  if (GetSearchHomeMode() == kSearchHomeWeb)
+    return GURL(kGrokWebHomeURL);
+  return GetSearchURL();
 }
 
 void RegisterGrokSidePanel(BrowserWindowInterface* browser) {
@@ -120,7 +172,7 @@ void OpenGrokSearchPage(BrowserWindowInterface* browser) {
   content::WebContents* contents = tab->GetContents();
   if (!contents)
     return;
-  content::NavigationController::LoadURLParams params(GetSearchURL());
+  content::NavigationController::LoadURLParams params(GetDefaultSearchHomeURL());
   params.transition_type = ui::PAGE_TRANSITION_TYPED;
   contents->GetController().LoadURLWithParams(params);
 }

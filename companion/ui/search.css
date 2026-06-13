@@ -59,6 +59,37 @@ html, body {
   display: flex;
   align-items: center;
   gap: 10px;
+  flex-wrap: wrap;
+}
+
+.home-toggle {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  overflow: hidden;
+  background: var(--surface-elevated);
+}
+
+.home-opt {
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  padding: 5px 12px;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.home-opt:hover {
+  color: var(--text);
+  background: var(--surface);
+}
+
+.home-opt.active {
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 500;
 }
 
 .model-badge {

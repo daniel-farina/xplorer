@@ -248,7 +248,7 @@ def main(src: Path):
         '      return NewTabURLDetails(GURL(), NEW_TAB_URL_INCOGNITO);\n'
         '    }\n\n'
         '    // AETHER: XBrowser uses Grok search as the default new tab page.\n'
-        '    return NewTabURLDetails(grok_companion::GetSearchURL(),\n'
+        '    return NewTabURLDetails(grok_companion::GetDefaultSearchHomeURL(),\n'
         '                            NEW_TAB_URL_VALID);',
     )
     edit(

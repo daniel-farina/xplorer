@@ -219,6 +219,8 @@ void SaveSessions(const base::DictValue& data) {
 constexpr char kDefaultModel[] = "grok-composer-2.5-fast";
 constexpr char kSearchModel[] = "grok-build";
 constexpr char kComposerModel[] = "grok-composer-2.5-fast";
+constexpr char kSearchHomeBuild[] = "build";
+constexpr char kSearchHomeWeb[] = "web";
 
 base::FilePath SettingsFile() {
   base::FilePath home;
@@ -260,6 +262,22 @@ std::string GetConfiguredModel() {
 void SetConfiguredModel(const std::string& model) {
   base::DictValue settings = LoadSettings();
   settings.Set("model", model);
+  SaveSettings(settings);
+}
+
+std::string GetSearchHomeMode() {
+  base::DictValue settings = LoadSettings();
+  if (const std::string* mode = settings.FindString("search_home");
+      mode && *mode == kSearchHomeWeb) {
+    return kSearchHomeWeb;
+  }
+  return kSearchHomeBuild;
+}
+
+void SetSearchHomeMode(const std::string& mode) {
+  base::DictValue settings = LoadSettings();
+  settings.Set("search_home",
+                 mode == kSearchHomeWeb ? kSearchHomeWeb : kSearchHomeBuild);
   SaveSettings(settings);
 }
 
@@ -1076,24 +1094,55 @@ bool GrokNative::TryHandleRequest(
       d.Set("model", kDefaultModel);
     d.Set("model_label", ModelDisplayName(GetConfiguredModel()));
     d.Set("models", ListGrokModels());
+    d.Set("search_home", GetSearchHomeMode());
+    d.Set("grok_web_url", "https://grok.com/");
+    d.Set("grok_build_url",
+          "http://127.0.0.1:" + base::NumberToString(gateway_port) +
+              "/search");
     SendJson(server, connection_id, net::HTTP_OK, std::move(d));
     return true;
   }
 
   if (info.method == "POST" && path == "/api/settings") {
     auto body = base::JSONReader::ReadDict(info.data, base::JSON_PARSE_RFC);
-    const std::string* model = body ? body->FindString("model") : nullptr;
-    if (!model || model->empty()) {
+    if (!body) {
       base::DictValue err;
-      err.Set("error", "missing model");
+      err.Set("error", "invalid json");
       SendJson(server, connection_id, net::HTTP_BAD_REQUEST, std::move(err));
       return true;
     }
-    SetConfiguredModel(*model);
+    const std::string* model = body->FindString("model");
+    const std::string* home = body->FindString("search_home");
+    bool updated = false;
+    if (model && !model->empty()) {
+      SetConfiguredModel(*model);
+      updated = true;
+    }
+    if (home && !home->empty()) {
+      if (*home != kSearchHomeBuild && *home != kSearchHomeWeb) {
+        base::DictValue err;
+        err.Set("error", "search_home must be 'build' or 'web'");
+        SendJson(server, connection_id, net::HTTP_BAD_REQUEST, std::move(err));
+        return true;
+      }
+      SetSearchHomeMode(*home);
+      updated = true;
+    }
+    if (!updated) {
+      base::DictValue err;
+      err.Set("error", "provide model and/or search_home");
+      SendJson(server, connection_id, net::HTTP_BAD_REQUEST, std::move(err));
+      return true;
+    }
     base::DictValue d;
     d.Set("ok", true);
-    d.Set("model", *model);
-    d.Set("model_label", ModelDisplayName(*model));
+    d.Set("model", GetConfiguredModel());
+    d.Set("model_label", ModelDisplayName(GetConfiguredModel()));
+    d.Set("search_home", GetSearchHomeMode());
+    d.Set("grok_web_url", "https://grok.com/");
+    d.Set("grok_build_url",
+          "http://127.0.0.1:" + base::NumberToString(gateway_port) +
+              "/search");
     SendJson(server, connection_id, net::HTTP_OK, std::move(d));
     return true;
   }

@@ -146,11 +146,7 @@ modelSelect?.addEventListener('change', async () => {
   persistSearchModel(activeModel);
   updateModelBadge(modelBadge, activeModel, modelLabel(activeModel, models));
   try {
-    await fetch('/api/settings', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: activeModel }),
-    });
+    await saveSettings({ model: activeModel });
   } catch { /* local preference still applies */ }
 });
 
@@ -367,6 +363,8 @@ function renderResults(query, data) {
     `<div class="result-card result-body"><div class="markdown">${renderMarkdown(text)}</div>${meta}</div>` +
     renderImageGrid(data.images);
 }
+
+initSearchHomeToggle($('#home-toggle'));
 
 startThemeWatcher();
 initModels();

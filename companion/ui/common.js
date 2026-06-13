@@ -5,6 +5,9 @@ const DEFAULT_MODEL = 'grok-composer-2.5-fast';
 const SEARCH_DEFAULT_MODEL = 'grok-build';
 const MODEL_STORAGE_KEY = 'grok_model';
 const SEARCH_MODEL_STORAGE_KEY = 'grok_search_model';
+const SEARCH_HOME_STORAGE_KEY = 'grok_search_home';
+const SEARCH_HOME_BUILD = 'build';
+const SEARCH_HOME_WEB = 'web';
 
 function getStoredModel() {
   try {
@@ -32,6 +35,82 @@ function persistSearchModel(model) {
   try {
     localStorage.setItem(SEARCH_MODEL_STORAGE_KEY, model);
   } catch { /* ignore */ }
+}
+
+function getStoredSearchHome() {
+  try {
+    return localStorage.getItem(SEARCH_HOME_STORAGE_KEY) || SEARCH_HOME_BUILD;
+  } catch {
+    return SEARCH_HOME_BUILD;
+  }
+}
+
+function persistSearchHome(mode) {
+  try {
+    localStorage.setItem(SEARCH_HOME_STORAGE_KEY, mode);
+  } catch { /* ignore */ }
+}
+
+async function fetchSettings() {
+  const res = await fetch('/api/settings');
+  if (!res.ok) throw new Error('settings unavailable');
+  return res.json();
+}
+
+async function saveSettings(partial) {
+  const res = await fetch('/api/settings', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(partial),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || res.statusText);
+  }
+  return res.json();
+}
+
+/** Wire Grok Web / Grok Build segmented toggle. */
+async function initSearchHomeToggle(container, { onSwitch } = {}) {
+  if (!container) return;
+  const buttons = container.querySelectorAll('[data-home]');
+  let settings;
+  try {
+    settings = await fetchSettings();
+  } catch {
+    settings = { search_home: getStoredSearchHome() };
+  }
+  let currentHome = settings.search_home || SEARCH_HOME_BUILD;
+  persistSearchHome(currentHome);
+
+  const setActive = (mode) => {
+    currentHome = mode;
+    buttons.forEach((btn) => {
+      btn.classList.toggle('active', btn.dataset.home === mode);
+    });
+  };
+  setActive(currentHome);
+
+  buttons.forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const mode = btn.dataset.home;
+      if (!mode || mode === currentHome) return;
+      try {
+        const updated = await saveSettings({ search_home: mode });
+        const saved = updated.search_home || mode;
+        persistSearchHome(saved);
+        setActive(saved);
+        if (onSwitch) onSwitch(saved, updated);
+        else if (saved === SEARCH_HOME_WEB) {
+          window.location.href = updated.grok_web_url || 'https://grok.com/';
+        } else {
+          window.location.href = updated.grok_build_url || '/search';
+        }
+      } catch (e) {
+        alert(`Could not save preference: ${e.message}`);
+      }
+    });
+  });
 }
 
 /** Pick the right model for a search mode (web/videos → grok-build). */

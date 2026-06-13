@@ -86,6 +86,37 @@ body {
   border-color: transparent;
 }
 
+.home-toggle {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  overflow: hidden;
+  background: var(--surface-elevated);
+  margin-left: 4px;
+}
+
+.home-opt {
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  padding: 4px 10px;
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.home-opt:hover {
+  color: var(--text);
+  background: var(--surface);
+}
+
+.home-opt.active {
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 500;
+}
+
 #new-chat {
   width: 32px;
   height: 32px;

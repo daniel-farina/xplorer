@@ -199,12 +199,11 @@ modelSelect?.addEventListener('change', async () => {
   persistModel(activeModel);
   updateModelBadge(modelBadge, activeModel, modelLabel(activeModel, models));
   try {
-    await api('/api/settings', {
-      method: 'POST',
-      body: JSON.stringify({ model: activeModel }),
-    });
+    await saveSettings({ model: activeModel });
   } catch { /* local preference still applies */ }
 });
+
+initSearchHomeToggle($('#home-toggle'));
 
 startThemeWatcher();
 initModels().then(() => refresh().then(() => {
