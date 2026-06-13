@@ -8,30 +8,36 @@
 #include <string>
 
 #include "base/functional/bind.h"
+#include "base/values.h"
+#include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/sequenced_task_runner.h"
+#include "base/time/time.h"
 #include "chrome/browser/agent_gateway/agent_gateway.h"
 #include "chrome/browser/grok_companion/grok_companion_util.h"
 #include "chrome/common/chrome_isolated_world_ids.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
-#include "ui/base/page_transition_types.h"
 #include "ui/base/unowned_user_data/scoped_unowned_user_data.h"
 #include "url/gurl.h"
 
 namespace grok_companion {
 namespace {
 
+constexpr int kMaxInjectAttempts = 12;
+
 bool IsGrokWebHost(const GURL& url) {
   if (!url.is_valid() || !url.SchemeIsHTTPOrHTTPS())
     return false;
   const std::string_view host = url.host();
-  return host == "grok.com" || host == "www.grok.com";
+  return host == "grok.com" || host == "www.grok.com" ||
+         base::EndsWith(host, ".grok.com");
 }
 
 int GatewayPort() {
@@ -72,10 +78,8 @@ std::string BuildInjectScript(const std::string& active_mode) {
     'position:fixed;top:0;left:0;right:0;z-index:2147483647;',
     'display:flex;align-items:center;gap:12px;padding:10px 16px;',
     'font:13px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;',
-    '--xb-border:#333;--xb-surface:#161616;--xb-text:#f2f2f2;',
-    '--xb-muted:#aaa;--xb-elevated:#222;--xb-accent:#f2f2f2;--xb-accent-soft:#2a2a2a;',
     'border-bottom:1px solid var(--xb-border);background:var(--xb-surface);',
-    'color:var(--xb-text);box-shadow:0 1px 0 rgba(0,0,0,.25);}',
+    'color:var(--xb-text);box-shadow:0 1px 0 var(--xb-shadow);}',
     '#xbrowser-grok-bar .xb-logo{font-weight:700;font-size:16px;color:var(--xb-accent);',
     'text-decoration:none;white-space:nowrap;}',
     '#xbrowser-grok-bar .xb-modes{display:inline-flex;gap:2px;flex-wrap:wrap;}',
@@ -89,7 +93,15 @@ std::string BuildInjectScript(const std::string& active_mode) {
     'font-size:12px;white-space:nowrap;}',
     '#xbrowser-grok-bar .xb-opt:hover{color:var(--xb-text);background:var(--xb-surface);}',
     '#xbrowser-grok-bar .xb-opt.active{background:var(--xb-accent-soft);',
-    'color:var(--xb-accent);font-weight:500;}'
+    'color:var(--xb-accent);font-weight:500;}',
+    '@media (prefers-color-scheme:light){',
+    '#xbrowser-grok-bar{--xb-border:#dadce0;--xb-surface:#f8f9fa;--xb-text:#202124;',
+    '--xb-muted:#5f6368;--xb-elevated:#f1f3f4;--xb-accent:#1a73e8;',
+    '--xb-accent-soft:rgba(26,115,232,.12);--xb-shadow:rgba(60,64,67,.12);}}',
+    '@media (prefers-color-scheme:dark){',
+    '#xbrowser-grok-bar{--xb-border:#333;--xb-surface:#161616;--xb-text:#f2f2f2;',
+    '--xb-muted:#aaa;--xb-elevated:#222;--xb-accent:#f2f2f2;',
+    '--xb-accent-soft:#2a2a2a;--xb-shadow:rgba(0,0,0,.25);}}'
   ].join('');
   document.documentElement.appendChild(style);
   var bar = document.createElement('div');
@@ -107,9 +119,11 @@ std::string BuildInjectScript(const std::string& active_mode) {
     '<a class="xb-opt%s" href="%s">Grok Web</a>',
     '</div>'
   ].join('');
-  document.documentElement.insertBefore(bar, document.documentElement.firstChild);
+  var root = document.body || document.documentElement;
+  root.insertBefore(bar, root.firstChild);
   var pad = (bar.getBoundingClientRect().height || 44) + 'px';
   document.documentElement.style.setProperty('padding-top', pad, 'important');
+  if (document.body) document.body.style.setProperty('padding-top', pad, 'important');
 })();)",
       search_href.c_str(), search_href.c_str(), images_href.c_str(),
       videos_href.c_str(), build_active.c_str(), build_href.c_str(),
@@ -119,7 +133,21 @@ std::string BuildInjectScript(const std::string& active_mode) {
 class GrokWebBarInjector : public content::WebContentsObserver {
  public:
   explicit GrokWebBarInjector(content::WebContents* contents)
-      : content::WebContentsObserver(contents) {}
+      : content::WebContentsObserver(contents) {
+    ScheduleInject();
+  }
+
+  void DidFinishNavigation(
+      content::NavigationHandle* navigation_handle) override {
+    if (!navigation_handle->IsInPrimaryMainFrame() ||
+        !navigation_handle->HasCommitted() ||
+        navigation_handle->IsErrorPage()) {
+      return;
+    }
+    if (!IsGrokWebHost(navigation_handle->GetURL()))
+      return;
+    ScheduleInject();
+  }
 
   void DocumentOnLoadCompletedInPrimaryMainFrame() override {
     ScheduleInject();
@@ -128,10 +156,9 @@ class GrokWebBarInjector : public content::WebContentsObserver {
  private:
   void ScheduleInject() {
     content::WebContents* contents = web_contents();
-    if (!contents)
+    if (!contents || !IsGrokWebHost(contents->GetLastCommittedURL()))
       return;
-    if (!IsGrokWebHost(contents->GetLastCommittedURL()))
-      return;
+    inject_attempts_ = 0;
     base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE, base::BindOnce(&GrokWebBarInjector::MaybeInject,
                                   weak_factory_.GetWeakPtr()));
@@ -143,16 +170,33 @@ class GrokWebBarInjector : public content::WebContentsObserver {
       return;
     if (!IsGrokWebHost(contents->GetLastCommittedURL()))
       return;
+
     content::RenderFrameHost* frame = contents->GetPrimaryMainFrame();
-    if (!frame || !frame->IsRenderFrameLive() ||
-        !frame->IsDocumentOnLoadCompletedInMainFrame()) {
+    if (!frame || !frame->IsRenderFrameLive()) {
+      RetryInject();
       return;
     }
+
     frame->ExecuteJavaScriptInIsolatedWorld(
         base::UTF8ToUTF16(BuildInjectScript(GetSearchHomeMode())),
-        base::NullCallback(), ISOLATED_WORLD_ID_EXTENSIONS);
+        base::BindOnce(&GrokWebBarInjector::OnInjected,
+                       weak_factory_.GetWeakPtr()),
+        ISOLATED_WORLD_ID_EXTENSIONS);
   }
 
+  void OnInjected(base::Value) { inject_attempts_ = 0; }
+
+  void RetryInject() {
+    if (++inject_attempts_ > kMaxInjectAttempts)
+      return;
+    base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
+        FROM_HERE,
+        base::BindOnce(&GrokWebBarInjector::MaybeInject,
+                       weak_factory_.GetWeakPtr()),
+        base::Milliseconds(250 * inject_attempts_));
+  }
+
+  int inject_attempts_ = 0;
   base::WeakPtrFactory<GrokWebBarInjector> weak_factory_{this};
 };
 

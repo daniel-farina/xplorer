@@ -223,7 +223,8 @@ def main(src: Path):
     edit(
         side_panel_helper,
         '#include "chrome/browser/ui/views/side_panel/reading_list/reading_list_side_panel_coordinator.h"',
-        '\n#include "chrome/browser/grok_companion/grok_companion_util.h"  // AETHER\n',
+        '\n#include "chrome/browser/grok_companion/grok_companion_util.h"  // AETHER\n'
+        '#include "chrome/browser/grok_companion/grok_web_bar.h"  // AETHER\n',
     )
     edit(
         side_panel_helper,
@@ -233,7 +234,8 @@ def main(src: Path):
         '  // Add bookmarks.\n'
         '  BookmarksSidePanelCoordinator::From(browser)->CreateAndRegisterEntry(\n'
         '      window_registry);\n\n'
-        '  // AETHER: Grok AI companion side panel.\n'
+        '  // AETHER: Grok AI companion side panel + grok.com toolbar overlay.\n'
+        '  grok_companion::RegisterGrokWebBar(browser);\n'
         '  grok_companion::RegisterGrokSidePanel(browser);',
     )
 

@@ -168,6 +168,7 @@ void RegisterGrokSidePanel(BrowserWindowInterface* browser) {
 void OpenGrokSearchPage(BrowserWindowInterface* browser) {
   if (!browser)
     return;
+  RegisterGrokWebBar(browser);
   tabs::TabInterface* tab = browser->GetActiveTabInterface();
   if (!tab)
     return;

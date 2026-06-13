@@ -1,16 +1,14 @@
-/* Shared Grok toolbar — matches the Grok Web overlay (dark, compact). */
+/* Shared Grok toolbar — follows XBrowser light/dark theme via theme.css */
 
 :root {
-  --toolbar-bg: #161616;
-  --toolbar-border: #333333;
-  --toolbar-text: #f2f2f2;
-  --toolbar-muted: #aaaaaa;
-  --toolbar-elevated: #222222;
-  --toolbar-accent: #f2f2f2;
-  --toolbar-accent-soft: #2a2a2a;
-  --toolbar-page-bg: #111111;
-  --toolbar-surface: #1a1a1a;
-  --toolbar-input-bg: #222222;
+  --toolbar-bg: var(--surface);
+  --toolbar-border: var(--border);
+  --toolbar-text: var(--text);
+  --toolbar-muted: var(--text-secondary);
+  --toolbar-elevated: var(--surface-elevated);
+  --toolbar-accent: var(--accent);
+  --toolbar-accent-soft: var(--accent-soft);
+  --toolbar-input-bg: var(--input-bg);
 }
 
 .grok-toolbar {
@@ -25,7 +23,7 @@
   background: var(--toolbar-bg);
   color: var(--toolbar-text);
   border-bottom: 1px solid var(--toolbar-border);
-  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.25);
+  box-shadow: 0 1px 0 var(--shadow);
   flex-wrap: wrap;
 }
 
