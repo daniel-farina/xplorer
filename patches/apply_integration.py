@@ -123,6 +123,213 @@ def main(src: Path):
         grd.write_text(g)
         print(f"  edited: {grd}")
 
+    # 5. Link Grok companion (side panel + AI Mode redirect).
+    edit(
+        browser_gn,
+        '\n    "//chrome/browser/agent_gateway",  # AETHER',
+        '\n    "//chrome/browser/grok_companion",  # AETHER',
+    )
+
+    # AI Mode omnibox chip -> open native Grok Search page (not Google AI Mode).
+    ai_mode_icon = src / "chrome/browser/ui/views/location_bar/ai_mode_page_action_icon_view.cc"
+    edit(
+        ai_mode_icon,
+        'void AiModePageActionIconView::OnExecuting(\n'
+        '    PageActionIconView::ExecuteSource source) {\n'
+        '  OmniboxController* omnibox_controller =\n'
+        '      search::GetOmniboxController(GetWebContents());\n'
+        '  CHECK(omnibox_controller);\n'
+        '  omnibox::AiModePageActionController::OpenAiMode(*omnibox_controller,\n'
+        '                                                  /*via_keyboard=*/false);\n'
+        '}',
+        'void AiModePageActionIconView::OnExecuting(\n'
+        '    PageActionIconView::ExecuteSource source) {\n'
+        '  // AETHER: Grok chip opens native Grok Search.\n'
+        '  grok_companion::OpenGrokSearchPage(browser_);\n'
+        '}',
+    )
+    edit(
+        ai_mode_icon,
+        '    omnibox::AiModePageActionController::OpenAiMode(*omnibox_controller,\n'
+        '                                                    /*via_keyboard=*/true);\n'
+        '    return true;',
+        '    grok_companion::OpenGrokSearchPage(browser_);\n'
+        '    return true;',
+    )
+    edit(
+        ai_mode_icon,
+        '  SetUseTonalColorsWhenExpanded(true);\n'
+        '  SetBackgroundVisibility(BackgroundVisibility::kWithLabel);\n'
+        '}',
+        '  SetUseTonalColorsWhenExpanded(true);\n'
+        '  SetBackgroundVisibility(BackgroundVisibility::kWithLabel);\n'
+        '  SetTooltipText(u"Open Grok Search");\n'
+        '}',
+    )
+    edit(
+        ai_mode_icon,
+        '#include "chrome/browser/ui/views/page_action/page_action_icon_view.h"',
+        '\n#include "chrome/browser/grok_companion/grok_companion_util.h"  // AETHER\n',
+    )
+    # Redirect OpenAiMode (command callback) to Grok Search.
+    ai_mode_ctrl = src / "chrome/browser/ui/omnibox/ai_mode_page_action_controller.cc"
+    edit(
+        ai_mode_ctrl,
+        'void AiModePageActionController::OpenAiMode(\n'
+        '    OmniboxController& omnibox_controller,\n'
+        '    bool via_keyboard) {\n'
+        '  omnibox_controller.edit_model()->OpenAiMode(via_keyboard,\n'
+        '                                              /*via_context_menu=*/false);\n'
+        '}',
+        'void AiModePageActionController::OpenAiMode(\n'
+        '    OmniboxController& omnibox_controller,\n'
+        '    bool via_keyboard) {\n'
+        '  // AETHER: never open Google AI Mode — use native Grok Search.\n'
+        '  OmniboxClient* client = omnibox_controller.client();\n'
+        '  if (!client || !client->IsChromeOmniboxClient()) {\n'
+        '    return;\n'
+        '  }\n'
+        '  Browser* browser = static_cast<ChromeOmniboxClient*>(client)->browser();\n'
+        '  if (browser) {\n'
+        '    grok_companion::OpenGrokSearchPage(browser);\n'
+        '  }\n'
+        '}',
+    )
+    edit(
+        ai_mode_ctrl,
+        '#include "chrome/browser/ui/omnibox/ai_mode_page_action_controller.h"',
+        '#include "chrome/browser/ui/omnibox/ai_mode_page_action_controller.h"\n'
+        '#include "chrome/browser/grok_companion/grok_companion_util.h"  // AETHER\n'
+        '#include "chrome/browser/ui/browser.h"  // AETHER\n'
+        '#include "chrome/browser/ui/omnibox/chrome_omnibox_client.h"  // AETHER\n',
+    )
+    edit(
+        ai_mode_ctrl,
+        'bool AiModePageActionController::ShouldShowPageAction(\n'
+        '    Profile* profile,\n'
+        '    LocationBarView& location_bar_view) {',
+        'bool AiModePageActionController::ShouldShowPageAction(\n'
+        '    Profile* profile,\n'
+        '    LocationBarView& location_bar_view) {\n'
+        '  // AETHER: always show Grok entrypoint in XBrowser.\n'
+        '  if (profile && profile->IsRegularProfile()) {\n'
+        '    return true;\n'
+        '  }',
+    )
+
+    # Register Grok side panel in global entries.
+    side_panel_helper = (
+        src / "chrome/browser/ui/views/side_panel/side_panel_helper.cc")
+    edit(
+        side_panel_helper,
+        '#include "chrome/browser/ui/views/side_panel/reading_list/reading_list_side_panel_coordinator.h"',
+        '\n#include "chrome/browser/grok_companion/grok_companion_util.h"  // AETHER\n',
+    )
+    edit(
+        side_panel_helper,
+        '  // Add bookmarks.\n'
+        '  BookmarksSidePanelCoordinator::From(browser)->CreateAndRegisterEntry(\n'
+        '      window_registry);',
+        '  // Add bookmarks.\n'
+        '  BookmarksSidePanelCoordinator::From(browser)->CreateAndRegisterEntry(\n'
+        '      window_registry);\n\n'
+        '  // AETHER: Grok AI companion side panel.\n'
+        '  grok_companion::RegisterGrokSidePanel(browser);',
+    )
+
+    # New tab page -> Grok search homepage.
+    search_cc = src / "chrome/browser/search/search.cc"
+    edit(
+        search_cc,
+        '    if (profile->IsOffTheRecord()) {\n'
+        '      return NewTabURLDetails(GURL(), NEW_TAB_URL_INCOGNITO);\n'
+        '    }',
+        '    if (profile->IsOffTheRecord()) {\n'
+        '      return NewTabURLDetails(GURL(), NEW_TAB_URL_INCOGNITO);\n'
+        '    }\n\n'
+        '    // AETHER: XBrowser uses Grok search as the default new tab page.\n'
+        '    return NewTabURLDetails(grok_companion::GetSearchURL(),\n'
+        '                            NEW_TAB_URL_VALID);',
+    )
+    edit(
+        search_cc,
+        '#include "chrome/browser/search/search.h"',
+        '\n#include "chrome/browser/grok_companion/grok_companion_util.h"  // AETHER\n',
+    )
+
+    # Enable AI Mode omnibox entrypoint feature flag.
+    edit(
+        cmd_delegate,
+        '      cmd->AppendSwitchASCII("disable-features",\n'
+        '                             "CalculateNativeWinOcclusion");\n'
+        '  }\n',
+        '      cmd->AppendSwitchASCII("disable-features",\n'
+        '                             "CalculateNativeWinOcclusion");\n'
+        '    if (!cmd->HasSwitch("enable-features"))\n'
+        '      cmd->AppendSwitchASCII("enable-features",\n'
+        '                             "AiModeOmniboxEntryPoint");\n'
+        '  }\n',
+    )
+
+    # Rename "AI Mode" label to "Grok" in the omnibox chip.
+    g = grd.read_text()
+    if "IDS_AI_MODE_ENTRYPOINT_LABEL" in g and ">Grok<" not in g:
+        g = g.replace(
+            '<message name="IDS_AI_MODE_ENTRYPOINT_LABEL"\n'
+            '        desc="The label of the AI mode entrypoint in the omnibox" formatter_data="android_java">\n'
+            '        AI Mode\n'
+            '      </message>',
+            '<message name="IDS_AI_MODE_ENTRYPOINT_LABEL"\n'
+            '        desc="The label of the AI mode entrypoint in the omnibox" formatter_data="android_java">\n'
+            '        Grok\n'
+            '      </message>',
+        )
+        grd.write_text(g)
+        print(f"  edited: {grd}")
+
+    # Toolbar Grok button (opens same side panel as AI Mode chip).
+    toolbar = src / "chrome/browser/ui/views/toolbar/toolbar_view.cc"
+    edit(
+        toolbar,
+        '  overflow_button_ = AddChildView(std::make_unique<OverflowButton>());',
+        '  // AETHER: Grok companion toolbar button.\n'
+        '  {\n'
+        '    auto grok_btn = std::make_unique<ToolbarButton>(base::BindRepeating(\n'
+        '        [](Browser* b) {\n'
+        '          if (b)\n'
+        '            grok_companion::ToggleGrokSidePanel(b);\n'
+        '        },\n'
+        '        base::Unretained(browser_)));\n'
+        '    grok_btn->SetTooltipText(u"Grok");\n'
+        '    grok_btn->SetAccessibleName(u"Grok");\n'
+        '    grok_btn->SetVectorIcon(vector_icons::kLightbulbIcon);\n'
+        '    grok_btn->SetProperty(views::kElementIdentifierKey,\n'
+        '                          kToolbarGrokButtonElementId);\n'
+        '    AddChildView(std::move(grok_btn));\n'
+        '  }\n\n'
+        '  overflow_button_ = AddChildView(std::make_unique<OverflowButton>());',
+    )
+    edit(
+        toolbar,
+        '#include "chrome/browser/ui/views/toolbar/toolbar_view.h"',
+        '\n#include "chrome/browser/grok_companion/grok_companion_util.h"  // AETHER\n'
+        '#include "chrome/browser/ui/views/toolbar/toolbar_button.h"\n'
+        '#include "components/vector_icons/vector_icons.h"\n',
+    )
+    # Element id for the Grok toolbar button (local to toolbar_view.cc).
+    browser_elements = src / "chrome/browser/ui/browser_element_identifiers.h"
+    edit(
+        browser_elements,
+        'DECLARE_ELEMENT_IDENTIFIER_VALUE(kLocationBarElementId);',
+        'DECLARE_ELEMENT_IDENTIFIER_VALUE(kToolbarGrokButtonElementId);\n',
+    )
+    browser_elements_cc = src / "chrome/browser/ui/browser_element_identifiers.cc"
+    edit(
+        browser_elements_cc,
+        'DEFINE_ELEMENT_IDENTIFIER_VALUE(kLocationBarElementId);',
+        'DEFINE_ELEMENT_IDENTIFIER_VALUE(kToolbarGrokButtonElementId);\n',
+    )
+
     print("Integration edits applied.")
 
 
