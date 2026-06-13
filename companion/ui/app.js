@@ -1,0 +1,212 @@
+const $ = (s) => document.querySelector(s);
+const messagesEl = $('#messages');
+const convList = $('#conv-list');
+const input = $('#input');
+const sendBtn = $('#send');
+const statusEl = $('#status');
+const modelSelect = $('#model-select');
+const modelBadge = $('#model-badge');
+
+let conversations = [];
+let activeId = null;
+let busy = false;
+let models = [];
+let activeModel = getStoredModel();
+
+async function api(path, opts = {}) {
+  const r = await fetch(path, {
+    headers: { 'Content-Type': 'application/json' },
+    ...opts,
+  });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data.error || r.statusText);
+  return data;
+}
+
+function renderMessages(conv) {
+  messagesEl.innerHTML = '';
+  if (!conv) return;
+  for (const m of conv.messages || []) {
+    const div = document.createElement('div');
+    div.className = `msg ${m.role}`;
+    div.textContent = m.content;
+    messagesEl.appendChild(div);
+  }
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+}
+
+function renderConvList() {
+  convList.innerHTML = '';
+  for (const c of conversations) {
+    const li = document.createElement('li');
+    li.textContent = c.title || 'Chat';
+    li.className = c.id === activeId ? 'active' : '';
+    li.onclick = () => selectConv(c.id);
+    convList.appendChild(li);
+  }
+}
+
+function selectConv(id) {
+  activeId = id;
+  const conv = conversations.find((c) => c.id === id);
+  renderConvList();
+  renderMessages(conv);
+}
+
+async function refresh() {
+  const data = await api('/api/conversations');
+  conversations = data.conversations || [];
+  if (!activeId && conversations.length) activeId = conversations[0].id;
+  renderConvList();
+  selectConv(activeId);
+}
+
+async function newChat() {
+  const conv = await api('/api/conversations', { method: 'POST', body: '{}' });
+  conversations.unshift(conv);
+  activeId = conv.id;
+  renderConvList();
+  renderMessages(conv);
+  input.focus();
+}
+
+async function sendMessage(text) {
+  if (!text.trim() || busy || !activeId) return;
+  busy = true;
+  sendBtn.disabled = true;
+  const conv = conversations.find((c) => c.id === activeId);
+  conv.messages = conv.messages || [];
+  conv.messages.push({ role: 'user', content: text });
+  renderMessages(conv);
+  input.value = '';
+
+  const thinking = document.createElement('div');
+  thinking.className = 'msg assistant thinking';
+  thinking.textContent = 'Grok is thinking…';
+  messagesEl.appendChild(thinking);
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+
+  try {
+    const res = await fetch(`/api/conversations/${activeId}/message/stream`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: text, model: activeModel }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || res.statusText);
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let reply = '';
+    let streamModelLabel = modelLabel(activeModel, models);
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      let idx;
+      while ((idx = buffer.indexOf('\n')) >= 0) {
+        const line = buffer.slice(0, idx).trim();
+        buffer = buffer.slice(idx + 1);
+        if (!line) continue;
+        const evt = JSON.parse(line);
+        if (evt.type === 'meta') {
+          if (evt.model_label) streamModelLabel = evt.model_label;
+          updateModelBadge(modelBadge, evt.model || activeModel, streamModelLabel);
+        } else if (evt.type === 'thought') {
+          thinking.textContent = evt.data || 'Grok is thinking…';
+        } else if (evt.type === 'text') {
+          thinking.remove();
+          reply += evt.data || '';
+          const div = messagesEl.querySelector('.msg.assistant.streaming') ||
+            (() => {
+              const el = document.createElement('div');
+              el.className = 'msg assistant streaming';
+              messagesEl.appendChild(el);
+              return el;
+            })();
+          div.textContent = reply;
+          messagesEl.scrollTop = messagesEl.scrollHeight;
+        } else if (evt.type === 'result') {
+          if (evt.reply) reply = evt.reply;
+          if (evt.sessionId) conv.session_id = evt.sessionId;
+          if (evt.model_label) streamModelLabel = evt.model_label;
+        } else if (evt.type === 'error') {
+          throw new Error(evt.error || 'chat failed');
+        }
+      }
+    }
+
+    thinking.remove();
+    messagesEl.querySelector('.msg.assistant.streaming')?.remove();
+    conv.messages.push({ role: 'assistant', content: reply });
+    renderMessages(conv);
+    updateModelBadge(modelBadge, activeModel, streamModelLabel);
+    await refresh();
+  } catch (e) {
+    thinking.textContent = `Error: ${e.message}`;
+    thinking.classList.remove('thinking');
+  } finally {
+    busy = false;
+    sendBtn.disabled = false;
+    input.focus();
+  }
+}
+
+$('#composer').onsubmit = (e) => {
+  e.preventDefault();
+  sendMessage(input.value);
+};
+
+$('#new-chat').onclick = newChat;
+
+input.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    sendMessage(input.value);
+  }
+});
+
+async function pollStatus() {
+  try {
+    const s = await api('/api/status');
+    const gw = s.gateway?.running ? `${s.gateway.tabs} tabs` : 'browser online';
+    statusEl.textContent = gw;
+    statusEl.className = 'badge' + (s.gateway?.running ? ' ok' : ' ok');
+    if (s.model_label) updateModelBadge(modelBadge, s.model || activeModel, s.model_label);
+  } catch {
+    statusEl.textContent = 'offline';
+    statusEl.className = 'badge';
+  }
+}
+
+async function initModels() {
+  models = await fetchModels();
+  if (!models.some((m) => m.id === activeModel)) {
+    activeModel = models[0]?.id || DEFAULT_MODEL;
+  }
+  populateModelSelect(modelSelect, models, activeModel);
+  updateModelBadge(modelBadge, activeModel, modelLabel(activeModel, models));
+}
+
+modelSelect?.addEventListener('change', async () => {
+  activeModel = modelSelect.value;
+  persistModel(activeModel);
+  updateModelBadge(modelBadge, activeModel, modelLabel(activeModel, models));
+  try {
+    await api('/api/settings', {
+      method: 'POST',
+      body: JSON.stringify({ model: activeModel }),
+    });
+  } catch { /* local preference still applies */ }
+});
+
+startThemeWatcher();
+initModels().then(() => refresh().then(() => {
+  if (!conversations.length) newChat();
+}));
+pollStatus();
+setInterval(pollStatus, 5000);

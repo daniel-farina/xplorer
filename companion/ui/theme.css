@@ -1,0 +1,59 @@
+/* Matches XBrowser / Chrome neutral palette — no purple. */
+:root {
+  color-scheme: light dark;
+  --bg: #ffffff;
+  --surface: #f8f9fa;
+  --surface-elevated: #f1f3f4;
+  --text: #202124;
+  --text-secondary: #5f6368;
+  --border: #dadce0;
+  --accent: #1a73e8;
+  --accent-soft: rgba(26, 115, 232, 0.12);
+  --link: #1a73e8;
+  --button-bg: #1a73e8;
+  --button-text: #ffffff;
+  --input-bg: #ffffff;
+  --shadow: rgba(60, 64, 67, 0.15);
+  --user-bg: #e8f0fe;
+  --assistant-bg: #f1f3f4;
+}
+
+html[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #202124;
+  --surface: #292a2d;
+  --surface-elevated: #35363a;
+  --text: #e8eaed;
+  --text-secondary: #9aa0a6;
+  --border: #3c4043;
+  --accent: #8ab4f8;
+  --accent-soft: rgba(138, 180, 248, 0.16);
+  --link: #8ab4f8;
+  --button-bg: #8ab4f8;
+  --button-text: #202124;
+  --input-bg: #292a2d;
+  --shadow: rgba(0, 0, 0, 0.35);
+  --user-bg: #394457;
+  --assistant-bg: #292a2d;
+}
+
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #202124;
+    --surface: #292a2d;
+    --surface-elevated: #35363a;
+    --text: #e8eaed;
+    --text-secondary: #9aa0a6;
+    --border: #3c4043;
+    --accent: #8ab4f8;
+    --accent-soft: rgba(138, 180, 248, 0.16);
+    --link: #8ab4f8;
+    --button-bg: #8ab4f8;
+    --button-text: #202124;
+    --input-bg: #292a2d;
+    --shadow: rgba(0, 0, 0, 0.35);
+    --user-bg: #394457;
+    --assistant-bg: #292a2d;
+  }
+}
