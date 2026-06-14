@@ -88,18 +88,24 @@ function renderEmptyState(kind) {
 }
 
 async function openGrokWebQuery(query) {
-  const prompt = formatGrokWebQuery(query);
   if (submitBtn) submitBtn.disabled = true;
   try {
-    const res = await fetch('/api/page/grok-web', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ query: prompt }),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || res.statusText);
-    if (!data.grok_url) throw new Error('missing grok_url');
-    window.open(data.grok_url, '_blank');
+    let dest;
+    if (mode === 'imagine') {
+      dest = await imagineUrlForQuery(query, 'https://grok.com/imagine');
+    } else {
+      const prompt = formatGrokWebQuery(query);
+      const res = await fetch('/api/page/grok-web', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: prompt }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || res.statusText);
+      if (!data.grok_url) throw new Error('missing grok_url');
+      dest = data.grok_url;
+    }
+    window.open(dest, '_blank');
   } catch (err) {
     alert(`Grok Web failed: ${err.message}`);
   } finally {

@@ -10,6 +10,8 @@ const deleteSelectedBtn = $('#delete-selected-btn');
 const restartSelectedBtn = $('#restart-selected-btn');
 
 let lastApps = [];
+let statusFilter = 'all';
+const filterBar = $('#apps-filter-bar');
 
 function showAppsToast(message, isError = false) {
   let el = document.getElementById('apps-toast');
@@ -90,12 +92,24 @@ function updateBulkBar(apps) {
   }
 }
 
+function appsForFilter(apps) {
+  if (statusFilter === 'all') return apps;
+  return apps.filter((a) => (a.status || 'idle') === statusFilter);
+}
+
 function renderApps(data) {
   const apps = data.apps || [];
   lastApps = apps;
+  const visible = appsForFilter(apps);
   grid.innerHTML = '';
-  emptyEl.classList.toggle('hidden', apps.length > 0);
-  for (const app of apps) {
+  emptyEl.classList.toggle('hidden', visible.length > 0);
+  emptyEl.textContent = statusFilter === 'all'
+    ? 'No apps yet. Create one above.'
+    : `No ${statusFilter} apps.`;
+  filterBar?.querySelectorAll('[data-filter]').forEach((btn) => {
+    btn.classList.toggle('active', btn.dataset.filter === statusFilter);
+  });
+  for (const app of visible) {
     const card = document.createElement('article');
     card.className = 'app-card' + (app.status === 'building' ? ' building' : '');
     card.innerHTML = `
@@ -215,9 +229,9 @@ function renderApps(data) {
     };
   });
   grid.querySelectorAll('.app-select-cb').forEach((cb) => {
-    cb.onchange = () => updateBulkBar(apps);
+    cb.onchange = () => updateBulkBar(visible);
   });
-  updateBulkBar(apps);
+  updateBulkBar(visible);
   grid.querySelectorAll('[data-modify]').forEach((btn) => {
     btn.onclick = () => {
       const prompt = window.prompt('What should Grok change in this app?');
@@ -408,6 +422,13 @@ exportSelectedBtn?.addEventListener('click', async () => {
     exportSelectedBtn.disabled = false;
     updateBulkBar(lastApps);
   }
+});
+
+filterBar?.querySelectorAll('[data-filter]').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    statusFilter = btn.dataset.filter || 'all';
+    renderApps({ apps: lastApps });
+  });
 });
 
 initSearchHomeToggle($('#home-toggle'));

@@ -67,6 +67,12 @@
       <input id="import-name" type="text" placeholder="Display name (optional)">
       <button type="button" class="apps-btn" id="import-btn">Import</button>
     </section>
+    <div id="apps-filter-bar" class="apps-filter-bar">
+      <button type="button" class="apps-filter active" data-filter="all">All</button>
+      <button type="button" class="apps-filter" data-filter="ready">Ready</button>
+      <button type="button" class="apps-filter" data-filter="building">Building</button>
+      <button type="button" class="apps-filter" data-filter="error">Error</button>
+    </div>
     <div id="apps-bulk-bar" class="apps-bulk-bar hidden">
       <label class="apps-bulk-select-all">
         <input type="checkbox" id="apps-select-all">

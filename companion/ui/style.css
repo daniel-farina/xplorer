@@ -66,6 +66,25 @@ body {
   border-color: var(--accent);
 }
 
+.conv-filter {
+  display: block;
+  width: calc(100% - 20px);
+  margin: 0 10px 8px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--input-bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+}
+
+.conv-filter:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-soft);
+}
+
 .grok-modes .grok-mode[aria-current="page"] {
   cursor: default;
 }
@@ -122,6 +141,13 @@ body {
 html[data-theme="dark"] .markdown .hl-kw { color: #c4b5fd; }
 html[data-theme="dark"] .markdown .hl-str { color: #5eead4; }
 html[data-theme="dark"] .markdown .hl-num { color: #fbbf24; }
+
+#conv-list li.conv-empty {
+  padding: 10px 14px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  cursor: default;
+}
 
 #conv-list li {
   padding: 8px 14px;

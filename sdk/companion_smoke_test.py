@@ -109,7 +109,17 @@ def main() -> int:
     assert "export-batch" in apps_js
     assert "data-restart" in apps_js
     assert "restart-batch" in apps_js
+    assert "statusFilter" in apps_js
+    _, apps_html = get("/apps")
+    assert "apps-filter-bar" in apps_html
     print("apps.js bulk actions: OK")
+
+    assert "convFilterQuery" in app_js
+    req = urllib.request.Request(f"{BASE}/", headers={"Accept": "text/html"})
+    with urllib.request.urlopen(req, timeout=10) as resp:
+        app_html = resp.read().decode()
+    assert "conv-filter" in app_html
+    print("chat conv filter: OK")
 
     assert "runtime_alive" in apps_js
     print("apps.js runtime indicator: OK")
@@ -175,6 +185,18 @@ def main() -> int:
 
     if exportable:
         app_id = exportable[0]["id"]
+        req = urllib.request.Request(
+            f"{BASE}/api/apps/restart-batch",
+            data=json.dumps({"ids": [app_id]}).encode(),
+            method="POST",
+            headers={"Content-Type": "application/json"},
+        )
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            restarted = json.loads(resp.read().decode())
+        assert restarted.get("ok") is True, restarted
+        assert restarted.get("restarted", 0) >= 1, restarted
+        print(f"restart-batch {app_id}: OK")
+
         req = urllib.request.Request(f"{BASE}/api/apps/{app_id}/export")
         with urllib.request.urlopen(req, timeout=30) as resp:
             data = resp.read()

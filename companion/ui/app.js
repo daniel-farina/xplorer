@@ -10,6 +10,9 @@ let activeId = null;
 let busy = false;
 let models = [];
 let activeModel = getStoredModel();
+let convFilterQuery = '';
+
+const convFilterInput = document.getElementById('conv-filter');
 
 async function api(path, opts = {}) {
   const r = await fetch(path, {
@@ -60,9 +63,23 @@ async function renameConversation(conv, nextTitle) {
   conv.title = data.title || title;
 }
 
+function filteredConversations() {
+  const q = convFilterQuery.trim().toLowerCase();
+  if (!q) return conversations;
+  return conversations.filter((c) => (c.title || 'Chat').toLowerCase().includes(q));
+}
+
 function renderConvList() {
   convList.innerHTML = '';
-  for (const c of conversations) {
+  const list = filteredConversations();
+  if (!list.length && convFilterQuery.trim()) {
+    const empty = document.createElement('li');
+    empty.className = 'conv-empty';
+    empty.textContent = 'No matching chats';
+    convList.appendChild(empty);
+    return;
+  }
+  for (const c of list) {
     const li = document.createElement('li');
     li.textContent = c.title || 'Chat';
     li.className = c.id === activeId ? 'active' : '';
@@ -252,6 +269,11 @@ modelSelect?.addEventListener('change', async () => {
   try {
     await saveSettings({ model: activeModel });
   } catch { /* local preference still applies */ }
+});
+
+convFilterInput?.addEventListener('input', () => {
+  convFilterQuery = convFilterInput.value;
+  renderConvList();
 });
 
 initSearchHomeToggle($('#home-toggle'));

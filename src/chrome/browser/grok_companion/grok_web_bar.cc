@@ -290,7 +290,11 @@ std::string BuildInjectScript(const std::string& active_mode) {
     applyActivePill();
   }
   function pageQuery(){
-    try{return new URLSearchParams(location.search).get('q')||'';}catch(e){return '';}
+    try{
+      var q=new URLSearchParams(location.search).get('q')||'';
+      if(q)return q;
+      try{return localStorage.getItem('xplorer_search_query')||'';}catch(e){return '';}
+    }catch(e){return '';}
   }
   function wireWikiWebHandoff(bar){
     if(!bar||bar.dataset.wikiHandoff==='1')return;

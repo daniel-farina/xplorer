@@ -232,10 +232,30 @@ See above. Verified: search page serves mode pills + results section (curl).
 | restart-batch + FAB modifyapp | ✓ |
 | Build + reinstall | 43s, relaunch OK ✓ |
 
+## Loop 12 (2026-06-14 ~08:00)
+
+### Commit — feat(ui+native+fab): filters, imagine open, share link
+- **Search:** `openGrokWebQuery` uses `imagineUrlForQuery` in imagine mode
+- **Apps:** status filter tabs (All / Ready / Building / Error)
+- **Chat:** sidebar filter input for conversations
+- **Native bar:** grokipedia handoff falls back to `localStorage` `xplorer_search_query`
+- **FAB:** **Copy app link** on runtime pages (`shareapp`)
+- **Smoke:** conv filter HTML, restart-batch API, Accept header for `/` HTML
+- **Test:** companion_smoke_test.py ALL OK ✓ | build 42s ✓ | reinstall ✓
+
+**Loop 12 test summary**
+| Check | Result |
+|-------|--------|
+| companion_smoke_test.py | ALL OK (restart-batch) |
+| apps status filters | ✓ |
+| chat conv filter | ✓ |
+| FAB shareapp + wiki localStorage | ✓ |
+| Build + reinstall | 42s, relaunch OK ✓ |
+
 ## Next loop priorities
-- Search: openGrokWebQuery uses imagine URL in imagine mode
-- Apps: status filter tabs (ready / building / error)
-- Chat: conversation search/filter in sidebar
-- Native: grok_web_bar localStorage query fallback on grokipedia
-- FAB: share app preview link
-- Smoke test: restart-batch API with stopped runtime
+- Apps: filter counts on status tabs
+- Chat: keyboard shortcut to focus conv filter (/)
+- Search: Continue in Grok Web uses imagine URL in imagine mode
+- Native: grok_web_bar imagine pill handoff
+- FAB: copy builder link (companion /app?id=)
+- Smoke test: apps filter tab interaction via exportable counts

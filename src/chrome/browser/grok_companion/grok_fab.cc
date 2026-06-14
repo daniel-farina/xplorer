@@ -173,6 +173,7 @@ std::string BuildFabInjectScript() {
       appendMenuItem(menu,'modifyapp','\u270f','Modify app');
       appendMenuItem(menu,'renameapp','\u270e','Rename app');
       appendMenuItem(menu,'duplicateapp','\u2398','Duplicate app');
+      appendMenuItem(menu,'shareapp','\u29c9','Copy app link');
       appendMenuItem(menu,'exportapp','\u2b07','Export app');
     }
     appendMenuItem(menu,'analyze','\u2726','Analyze with Grok');
@@ -289,8 +290,8 @@ std::string BuildFabInjectScript() {
     }else if(fab.parentNode!==wrap){
       wrap.appendChild(fab);
     }
-    if(menu.dataset.version!=='12'){
-      menu.dataset.version='12';
+    if(menu.dataset.version!=='13'){
+      menu.dataset.version='13';
       buildMenu(menu);
       fab.dataset.wired='';
     }
@@ -299,8 +300,8 @@ std::string BuildFabInjectScript() {
     buildFabButton(fab);
     var oldPanel=document.getElementById('xplorer-grok-panel');
     if(oldPanel)oldPanel.remove();
-    if(fab.dataset.wired==='12')return;
-    fab.dataset.wired='12';
+    if(fab.dataset.wired==='13')return;
+    fab.dataset.wired='13';
     function setBusy(on){
       state.busy=on;
       fab.disabled=on;
@@ -344,6 +345,28 @@ std::string BuildFabInjectScript() {
           });});
         }).catch(function(e){
           if(e&&e.message)alert('Rename failed: '+e.message);
+        }).finally(function(){setBusy(false);});
+        return;
+      }
+      if(action==='shareapp'){
+        var ctx=detectAppContext();
+        if(!ctx){
+          alert('Not viewing an Xplorer app.');
+          return;
+        }
+        setBusy(true);
+        fetch(GW+'/api/apps').then(function(r){return r.json();}).then(function(d){
+          if(d.error)throw new Error(d.error);
+          var app=resolveAppFromContext(ctx,d.apps||[]);
+          var link=(app&&app.open_url)||location.href;
+          if(navigator.clipboard&&navigator.clipboard.writeText){
+            return navigator.clipboard.writeText(link).then(function(){
+              alert('App link copied');
+            });
+          }
+          window.prompt('Copy app link:',link);
+        }).catch(function(e){
+          alert('Share failed: '+(e.message||e));
         }).finally(function(){setBusy(false);});
         return;
       }

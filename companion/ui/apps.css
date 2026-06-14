@@ -131,6 +131,36 @@ html.grok-build body.apps-page {
   border-radius: 10px;
 }
 
+.apps-filter-bar {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.apps-filter {
+  border: 1px solid var(--border);
+  background: var(--surface-elevated);
+  color: var(--text-secondary);
+  border-radius: 999px;
+  padding: 5px 12px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.apps-filter:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.apps-filter.active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 .apps-bulk-bar {
   display: flex;
   align-items: center;
