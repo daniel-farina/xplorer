@@ -246,7 +246,48 @@ std::string AppStatus(const base::DictValue& app) {
   return status ? *status : kStatusIdle;
 }
 
+void MigrateAppPaths(base::DictValue& registry) {
+  base::FilePath root = AppsRootDir();
+  base::ListValue* apps = AppsList(registry);
+  if (!apps || root.empty())
+    return;
+  bool changed = false;
+  for (auto& v : *apps) {
+    if (!v.is_dict())
+      continue;
+    base::DictValue& app = v.GetDict();
+    const std::string* path = app.FindString("path");
+    const std::string* id = app.FindString("id");
+    if (!path || path->empty())
+      continue;
+    std::string updated = *path;
+    static constexpr const char* kLegacySegments[] = {
+        "/.aether/", "/.xbrowser/"};
+    for (const char* legacy : kLegacySegments) {
+      size_t pos = 0;
+      while ((pos = updated.find(legacy, pos)) != std::string::npos) {
+        updated.replace(pos, strlen(legacy), "/.xplorer/");
+        pos += strlen("/.xplorer/");
+        changed = true;
+      }
+    }
+    if (updated != *path) {
+      base::FilePath candidate(updated);
+      if (!base::DirectoryExists(candidate) && id && !id->empty()) {
+        base::FilePath fallback = root.AppendASCII(*id);
+        if (base::DirectoryExists(fallback))
+          updated = fallback.value();
+      }
+      app.Set("path", updated);
+      app.Set("updated_at", NowIso());
+    }
+  }
+  if (changed)
+    SaveRegistry(registry);
+}
+
 void ReconcileRegistryStates(base::DictValue& registry) {
+  MigrateAppPaths(registry);
   bool changed = false;
   base::ListValue* apps = AppsList(registry);
   if (!apps)
@@ -407,6 +448,9 @@ void SetAppRuntimeUrls(base::DictValue& out,
 base::DictValue AppToJson(const base::DictValue& app, int gateway_port) {
   base::DictValue out = app.Clone();
   out.Set("status", AppStatus(app));
+  const base::FilePath app_path = ResolveAppPath(app);
+  out.Set("exportable",
+          !app_path.empty() && base::DirectoryExists(app_path));
   SetAppRuntimeUrls(out, app, gateway_port);
   if (const std::string* sid = app.FindString("session_id")) {
     const std::string* path = app.FindString("path");

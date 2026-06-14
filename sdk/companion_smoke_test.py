@@ -62,12 +62,19 @@ def main() -> int:
     assert "renderMarkdown" in common
     print("common.js markers: OK")
 
+    class NoRedirect(urllib.request.HTTPRedirectHandler):
+        def redirect_request(self, req, fp, code, msg, headers, newurl):
+            return None
+
+    opener = urllib.request.build_opener(NoRedirect)
     req = urllib.request.Request(f"{BASE}/switch-home?mode=build", method="GET")
     try:
-        urllib.request.urlopen(req, timeout=10)
+        opener.open(req, timeout=10)
         raise AssertionError("switch-home should redirect, not 200")
     except urllib.error.HTTPError as e:
         assert e.code in (302, 303, 307), f"switch-home status {e.code}"
+        location = e.headers.get("Location", "")
+        assert "search" in location, f"unexpected Location: {location}"
     print("switch-home redirect: OK")
 
     exportable = [a for a in apps["apps"] if a.get("exportable")]
