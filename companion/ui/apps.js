@@ -4,6 +4,21 @@ const emptyEl = $('#apps-empty');
 const createBtn = $('#create-btn');
 const importBtn = $('#import-btn');
 
+function showAppsToast(message, isError = false) {
+  let el = document.getElementById('apps-toast');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'apps-toast';
+    el.className = 'apps-toast hidden';
+    document.body.appendChild(el);
+  }
+  el.textContent = message;
+  el.classList.toggle('error', isError);
+  el.classList.remove('hidden');
+  clearTimeout(el._hideTimer);
+  el._hideTimer = setTimeout(() => el.classList.add('hidden'), 4500);
+}
+
 async function fetchApps() {
   const r = await fetch('/api/apps');
   if (!r.ok) throw new Error('failed to load apps');
@@ -44,7 +59,9 @@ function renderApps(data) {
           : ''}
         <button type="button" class="apps-btn" data-rename="${escapeHtml(app.id)}" data-name="${escapeHtml(app.name || 'App')}">Rename</button>
         <button type="button" class="apps-btn" data-duplicate="${escapeHtml(app.id)}">Duplicate</button>
-        <button type="button" class="apps-btn" data-export="${escapeHtml(app.id)}" data-name="${escapeHtml(app.name || 'App')}">Export</button>
+        ${app.exportable
+          ? `<button type="button" class="apps-btn" data-export="${escapeHtml(app.id)}" data-name="${escapeHtml(app.name || 'App')}">Export</button>`
+          : '<button type="button" class="apps-btn" disabled title="App folder missing">Export</button>'}
         <button type="button" class="apps-btn" data-modify="${escapeHtml(app.id)}">Modify</button>
         <button type="button" class="apps-btn danger" data-delete="${escapeHtml(app.id)}" data-name="${escapeHtml(app.name || 'App')}">Delete</button>
       </div>`;
@@ -99,9 +116,32 @@ function renderApps(data) {
     };
   });
   grid.querySelectorAll('[data-export]').forEach((btn) => {
-    btn.onclick = () => {
-      const slug = (btn.dataset.name || 'app').trim().replace(/[^\w.-]+/g, '_').slice(0, 48);
-      window.location.href = `/api/apps/${encodeURIComponent(btn.dataset.export)}/export?filename=${encodeURIComponent(slug)}.zip`;
+    btn.onclick = async () => {
+      btn.disabled = true;
+      try {
+        const id = btn.dataset.export;
+        const res = await fetch(`/api/apps/${encodeURIComponent(id)}/export`);
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.error || res.statusText || 'Export failed');
+        }
+        const blob = await res.blob();
+        const cd = res.headers.get('Content-Disposition') || '';
+        const match = cd.match(/filename="([^"]+)"/);
+        const slug = (btn.dataset.name || 'app').trim().replace(/[^\w.-]+/g, '_').slice(0, 48);
+        const filename = match?.[1] || `${slug}.zip`;
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        a.click();
+        URL.revokeObjectURL(url);
+        showAppsToast(`Exported ${filename}`);
+      } catch (e) {
+        showAppsToast(e.message, true);
+      } finally {
+        btn.disabled = false;
+      }
     };
   });
   grid.querySelectorAll('[data-modify]').forEach((btn) => {

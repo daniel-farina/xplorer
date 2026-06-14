@@ -235,6 +235,12 @@ header.grok-toolbar {
   color: var(--toolbar-accent);
 }
 
+.grok-pill-menu a.active {
+  background: var(--toolbar-accent-soft);
+  color: var(--toolbar-accent);
+  font-weight: 500;
+}
+
 /* Legacy toggle (unused) */
 .grok-toggle {
   display: inline-flex;

@@ -71,15 +71,30 @@ async function saveSettings(partial) {
   return res.json();
 }
 
+/** Sub-route within Grok Build (conversations / apps / app builder). */
+function companionBuildSubRoute(path) {
+  if (path === '/' || path === '') return 'conversations';
+  if (path.startsWith('/apps')) return 'apps';
+  if (path.startsWith('/app')) return 'app';
+  return '';
+}
+
 /** Highlight companion toolbar pill from current route (127.0.0.1 pages). */
 function syncCompanionToolbarPill() {
   const path = (location.pathname || '').toLowerCase();
   let routeHome = SEARCH_HOME_BUILD;
   if (path.startsWith('/search')) routeHome = SEARCH_HOME_WEB;
+  const subRoute = companionBuildSubRoute(path);
   const toggle = document.getElementById('home-toggle');
   if (!toggle) return;
   toggle.querySelectorAll('[data-home]').forEach((btn) => {
     btn.classList.toggle('active', btn.dataset.home === routeHome);
+  });
+  toggle.querySelectorAll('.grok-pill-menu a[data-route]').forEach((link) => {
+    link.classList.toggle('active', !!subRoute && link.dataset.route === subRoute);
+  });
+  toggle.querySelectorAll('.grok-pill-menu a[data-route="search"]').forEach((link) => {
+    link.classList.toggle('active', path.startsWith('/search'));
   });
 }
 
@@ -349,7 +364,19 @@ function extractResultsFromText(text, mode) {
 /** Lightweight markdown → HTML (escaped input). */
 function renderMarkdown(raw) {
   if (!raw) return '';
-  let s = escapeHtml(raw);
+  const codeBlocks = [];
+  let s = String(raw).replace(/```(\w*)\n?([\s\S]*?)```/g, (_, lang, code) => {
+    const idx = codeBlocks.length;
+    codeBlocks.push({ lang: lang || '', code });
+    return `\x00CODE${idx}\x00`;
+  });
+  s = escapeHtml(s);
+  s = s.replace(/\x00CODE(\d+)\x00/g, (_, n) => {
+    const block = codeBlocks[Number(n)];
+    if (!block) return '';
+    const lang = block.lang ? ` language-${escapeHtml(block.lang)}` : '';
+    return `<pre class="code-block"><code class="${lang.trim()}">${escapeHtml(block.code.trim())}</code></pre>`;
+  });
 
   s = s.replace(
     /\[\[(\d+)\]\]\((https?:\/\/[^)\s]+)\)/g,

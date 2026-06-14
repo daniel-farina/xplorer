@@ -235,6 +235,30 @@ html[data-theme="dark"] .app-status.error { color: #f28b82; }
   animation: apps-pulse 1.2s ease-in-out infinite;
 }
 
+.apps-toast {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  z-index: 200;
+  max-width: 320px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface-elevated);
+  color: var(--text);
+  font-size: 13px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+}
+
+.apps-toast.error {
+  border-color: #c5221f;
+  color: #c5221f;
+}
+
+.apps-toast.hidden {
+  display: none;
+}
+
 @keyframes apps-pulse {
   0%, 100% { opacity: 0.35; transform: scale(0.85); }
   50% { opacity: 1; transform: scale(1); }
