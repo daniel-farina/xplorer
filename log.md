@@ -45,8 +45,21 @@ See above. Verified: search page serves mode pills + results section (curl).
 | switch-home query preserve | q + mode in Location ✓ |
 | Data dir | ~/.xplorer ✓ |
 
+## Loop 2 (2026-06-14)
+
+### Commit 94fec7c — feat(ui)
+- App builder delete button; search streaming UI; welcome tour links
+
+### Commit d53a3b1 — fix(native)
+- Runtime relaunch via WaitForExitWithTimeout; toolbar SPA nav; switch-home Connection: close
+
+### Commit (apps) — fix WaitForExitWithTimeout build
+- Replaced nonexistent Process::IsRunning() with Chromium API
+
+**Test:** Build 41s ✓ | switch-home returns 302 immediately ✓ | smoke test passed ✓
+
 ## Next loop priorities
-- App view delete button + runtime auto-restart on open
-- Search stream UI for long native searches
-- Toolbar SPA navigation edge cases on x.com/i/chat
-- Welcome screen "tour" links to apps/search
+- App rename in gallery; duplicate app
+- Search: remember last mode in localStorage
+- Grok FAB menu: add "Build app from page" shortcut
+- Companion chat: model picker persistence across pages
