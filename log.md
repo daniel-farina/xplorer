@@ -123,10 +123,19 @@ See above. Verified: search page serves mode pills + results section (curl).
 | Path migration | `.aether` → `.xplorer` in registry ✓ |
 | Code blocks in renderMarkdown | placeholder + pre/code path ✓ |
 
+## Loop 6 (2026-06-14 ~06:35)
+
+### Commit (ui) — feat(ui): native web search, app export, empty states, code highlight
+- **Web search:** `usesNativeSearch()` includes `web` → native stream + link grid
+- **Search UX:** `enrichSearchResults()` extracts URLs from answer text; dashed empty-state cards per mode
+- **App builder:** Export button in app subtoolbar (`exportAppZip`, respects `exportable`)
+- **Markdown:** `highlightCodeLight()` — keywords/strings/comments/numbers in code fences
+- **Test:** companion_smoke_test.py ALL OK ✓ | live curl search.js/app-view.js ✓
+
 ## Next loop priorities
-- Web search: optional native stream (currently Grok Web handoff)
-- Chat: syntax highlighting for code blocks (highlight.js or Prism)
-- App builder: export button on app view page
-- Welcome tour: link to companion smoke test in dev docs
-- Search: empty-state when video stream returns no thumbnails
 - FAB: quick-export current app from runtime preview
+- Welcome tour: companion smoke test in dev docs
+- Search: persist last query across home toggle
+- App builder: keyboard shortcut for export (Cmd+Shift+E)
+- Chat: copy code block button on hover
+- Native: grok-web handoff fallback when native search errors
