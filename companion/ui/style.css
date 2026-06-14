@@ -93,6 +93,15 @@ body {
   font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
+.markdown .hl-kw { color: #7c3aed; }
+.markdown .hl-str { color: #0d9488; }
+.markdown .hl-cmt { color: var(--text-secondary); font-style: italic; }
+.markdown .hl-num { color: #b45309; }
+
+html[data-theme="dark"] .markdown .hl-kw { color: #c4b5fd; }
+html[data-theme="dark"] .markdown .hl-str { color: #5eead4; }
+html[data-theme="dark"] .markdown .hl-num { color: #fbbf24; }
+
 #conv-list li {
   padding: 8px 14px;
   cursor: pointer;

@@ -13,6 +13,43 @@ function appPreviewUrl() {
     `/api/apps/${encodeURIComponent(appId)}/preview/index.html`;
 }
 
+function updateExportButton() {
+  const btn = $('#export-app');
+  if (!btn) return;
+  const canExport = !!app?.exportable;
+  btn.hidden = !canExport;
+  btn.disabled = !canExport;
+  btn.title = canExport ? 'Download app folder as zip' : 'App folder missing';
+}
+
+async function exportAppZip() {
+  if (!app?.exportable || !appId) return;
+  const btn = $('#export-app');
+  if (btn) btn.disabled = true;
+  try {
+    const res = await fetch(`/api/apps/${encodeURIComponent(appId)}/export`);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || res.statusText || 'Export failed');
+    }
+    const blob = await res.blob();
+    const cd = res.headers.get('Content-Disposition') || '';
+    const match = cd.match(/filename="([^"]+)"/);
+    const slug = (app.name || 'app').trim().replace(/[^\w.-]+/g, '_').slice(0, 48);
+    const filename = match?.[1] || `${slug}.zip`;
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  } catch (err) {
+    alert(err.message);
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
 function updateOpenTabLink() {
   const link = $('#open-app-tab');
   const url = appPreviewUrl();
@@ -156,6 +193,8 @@ async function loadApp() {
     pathEl.title = app.open_url || app.runtime_url || app.path || '';
   }
   updateOpenTabLink();
+  updateExportButton();
+  $('#export-app').onclick = exportAppZip;
   $('#copy-cli').onclick = () => {
     const cmd = app.cli_command || `grok --cwd ${app.path || '.'}`;
     navigator.clipboard.writeText(cmd).then(() => {
@@ -257,6 +296,7 @@ async function refreshApp() {
       pathEl.title = app.open_url || app.runtime_url || app.path || '';
     }
     updateOpenTabLink();
+    updateExportButton();
   }
 }
 

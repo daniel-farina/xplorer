@@ -65,7 +65,29 @@ function formatGrokWebQuery(query) {
 }
 
 function usesNativeSearch() {
-  return !!attachedImage || mode === 'imagine' || mode === 'videos';
+  return !!attachedImage || mode === 'imagine' || mode === 'videos' || mode === 'web';
+}
+
+function enrichSearchResults(data) {
+  const out = { ...data, mode: data.mode || mode };
+  const text = out.answer || out.text || '';
+  if (!text) return out;
+  if (out.mode === 'videos' && !out.videos?.length)
+    out.videos = extractResultsFromText(text, 'videos');
+  if (out.mode === 'images' && !out.images?.length)
+    out.images = extractResultsFromText(text, 'images');
+  if (out.mode === 'web' && !out.links?.length)
+    out.links = extractResultsFromText(text, 'web');
+  return out;
+}
+
+function renderEmptyState(kind) {
+  const msg = kind === 'video'
+    ? 'No videos with thumbnails yet. Try broader keywords or continue in Grok Web.'
+    : kind === 'image'
+      ? 'No images returned. Try rephrasing or attach an image for vision search.'
+      : 'No links extracted yet. The answer above may still help — open Grok Web for more sources.';
+  return `<div class="result-card empty-state"><p>${msg}</p></div>`;
 }
 
 async function openGrokWebQuery(query) {
@@ -126,6 +148,7 @@ function renderMediaGrid(items, kind) {
 
 function renderSearchResults(query, data) {
   if (!resultsEl) return;
+  data = enrichSearchResults(data);
   const answer = data.answer || data.text || '';
   let html = '';
 
@@ -146,9 +169,21 @@ function renderSearchResults(query, data) {
     html += `<div class="result-card result-body markdown">${renderMarkdown(answer)}</div>`;
   }
 
-  html += renderMediaGrid(data.videos, 'video');
-  html += renderMediaGrid(data.images, 'image');
-  html += renderMediaGrid(data.links, 'link');
+  const videoGrid = renderMediaGrid(data.videos, 'video');
+  const imageGrid = renderMediaGrid(data.images, 'image');
+  const linkGrid = renderMediaGrid(data.links, 'link');
+  html += videoGrid;
+  html += imageGrid;
+  html += linkGrid;
+
+  const activeMode = data.mode || mode;
+  if (activeMode === 'videos' && !data.videos?.length && !videoGrid) {
+    html += renderEmptyState('video');
+  } else if (activeMode === 'images' && !data.images?.length && !imageGrid) {
+    html += renderEmptyState('image');
+  } else if (activeMode === 'web' && !data.links?.length && !linkGrid && !answer) {
+    html += renderEmptyState('link');
+  }
 
   if (!html) {
     html = '<div class="result-card"><p>No results returned. Try rephrasing your query.</p></div>';
@@ -236,7 +271,7 @@ async function runNativeSearch(query) {
       }
     }
     if (resultData) {
-      renderSearchResults(query, resultData);
+      renderSearchResults(query, { ...resultData, mode: body.mode });
     } else if (answerText) {
       renderSearchResults(query, { answer: answerText, mode: body.mode, text: answerText });
     } else {

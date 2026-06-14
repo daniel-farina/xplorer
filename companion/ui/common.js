@@ -361,6 +361,17 @@ function extractResultsFromText(text, mode) {
   return items;
 }
 
+/** Minimal syntax colors for fenced code (no external deps). */
+function highlightCodeLight(code) {
+  let s = escapeHtml(code);
+  const keywords = /\b(const|let|var|function|return|if|else|for|while|class|import|export|from|async|await|new|try|catch|throw|typeof|interface|type|enum)\b/g;
+  s = s.replace(keywords, '<span class="hl-kw">$1</span>');
+  s = s.replace(/(\/\/[^\n]*)/g, '<span class="hl-cmt">$1</span>');
+  s = s.replace(/('(?:\\.|[^'\\])*'|"(?:\\.|[^"\\])*"|`(?:\\.|[^`\\])*`)/g, '<span class="hl-str">$1</span>');
+  s = s.replace(/\b(\d+(?:\.\d+)?)\b/g, '<span class="hl-num">$1</span>');
+  return s;
+}
+
 /** Lightweight markdown → HTML (escaped input). */
 function renderMarkdown(raw) {
   if (!raw) return '';
@@ -375,7 +386,8 @@ function renderMarkdown(raw) {
     const block = codeBlocks[Number(n)];
     if (!block) return '';
     const lang = block.lang ? ` language-${escapeHtml(block.lang)}` : '';
-    return `<pre class="code-block"><code class="${lang.trim()}">${escapeHtml(block.code.trim())}</code></pre>`;
+    const body = highlightCodeLight(block.code.trim());
+    return `<pre class="code-block"><code class="${lang.trim()}">${body}</code></pre>`;
   });
 
   s = s.replace(
