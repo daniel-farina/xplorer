@@ -100,10 +100,33 @@ See above. Verified: search page serves mode pills + results section (curl).
 | common.js toolbar sync | syncCompanionToolbarPill present ✓ |
 | Build + reinstall | 41s, relaunch OK ✓ |
 
+## Loop 5 (2026-06-14 ~02:15)
+
+### Commit dc0b8de — feat(ui)
+- Export button disabled when folder missing; fetch+blob download with toast errors
+- `syncCompanionToolbarPill()` highlights Conversations/Apps/Search sub-routes
+- `renderMarkdown()` fenced code blocks + `pre.code-block` styling
+- `sdk/companion_smoke_test.py` — companion API/page smoke checks
+- **Test:** live curl common.js/apps.js markers ✓
+
+### Commit 03071b1 — feat(apps) native
+- `exportable` bool on each app in `/api/apps` (folder exists on disk)
+- `MigrateAppPaths()` rewrites `/.aether/` and `/.xbrowser/` → `/.xplorer/`
+- Smoke test: no-redirect check for switch-home
+- **Test:** Build 41s ✓ | reinstall ✓ | `companion_smoke_test.py` ALL OK ✓ | migration: paths now under `~/.xplorer/apps/` ✓
+
+**Loop 5 test summary**
+| Check | Result |
+|-------|--------|
+| companion_smoke_test.py | ALL OK (export zip included) |
+| exportable API field | present on all apps with folders ✓ |
+| Path migration | `.aether` → `.xplorer` in registry ✓ |
+| Code blocks in renderMarkdown | placeholder + pre/code path ✓ |
+
 ## Next loop priorities
 - Web search: optional native stream (currently Grok Web handoff)
-- App export: disable button when folder missing; show error toast
-- Companion smoke test script (curl-based API checks in sdk/)
-- Chat: code blocks + syntax highlighting in markdown
-- Toolbar: highlight active sub-route (Conversations vs Apps vs App builder)
-- Migrate stale ~/.aether/apps registry paths to ~/.xplorer
+- Chat: syntax highlighting for code blocks (highlight.js or Prism)
+- App builder: export button on app view page
+- Welcome tour: link to companion smoke test in dev docs
+- Search: empty-state when video stream returns no thumbnails
+- FAB: quick-export current app from runtime preview
