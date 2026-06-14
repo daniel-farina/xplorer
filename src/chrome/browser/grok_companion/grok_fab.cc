@@ -170,6 +170,7 @@ std::string BuildFabInjectScript() {
     var appCtx=detectAppContext();
     if(appCtx){
       appendMenuItem(menu,'openappbuilder','\u2699','Open in builder');
+      appendMenuItem(menu,'modifyapp','\u270f','Modify app');
       appendMenuItem(menu,'renameapp','\u270e','Rename app');
       appendMenuItem(menu,'duplicateapp','\u2398','Duplicate app');
       appendMenuItem(menu,'exportapp','\u2b07','Export app');
@@ -288,8 +289,8 @@ std::string BuildFabInjectScript() {
     }else if(fab.parentNode!==wrap){
       wrap.appendChild(fab);
     }
-    if(menu.dataset.version!=='11'){
-      menu.dataset.version='11';
+    if(menu.dataset.version!=='12'){
+      menu.dataset.version='12';
       buildMenu(menu);
       fab.dataset.wired='';
     }
@@ -298,8 +299,8 @@ std::string BuildFabInjectScript() {
     buildFabButton(fab);
     var oldPanel=document.getElementById('xplorer-grok-panel');
     if(oldPanel)oldPanel.remove();
-    if(fab.dataset.wired==='11')return;
-    fab.dataset.wired='11';
+    if(fab.dataset.wired==='12')return;
+    fab.dataset.wired='12';
     function setBusy(on){
       state.busy=on;
       fab.disabled=on;
@@ -343,6 +344,28 @@ std::string BuildFabInjectScript() {
           });});
         }).catch(function(e){
           if(e&&e.message)alert('Rename failed: '+e.message);
+        }).finally(function(){setBusy(false);});
+        return;
+      }
+      if(action==='modifyapp'){
+        var ctx=detectAppContext();
+        if(!ctx){
+          alert('Not viewing an Xplorer app.');
+          return;
+        }
+        var prompt=window.prompt('What should Grok change in this app?','');
+        if(!prompt||!prompt.trim())return;
+        setBusy(true);
+        fetch(GW+'/api/apps').then(function(r){return r.json();}).then(function(d){
+          if(d.error)throw new Error(d.error);
+          var app=resolveAppFromContext(ctx,d.apps||[]);
+          if(!app)throw new Error('App not found');
+          sessionStorage.setItem('xplorer_app_build',JSON.stringify({
+            id:app.id,prompt:prompt.trim()
+          }));
+          window.open(GW+'/app?id='+encodeURIComponent(app.id)+'&autobuild=1','_blank');
+        }).catch(function(e){
+          alert('Modify failed: '+(e.message||e));
         }).finally(function(){setBusy(false);});
         return;
       }

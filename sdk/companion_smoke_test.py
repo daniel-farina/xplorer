@@ -68,11 +68,39 @@ def main() -> int:
     assert "initToolbarHomeHotkeys" in common
     assert "persistConvModel" in common
     assert "wikiUrlForQuery" in common
+    assert "imagineUrlForQuery" in common
     print("common.js markers: OK")
 
     _, app_js = get("/app.js")
     assert "renameConversation" in app_js
+    assert "deleteConversation" in app_js
     print("app.js conv rename: OK")
+
+    # Conversation rename API
+    req = urllib.request.Request(
+        f"{BASE}/api/conversations",
+        data=b"{}",
+        method="POST",
+        headers={"Content-Type": "application/json"},
+    )
+    with urllib.request.urlopen(req, timeout=10) as resp:
+        conv = json.loads(resp.read().decode())
+    conv_id = conv["id"]
+    req = urllib.request.Request(
+        f"{BASE}/api/conversations/{conv_id}/rename",
+        data=json.dumps({"title": "Smoke rename"}).encode(),
+        method="POST",
+        headers={"Content-Type": "application/json"},
+    )
+    with urllib.request.urlopen(req, timeout=10) as resp:
+        renamed = json.loads(resp.read().decode())
+    assert renamed.get("title") == "Smoke rename", renamed
+    print("conv rename API: OK")
+    urllib.request.urlopen(
+        urllib.request.Request(f"{BASE}/api/conversations/{conv_id}", method="DELETE"),
+        timeout=10,
+    )
+    print("conv delete API: OK")
 
     _, apps_js = get("/apps.js")
     assert "export-selected-btn" in apps_js
@@ -80,6 +108,7 @@ def main() -> int:
     assert "delete-selected-btn" in apps_js
     assert "export-batch" in apps_js
     assert "data-restart" in apps_js
+    assert "restart-batch" in apps_js
     print("apps.js bulk actions: OK")
 
     assert "runtime_alive" in apps_js
@@ -127,6 +156,23 @@ def main() -> int:
     print("switch-home q+m redirect: OK")
 
     exportable = [a for a in apps["apps"] if a.get("exportable")]
+    if len(exportable) >= 2:
+        ids = [a["id"] for a in exportable[:2]]
+        req = urllib.request.Request(
+            f"{BASE}/api/apps/export-batch",
+            data=json.dumps({"ids": ids}).encode(),
+            method="POST",
+            headers={"Content-Type": "application/json"},
+        )
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            data = resp.read()
+            assert resp.status == 200
+            assert resp.headers.get("Content-Type", "").startswith("application/zip")
+            assert data[:2] == b"PK", "batch zip magic"
+        print("export-batch: OK")
+    elif exportable:
+        print("export-batch: skipped (need 2+ exportable apps)")
+
     if exportable:
         app_id = exportable[0]["id"]
         req = urllib.request.Request(f"{BASE}/api/apps/{app_id}/export")

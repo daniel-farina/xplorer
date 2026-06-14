@@ -120,6 +120,15 @@ function wikiUrlForQuery(query, fallbackUrl = 'https://grokipedia.com/') {
   return `${fallbackUrl}${sep}q=${encodeURIComponent(q)}`;
 }
 
+/** Hand off imagine prompts to grok.com/imagine with xplorer_grok context. */
+async function imagineUrlForQuery(query, fallbackUrl = 'https://grok.com/imagine') {
+  const dest = await grokWebUrlForQuery(query, 'imagine', fallbackUrl);
+  if (dest.includes('xplorer_grok=')) {
+    return dest.replace(/^https:\/\/grok\.com\/?/, 'https://grok.com/imagine');
+  }
+  return dest;
+}
+
 /** Build a grok.com URL that carries a search query via xplorer_grok pending id. */
 async function grokWebUrlForQuery(query, mode, fallbackUrl = 'https://grok.com/') {
   const q = String(query || '').trim();
@@ -227,7 +236,9 @@ async function initSearchHomeToggle(container, { onSwitch, pageHome } = {}) {
           const params = new URLSearchParams(window.location.search);
           const q = params.get('q') || getStoredSearchQuery();
           const m = params.get('mode') || getStoredSearchMode();
-          const dest = await grokWebUrlForQuery(q, m, updated.grok_web_url || 'https://grok.com/');
+          const dest = m === 'imagine'
+            ? await imagineUrlForQuery(q, 'https://grok.com/imagine')
+            : await grokWebUrlForQuery(q, m, updated.grok_web_url || 'https://grok.com/');
           window.location.href = dest;
         } else if (saved === SEARCH_HOME_WIKI) {
           const params = new URLSearchParams(window.location.search);

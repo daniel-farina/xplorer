@@ -188,6 +188,9 @@ std::string BuildInjectScript(const std::string& active_mode) {
       search_href.c_str(), build_href.c_str(), chat_href.c_str(),
       apps_href.c_str(), web_href.c_str(), wiki_href.c_str());
   const std::string html_json = JsonStringLiteral(html);
+  const std::string gw =
+      base::StringPrintf("http://%s:%d", kCompanionHost, GatewayPort());
+  const std::string gw_json = JsonStringLiteral(gw);
 
   const std::string theme = BrowserThemeAttribute();
   const std::string theme_boot =
@@ -203,7 +206,7 @@ std::string BuildInjectScript(const std::string& active_mode) {
       R"((function(){
   if(!document.documentElement)return;
   var BAR_ID='xplorer-grok-bar',STYLE_ID='xplorer-grok-toolbar-style';
-  var CSS=%s,HTML=%s,FALLBACK_PILL=%s;
+  var CSS=%s,HTML=%s,FALLBACK_PILL=%s,GW=%s;
   %s
   function isXHost(host){
     return host==='x.com'||host.endsWith('.x.com')||
@@ -276,6 +279,7 @@ std::string BuildInjectScript(const std::string& active_mode) {
     mountBar(bar);
     applyPadding(bar);
     applyActivePill();
+    wireWikiWebHandoff(bar);
   }
   function barNeedsMount(){
     var bar=document.getElementById(BAR_ID);
@@ -284,6 +288,34 @@ std::string BuildInjectScript(const std::string& active_mode) {
   }
   function onRouteChange(){
     applyActivePill();
+  }
+  function pageQuery(){
+    try{return new URLSearchParams(location.search).get('q')||'';}catch(e){return '';}
+  }
+  function wireWikiWebHandoff(bar){
+    if(!bar||bar.dataset.wikiHandoff==='1')return;
+    bar.dataset.wikiHandoff='1';
+    bar.addEventListener('click',function(ev){
+      var pill=ev.target&&ev.target.closest?ev.target.closest('.grok-pill[data-pill]'):null;
+      if(!pill||pill.getAttribute('data-pill')!=='web')return;
+      var host=(location.hostname||'').toLowerCase();
+      if(host.indexOf('grokipedia.com')<0)return;
+      var q=pageQuery();
+      if(!q)return;
+      ev.preventDefault();
+      ev.stopPropagation();
+      fetch(GW+'/api/page/grok-web',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({query:q})
+      }).then(function(r){return r.json().then(function(d){
+        if(!r.ok)throw new Error(d.error||'handoff failed');
+        if(d.grok_url)location.href=d.grok_url;
+        else throw new Error('missing grok_url');
+      });}).catch(function(){
+        location.href='https://grok.com/';
+      });
+    },true);
   }
   ensureBar();
   hookHistory();
@@ -312,7 +344,7 @@ std::string BuildInjectScript(const std::string& active_mode) {
   }
 })();)",
       css_json.c_str(), html_json.c_str(), fallback_pill_json.c_str(),
-      theme_boot.c_str(), theme_call.c_str());
+      gw_json.c_str(), theme_boot.c_str(), theme_call.c_str());
 }
 
 class GrokWebBarInjector : public content::WebContentsObserver,

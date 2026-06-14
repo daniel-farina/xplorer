@@ -411,11 +411,14 @@ initSearchHomeToggle($('#home-toggle'), {
         updated?.grok_wiki_url || 'https://grokipedia.com/',
       );
     } else {
-      const dest = await grokWebUrlForQuery(
-        q || getStoredSearchQuery(),
-        mode,
-        updated?.grok_web_url || 'https://grok.com/',
-      );
+      const query = q || getStoredSearchQuery();
+      const dest = mode === 'imagine'
+        ? await imagineUrlForQuery(query, 'https://grok.com/imagine')
+        : await grokWebUrlForQuery(
+          query,
+          mode,
+          updated?.grok_web_url || 'https://grok.com/',
+        );
       window.location.href = dest;
     }
   },

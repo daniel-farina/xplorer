@@ -7,6 +7,7 @@ const bulkBar = $('#apps-bulk-bar');
 const selectAllCb = $('#apps-select-all');
 const exportSelectedBtn = $('#export-selected-btn');
 const deleteSelectedBtn = $('#delete-selected-btn');
+const restartSelectedBtn = $('#restart-selected-btn');
 
 let lastApps = [];
 
@@ -71,6 +72,13 @@ function updateBulkBar(apps) {
       || !selectedAppIds().some((id) => lastApps.find((a) => a.id === id)?.exportable);
   }
   if (deleteSelectedBtn) deleteSelectedBtn.disabled = checked === 0;
+  if (restartSelectedBtn) {
+    const canRestart = selectedAppIds().some((id) => {
+      const app = lastApps.find((a) => a.id === id);
+      return app?.runtime_ready && !app?.runtime_alive;
+    });
+    restartSelectedBtn.disabled = checked === 0 || !canRestart;
+  }
   if (selectAllCb) {
     selectAllCb.indeterminate = checked > 0 && checked < apps.length;
     selectAllCb.checked = apps.length > 0 && checked === apps.length;
@@ -312,6 +320,32 @@ selectAllCb?.addEventListener('change', () => {
   const on = !!selectAllCb.checked;
   grid.querySelectorAll('.app-select-cb').forEach((cb) => { cb.checked = on; });
   updateBulkBar(lastApps);
+});
+
+restartSelectedBtn?.addEventListener('click', async () => {
+  const ids = selectedAppIds().filter((id) => {
+    const app = lastApps.find((a) => a.id === id);
+    return app?.runtime_ready && !app?.runtime_alive;
+  });
+  if (!ids.length) return;
+  restartSelectedBtn.disabled = true;
+  try {
+    const res = await fetch('/api/apps/restart-batch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || res.statusText || 'Restart failed');
+    const n = data.restarted ?? ids.length;
+    showAppsToast(n === 1 ? 'Restarted 1 runtime' : `Restarted ${n} runtimes`);
+    await refresh();
+  } catch (e) {
+    showAppsToast(e.message, true);
+  } finally {
+    restartSelectedBtn.disabled = false;
+    updateBulkBar(lastApps);
+  }
 });
 
 deleteSelectedBtn?.addEventListener('click', async () => {

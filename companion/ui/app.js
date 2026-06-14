@@ -39,6 +39,14 @@ function renderMessages(conv) {
   messagesEl.scrollTop = messagesEl.scrollHeight;
 }
 
+async function deleteConversation(convId) {
+  const r = await fetch(`/api/conversations/${encodeURIComponent(convId)}`, {
+    method: 'DELETE',
+  });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data.error || r.statusText);
+}
+
 async function renameConversation(conv, nextTitle) {
   const title = String(nextTitle || '').trim();
   if (!title || title === conv.title) return;
@@ -58,8 +66,27 @@ function renderConvList() {
     const li = document.createElement('li');
     li.textContent = c.title || 'Chat';
     li.className = c.id === activeId ? 'active' : '';
-    li.title = 'Double-click to rename';
+    li.title = 'Double-click to rename · right-click to delete';
     li.onclick = () => selectConv(c.id);
+    li.oncontextmenu = async (e) => {
+      e.preventDefault();
+      if (!confirm(`Delete "${c.title || 'Chat'}"?`)) return;
+      try {
+        await deleteConversation(c.id);
+        conversations = conversations.filter((x) => x.id !== c.id);
+        if (activeId === c.id) {
+          activeId = conversations[0]?.id || null;
+          if (!activeId) {
+            await newChat();
+            return;
+          }
+        }
+        renderConvList();
+        selectConv(activeId);
+      } catch (err) {
+        alert(err.message);
+      }
+    };
     li.ondblclick = async (e) => {
       e.preventDefault();
       e.stopPropagation();

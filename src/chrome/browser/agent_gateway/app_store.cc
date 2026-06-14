@@ -733,6 +733,50 @@ bool TryHandleAppsRequest(
   const std::string path = PathOnly(info.path);
   const std::string prefix = "/api/apps/";
 
+  if (info.method == "POST" && path == "/api/apps/restart-batch") {
+    auto body = base::JSONReader::ReadDict(info.data, base::JSON_PARSE_RFC);
+    const base::ListValue* ids = body ? body->FindList("ids") : nullptr;
+    if (!ids || ids->empty()) {
+      base::DictValue err;
+      err.Set("error", "ids required");
+      SendJson(server, connection_id, net::HTTP_BAD_REQUEST, std::move(err));
+      return true;
+    }
+    base::DictValue registry = LoadRegistry();
+    int restarted = 0;
+    base::ListValue restarted_apps;
+    for (const auto& id_val : *ids) {
+      if (!id_val.is_string())
+        continue;
+      const std::string& id = id_val.GetString();
+      base::DictValue* app = FindAppDict(registry, id);
+      if (!app)
+        continue;
+      base::FilePath app_path = ResolveAppPath(*app);
+      if (app_path.empty() || !base::DirectoryExists(app_path))
+        continue;
+      StopAppRuntimeServer(id);
+      const int port = GetOrAssignRuntimePort(registry, app);
+      if (!LaunchAppRuntimeServer(id, app_path, port))
+        continue;
+      ++restarted;
+      restarted_apps.Append(AppToJson(*app, gateway_port));
+    }
+    if (restarted == 0) {
+      base::DictValue err;
+      err.Set("error", "no runtimes restarted");
+      SendJson(server, connection_id, net::HTTP_BAD_REQUEST, std::move(err));
+      return true;
+    }
+    SaveRegistry(registry);
+    base::DictValue result;
+    result.Set("ok", true);
+    result.Set("restarted", restarted);
+    result.Set("apps", std::move(restarted_apps));
+    SendJson(server, connection_id, net::HTTP_OK, std::move(result));
+    return true;
+  }
+
   if (info.method == "POST" && path == "/api/apps/export-batch") {
     auto body = base::JSONReader::ReadDict(info.data, base::JSON_PARSE_RFC);
     const base::ListValue* ids = body ? body->FindList("ids") : nullptr;

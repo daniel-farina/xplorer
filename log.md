@@ -212,10 +212,30 @@ See above. Verified: search page serves mode pills + results section (curl).
 | FAB duplicateapp | ✓ |
 | Build + reinstall | 42s, relaunch OK ✓ |
 
+## Loop 11 (2026-06-14 ~07:45)
+
+### Commit — feat(ui+native+fab): imagine handoff, bulk restart, conv delete
+- **Search:** `imagineUrlForQuery` — imagine mode switches to `grok.com/imagine` with xplorer_grok context
+- **Native bar:** grokipedia → Grok Web pill intercepts `?q=` and calls `/api/page/grok-web` handoff
+- **Chat:** right-click sidebar to delete conversation
+- **Apps:** bulk **Restart selected** via `POST /api/apps/restart-batch`
+- **FAB:** **Modify app** opens builder with autobuild prompt (`modifyapp`)
+- **Smoke:** conv rename/delete API + export-batch zip when 2+ apps
+- **Test:** companion_smoke_test.py ALL OK ✓ | build 43s ✓ | reinstall ✓
+
+**Loop 11 test summary**
+| Check | Result |
+|-------|--------|
+| companion_smoke_test.py | ALL OK (rename, export-batch) |
+| imagineUrlForQuery | ✓ |
+| grok_web_bar wiki→web handoff | ✓ |
+| restart-batch + FAB modifyapp | ✓ |
+| Build + reinstall | 43s, relaunch OK ✓ |
+
 ## Next loop priorities
-- Native grok_web_bar: query handoff when switching wiki→web on grokipedia
-- Apps: bulk restart selected runtimes
-- Chat: delete conversation from sidebar context menu
-- Search: imagine mode handoff to grok.com/imagine
-- FAB: modify app (open builder with prefilled prompt)
-- Smoke test: conv rename + export-batch API calls
+- Search: openGrokWebQuery uses imagine URL in imagine mode
+- Apps: status filter tabs (ready / building / error)
+- Chat: conversation search/filter in sidebar
+- Native: grok_web_bar localStorage query fallback on grokipedia
+- FAB: share app preview link
+- Smoke test: restart-batch API with stopped runtime
