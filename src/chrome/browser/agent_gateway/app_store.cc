@@ -240,8 +240,12 @@ bool LaunchAppRuntimeServer(const std::string& app_id,
     return false;
   auto it = g_app_runtime_servers->find(app_id);
   if (it != g_app_runtime_servers->end() && it->second.process.IsValid() &&
-      it->second.process.IsRunning() && it->second.port == port) {
-    return true;
+      it->second.port == port) {
+    int exit_code = 0;
+    if (!it->second.process.WaitForExitWithTimeout(base::TimeDelta(),
+                                                   &exit_code)) {
+      return true;
+    }
   }
   StopAppRuntimeServer(app_id);
 
