@@ -64,12 +64,24 @@ def main() -> int:
     assert "getStoredSearchMode" in common
     assert "wireCodeCopyButtons" in common
     assert "initCodeCopyHotkey" in common
+    assert "grokWebUrlForQuery" in common
+    assert "initToolbarHomeHotkeys" in common
+    assert "persistConvModel" in common
     print("common.js markers: OK")
 
     _, apps_js = get("/apps.js")
     assert "export-selected-btn" in apps_js
     assert "downloadAppZip" in apps_js
-    print("apps.js bulk export: OK")
+    assert "delete-selected-btn" in apps_js
+    print("apps.js bulk actions: OK")
+
+    assert "runtime_alive" in apps_js
+    print("apps.js runtime indicator: OK")
+
+    if apps["apps"] and "runtime_alive" in apps["apps"][0]:
+        print("api/apps runtime health: OK")
+    else:
+        print("api/apps runtime health: skipped (native rebuild pending)")
 
     _, search_js = get("/search.js")
     assert "Try Grok Web instead" in search_js

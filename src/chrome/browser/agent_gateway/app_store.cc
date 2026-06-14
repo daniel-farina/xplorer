@@ -424,6 +424,15 @@ void EnsureAppRuntime(base::DictValue& registry, base::DictValue* app) {
     LaunchAppRuntimeServer(*app_id, app_path, port);
 }
 
+bool AppRuntimeAlive(const std::string& app_id) {
+  auto it = g_app_runtime_servers->find(app_id);
+  if (it == g_app_runtime_servers->end() || !it->second.process.IsValid())
+    return false;
+  int exit_code = 0;
+  return !it->second.process.WaitForExitWithTimeout(base::TimeDelta(),
+                                                    &exit_code);
+}
+
 void SetAppRuntimeUrls(base::DictValue& out,
                        const base::DictValue& app,
                        int gateway_port) {
@@ -451,6 +460,12 @@ base::DictValue AppToJson(const base::DictValue& app, int gateway_port) {
   const base::FilePath app_path = ResolveAppPath(app);
   out.Set("exportable",
           !app_path.empty() && base::DirectoryExists(app_path));
+  const std::string* app_id = app.FindString("id");
+  const bool runtime_ready =
+      !app_path.empty() && base::PathExists(app_path.AppendASCII("index.html"));
+  out.Set("runtime_ready", runtime_ready);
+  out.Set("runtime_alive",
+          app_id && !app_id->empty() && AppRuntimeAlive(*app_id));
   SetAppRuntimeUrls(out, app, gateway_port);
   if (const std::string* sid = app.FindString("session_id")) {
     const std::string* path = app.FindString("path");

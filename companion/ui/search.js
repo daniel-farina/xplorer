@@ -397,7 +397,7 @@ input?.addEventListener('input', () => {
 });
 
 initSearchHomeToggle($('#home-toggle'), {
-  onSwitch: (saved, updated) => {
+  onSwitch: async (saved, updated) => {
     const params = new URLSearchParams();
     const q = input.value.trim();
     if (q) params.set('q', q);
@@ -408,7 +408,12 @@ initSearchHomeToggle($('#home-toggle'), {
     } else if (saved === SEARCH_HOME_WIKI) {
       window.location.href = updated?.grok_wiki_url || 'https://grokipedia.com/';
     } else {
-      window.location.href = updated?.grok_web_url || 'https://grok.com/';
+      const dest = await grokWebUrlForQuery(
+        q || getStoredSearchQuery(),
+        mode,
+        updated?.grok_web_url || 'https://grok.com/',
+      );
+      window.location.href = dest;
     }
   },
 });

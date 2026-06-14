@@ -190,6 +190,19 @@ html.grok-build body.apps-page {
   transform: translateY(-1px);
 }
 
+.runtime-dot {
+  margin-left: 6px;
+  font-size: 10px;
+}
+
+.runtime-dot.alive {
+  color: #16a34a;
+}
+
+.runtime-dot.idle {
+  color: var(--text-secondary);
+}
+
 .app-card.building {
   border-color: var(--text-secondary);
   box-shadow: 0 0 0 1px var(--accent-soft);

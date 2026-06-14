@@ -170,6 +170,7 @@ std::string BuildFabInjectScript() {
     var appCtx=detectAppContext();
     if(appCtx){
       appendMenuItem(menu,'openappbuilder','\u2699','Open in builder');
+      appendMenuItem(menu,'renameapp','\u270e','Rename app');
       appendMenuItem(menu,'exportapp','\u2b07','Export app');
     }
     appendMenuItem(menu,'analyze','\u2726','Analyze with Grok');
@@ -286,8 +287,8 @@ std::string BuildFabInjectScript() {
     }else if(fab.parentNode!==wrap){
       wrap.appendChild(fab);
     }
-    if(menu.dataset.version!=='9'){
-      menu.dataset.version='9';
+    if(menu.dataset.version!=='10'){
+      menu.dataset.version='10';
       buildMenu(menu);
       fab.dataset.wired='';
     }
@@ -296,8 +297,8 @@ std::string BuildFabInjectScript() {
     buildFabButton(fab);
     var oldPanel=document.getElementById('xplorer-grok-panel');
     if(oldPanel)oldPanel.remove();
-    if(fab.dataset.wired==='9')return;
-    fab.dataset.wired='9';
+    if(fab.dataset.wired==='10')return;
+    fab.dataset.wired='10';
     function setBusy(on){
       state.busy=on;
       fab.disabled=on;
@@ -318,6 +319,32 @@ std::string BuildFabInjectScript() {
         return;
       }
       state.pageData=extractPage();
+      if(action==='renameapp'){
+        var ctx=detectAppContext();
+        if(!ctx){
+          alert('Not viewing an Xplorer app.');
+          return;
+        }
+        setBusy(true);
+        fetch(GW+'/api/apps').then(function(r){return r.json();}).then(function(d){
+          if(d.error)throw new Error(d.error);
+          var app=resolveAppFromContext(ctx,d.apps||[]);
+          if(!app)throw new Error('App not found');
+          var next=window.prompt('Rename app',app.name||'App');
+          if(!next||!next.trim())return Promise.resolve();
+          return fetch(GW+'/api/apps/'+encodeURIComponent(app.id)+'/rename',{
+            method:'POST',
+            headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({name:next.trim()})
+          }).then(function(r){return r.json().then(function(j){
+            if(!r.ok)throw new Error(j.error||'rename failed');
+            document.title=next.trim();
+          });});
+        }).catch(function(e){
+          if(e&&e.message)alert('Rename failed: '+e.message);
+        }).finally(function(){setBusy(false);});
+        return;
+      }
       if(action==='openappbuilder'){
         var ctx=detectAppContext();
         if(!ctx){

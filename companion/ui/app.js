@@ -52,6 +52,8 @@ function renderConvList() {
 
 function selectConv(id) {
   activeId = id;
+  activeModel = getConvModel(id);
+  if (modelSelect) modelSelect.value = activeModel;
   const conv = conversations.find((c) => c.id === id);
   renderConvList();
   renderMessages(conv);
@@ -193,6 +195,7 @@ async function initModels() {
 modelSelect?.addEventListener('change', async () => {
   activeModel = modelSelect.value;
   persistModel(activeModel);
+  if (activeId) persistConvModel(activeId, activeModel);
   try {
     await saveSettings({ model: activeModel });
   } catch { /* local preference still applies */ }

@@ -87,6 +87,51 @@ function persistSearchMode(mode) {
   } catch { /* ignore */ }
 }
 
+const CONV_MODEL_STORAGE_KEY = 'xplorer_conv_models';
+
+function getConvModelsMap() {
+  try {
+    return JSON.parse(localStorage.getItem(CONV_MODEL_STORAGE_KEY) || '{}');
+  } catch {
+    return {};
+  }
+}
+
+function getConvModel(convId) {
+  if (!convId) return getStoredModel();
+  const map = getConvModelsMap();
+  return map[convId] || getStoredModel();
+}
+
+function persistConvModel(convId, model) {
+  if (!convId || !model) return;
+  try {
+    const map = getConvModelsMap();
+    map[convId] = model;
+    localStorage.setItem(CONV_MODEL_STORAGE_KEY, JSON.stringify(map));
+  } catch { /* ignore */ }
+}
+
+/** Build a grok.com URL that carries a search query via xplorer_grok pending id. */
+async function grokWebUrlForQuery(query, mode, fallbackUrl = 'https://grok.com/') {
+  const q = String(query || '').trim();
+  if (!q) return fallbackUrl;
+  let prompt = q;
+  if (mode === 'videos') prompt = `Search for videos: ${q}`;
+  else if (mode === 'images') prompt = `Search for images: ${q}`;
+  else if (mode === 'imagine') prompt = `Generate an image: ${q}`;
+  try {
+    const res = await fetch('/api/page/grok-web', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query: prompt }),
+    });
+    const data = await res.json();
+    if (res.ok && data.grok_url) return data.grok_url;
+  } catch { /* fall through */ }
+  return fallbackUrl;
+}
+
 async function fetchSettings() {
   const res = await fetch('/api/settings');
   if (!res.ok) throw new Error('settings unavailable');
@@ -164,8 +209,15 @@ async function initSearchHomeToggle(container, { onSwitch, pageHome } = {}) {
         const saved = updated.search_home || mode;
         persistSearchHome(saved);
         setActive(saved);
-        if (onSwitch) onSwitch(saved, updated);
-        else {
+        if (onSwitch) {
+          onSwitch(saved, updated);
+        } else if (saved === SEARCH_HOME_WEB) {
+          const params = new URLSearchParams(window.location.search);
+          const q = params.get('q') || getStoredSearchQuery();
+          const m = params.get('mode') || getStoredSearchMode();
+          const dest = await grokWebUrlForQuery(q, m, updated.grok_web_url || 'https://grok.com/');
+          window.location.href = dest;
+        } else {
           const params = new URLSearchParams(window.location.search);
           let url = `${window.location.origin}/switch-home?mode=${encodeURIComponent(saved)}`;
           const q = params.get('q') || getStoredSearchQuery();
@@ -178,6 +230,27 @@ async function initSearchHomeToggle(container, { onSwitch, pageHome } = {}) {
         alert(`Could not save preference: ${e.message}`);
       }
     });
+  });
+  initToolbarHomeHotkeys(container);
+}
+
+/** Alt+←/→ cycles Grok Build / Web / Wiki home pills. */
+function initToolbarHomeHotkeys(container) {
+  if (!container || window.__xplorerToolbarHomeHotkeys) return;
+  window.__xplorerToolbarHomeHotkeys = true;
+  document.addEventListener('keydown', (e) => {
+    if (!e.altKey || e.metaKey || e.ctrlKey) return;
+    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+    const toggle = document.getElementById('home-toggle');
+    if (!toggle) return;
+    const buttons = [...toggle.querySelectorAll('[data-home]')];
+    if (buttons.length < 2) return;
+    const active = buttons.findIndex((b) => b.classList.contains('active'));
+    if (active < 0) return;
+    const delta = e.key === 'ArrowRight' ? 1 : -1;
+    const next = buttons[(active + delta + buttons.length) % buttons.length];
+    e.preventDefault();
+    next.click();
   });
 }
 

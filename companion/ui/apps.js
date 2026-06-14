@@ -6,6 +6,7 @@ const importBtn = $('#import-btn');
 const bulkBar = $('#apps-bulk-bar');
 const selectAllCb = $('#apps-select-all');
 const exportSelectedBtn = $('#export-selected-btn');
+const deleteSelectedBtn = $('#delete-selected-btn');
 
 let lastApps = [];
 
@@ -57,15 +58,27 @@ async function downloadAppZip(app) {
   return filename;
 }
 
+function selectedAppIds() {
+  return [...grid.querySelectorAll('.app-select-cb:checked')].map((cb) => cb.dataset.id);
+}
+
 function updateBulkBar(apps) {
-  const exportable = apps.filter((a) => a.exportable);
-  bulkBar?.classList.toggle('hidden', exportable.length === 0);
-  if (!exportSelectedBtn) return;
-  const checked = grid.querySelectorAll('.app-select-cb:checked').length;
-  exportSelectedBtn.disabled = checked === 0;
+  bulkBar?.classList.toggle('hidden', apps.length === 0);
+  const checked = selectedAppIds().length;
+  const exportableCount = apps.filter((a) => a.exportable).length;
+  if (exportSelectedBtn) {
+    exportSelectedBtn.disabled = checked === 0
+      || !selectedAppIds().some((id) => lastApps.find((a) => a.id === id)?.exportable);
+  }
+  if (deleteSelectedBtn) deleteSelectedBtn.disabled = checked === 0;
   if (selectAllCb) {
-    selectAllCb.indeterminate = checked > 0 && checked < exportable.length;
-    selectAllCb.checked = exportable.length > 0 && checked === exportable.length;
+    selectAllCb.indeterminate = checked > 0 && checked < apps.length;
+    selectAllCb.checked = apps.length > 0 && checked === apps.length;
+  }
+  if (exportSelectedBtn) {
+    exportSelectedBtn.title = exportableCount
+      ? 'Download zips for selected exportable apps'
+      : 'No exportable apps';
   }
 }
 
@@ -78,9 +91,7 @@ function renderApps(data) {
     const card = document.createElement('article');
     card.className = 'app-card' + (app.status === 'building' ? ' building' : '');
     card.innerHTML = `
-      ${app.exportable
-        ? `<label class="app-select"><input type="checkbox" class="app-select-cb" data-id="${escapeHtml(app.id)}"></label>`
-        : ''}
+      <label class="app-select"><input type="checkbox" class="app-select-cb" data-id="${escapeHtml(app.id)}"></label>
       <div class="app-card-head">
         <img class="app-icon" src="/api/apps/${encodeURIComponent(app.id)}/icon" alt="">
         <div>
@@ -91,6 +102,8 @@ function renderApps(data) {
       <div class="app-status ${escapeHtml(app.status || 'idle')}">
         ${app.status === 'building' ? '<span class="pulse"></span>' : ''}
         ${escapeHtml(statusLabel(app.status))}
+        ${app.runtime_alive ? '<span class="runtime-dot alive" title="Runtime server running">●</span>' : ''}
+        ${app.runtime_ready && !app.runtime_alive ? '<span class="runtime-dot idle" title="Built but runtime stopped">○</span>' : ''}
       </div>
       ${app.last_error ? '<p class="app-error">' + escapeHtml(app.last_error) + '</p>' : ''}
       <div class="app-actions">
@@ -279,8 +292,34 @@ selectAllCb?.addEventListener('change', () => {
   updateBulkBar(lastApps);
 });
 
+deleteSelectedBtn?.addEventListener('click', async () => {
+  const ids = selectedAppIds();
+  if (!ids.length) return;
+  const names = ids.map((id) => lastApps.find((a) => a.id === id)?.name || id);
+  if (!confirm(`Delete ${ids.length} app(s)?\n\n${names.join('\n')}\n\nThis removes app folders and cannot be undone.`)) {
+    return;
+  }
+  deleteSelectedBtn.disabled = true;
+  let ok = 0;
+  try {
+    for (const id of ids) {
+      const r = await fetch(`/api/apps/${encodeURIComponent(id)}`, { method: 'DELETE' });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(data.error || r.statusText || 'Delete failed');
+      ok += 1;
+    }
+    showAppsToast(ok === 1 ? 'Deleted 1 app' : `Deleted ${ok} apps`);
+    await refresh();
+  } catch (e) {
+    showAppsToast(e.message, true);
+    await refresh();
+  } finally {
+    deleteSelectedBtn.disabled = false;
+  }
+});
+
 exportSelectedBtn?.addEventListener('click', async () => {
-  const ids = [...grid.querySelectorAll('.app-select-cb:checked')].map((cb) => cb.dataset.id);
+  const ids = selectedAppIds();
   if (!ids.length) return;
   exportSelectedBtn.disabled = true;
   let ok = 0;

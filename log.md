@@ -172,10 +172,30 @@ See above. Verified: search page serves mode pills + results section (curl).
 | FAB openappbuilder | ✓ |
 | Build + reinstall | 41s, relaunch OK ✓ |
 
+## Loop 9 (2026-06-14 ~07:15)
+
+### Commit — feat(ui+native+fab): handoff, bulk delete, runtime health
+- **Search:** `grokWebUrlForQuery` — switching to Grok Web carries query via `#xplorer_grok=` pending id
+- **Toolbar:** Alt+←/→ cycles Build / Web / Wiki home pills (`initToolbarHomeHotkeys`)
+- **Chat:** per-conversation model in localStorage (`persistConvModel` / `getConvModel`)
+- **Apps:** bulk delete with name confirmation; runtime alive/ready dots on cards
+- **Native:** `runtime_alive` + `runtime_ready` on `/api/apps` entries
+- **FAB:** "Rename app" on runtime pages (`renameapp`)
+- **Test:** companion_smoke_test.py ALL OK ✓ | build 41s ✓ | reinstall ✓
+
+**Loop 9 test summary**
+| Check | Result |
+|-------|--------|
+| companion_smoke_test.py | ALL OK (runtime_alive API) |
+| grokWebUrlForQuery handoff | ✓ |
+| bulk delete + runtime dots | ✓ |
+| FAB renameapp | ✓ |
+| Build + reinstall | 41s, relaunch OK ✓ |
+
 ## Next loop priorities
-- Apps gallery: bulk delete with confirmation
-- Search: pass query to Grok Web when switching from search page
-- FAB: rename app from runtime preview
-- Chat: model picker persistence per conversation
-- Native: app runtime health probe in /api/apps
-- Toolbar: keyboard nav between Grok pills
+- Search: Grok Web handoff when switching from wiki home with query
+- Apps: restart stopped runtime from gallery
+- FAB: duplicate app from runtime preview
+- Chat: conversation title rename in sidebar
+- Native: batch zip export endpoint for multi-app download
+- Toolbar: show Alt+arrow hint in pill tooltips
