@@ -58,8 +58,20 @@ See above. Verified: search page serves mode pills + results section (curl).
 
 **Test:** Build 41s ✓ | switch-home returns 302 immediately ✓ | smoke test passed ✓
 
+## Loop 3 (2026-06-14)
+
+### Commit afcfa33 — feat(apps) UI
+- Rename + duplicate gallery buttons; search mode localStorage; chat model from settings
+
+### Commit 4ab8426 — feat(fab) native
+- POST /api/apps/{id}/rename and /duplicate
+- Grok FAB "Build app from page" menu item
+- switch-home 302 with explicit empty body
+
+**Test:** Build 40s ✓ | rename API ✓ | smoke passed ✓
+
 ## Next loop priorities
-- App rename in gallery; duplicate app
-- Search: remember last mode in localStorage
-- Grok FAB menu: add "Build app from page" shortcut
-- Companion chat: model picker persistence across pages
+- App export/download zip
+- Search: video mode uses native stream with results grid
+- Toolbar: companion localhost pill highlighting on 127.0.0.1
+- Chat: streaming markdown in main conversations view
