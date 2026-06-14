@@ -406,7 +406,10 @@ initSearchHomeToggle($('#home-toggle'), {
     if (saved === SEARCH_HOME_BUILD) {
       window.location.href = `/search${suffix}`;
     } else if (saved === SEARCH_HOME_WIKI) {
-      window.location.href = updated?.grok_wiki_url || 'https://grokipedia.com/';
+      window.location.href = wikiUrlForQuery(
+        q || getStoredSearchQuery(),
+        updated?.grok_wiki_url || 'https://grokipedia.com/',
+      );
     } else {
       const dest = await grokWebUrlForQuery(
         q || getStoredSearchQuery(),

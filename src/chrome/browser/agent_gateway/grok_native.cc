@@ -2100,6 +2100,45 @@ bool GrokNative::TryHandleRequest(
     return true;
   }
 
+  if (info.method == "POST" && base::StartsWith(path, "/api/conversations/") &&
+      base::EndsWith(path, "/rename")) {
+    const std::string prefix = "/api/conversations/";
+    std::string conv_id =
+        path.substr(prefix.size(), path.size() - prefix.size() - 7);
+    auto body = base::JSONReader::ReadDict(info.data, base::JSON_PARSE_RFC);
+    const std::string* title = body ? body->FindString("title") : nullptr;
+    if (!title || title->empty()) {
+      base::DictValue err;
+      err.Set("error", "title required");
+      SendJson(server, connection_id, net::HTTP_BAD_REQUEST, std::move(err));
+      return true;
+    }
+    base::DictValue data = LoadSessions();
+    base::ListValue* convs = data.FindList("conversations");
+    base::DictValue* conv = nullptr;
+    if (convs) {
+      for (auto& v : *convs) {
+        if (!v.is_dict())
+          continue;
+        const std::string* cid = v.GetDict().FindString("id");
+        if (cid && *cid == conv_id) {
+          conv = &v.GetDict();
+          break;
+        }
+      }
+    }
+    if (!conv) {
+      base::DictValue err;
+      err.Set("error", "conversation not found");
+      SendJson(server, connection_id, net::HTTP_NOT_FOUND, std::move(err));
+      return true;
+    }
+    conv->Set("title", title->substr(0, std::min<size_t>(80, title->size())));
+    SaveSessions(data);
+    SendJson(server, connection_id, net::HTTP_OK, conv->Clone());
+    return true;
+  }
+
   if (info.method == "DELETE" &&
       base::StartsWith(path, "/api/conversations/")) {
     std::string id = path.substr(std::string("/api/conversations/").size());

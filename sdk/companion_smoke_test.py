@@ -67,12 +67,19 @@ def main() -> int:
     assert "grokWebUrlForQuery" in common
     assert "initToolbarHomeHotkeys" in common
     assert "persistConvModel" in common
+    assert "wikiUrlForQuery" in common
     print("common.js markers: OK")
+
+    _, app_js = get("/app.js")
+    assert "renameConversation" in app_js
+    print("app.js conv rename: OK")
 
     _, apps_js = get("/apps.js")
     assert "export-selected-btn" in apps_js
     assert "downloadAppZip" in apps_js
     assert "delete-selected-btn" in apps_js
+    assert "export-batch" in apps_js
+    assert "data-restart" in apps_js
     print("apps.js bulk actions: OK")
 
     assert "runtime_alive" in apps_js

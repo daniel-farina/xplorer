@@ -112,6 +112,14 @@ function persistConvModel(convId, model) {
   } catch { /* ignore */ }
 }
 
+/** Append search query to Grokipedia (wiki home) URL. */
+function wikiUrlForQuery(query, fallbackUrl = 'https://grokipedia.com/') {
+  const q = String(query || '').trim();
+  if (!q) return fallbackUrl;
+  const sep = fallbackUrl.includes('?') ? '&' : '?';
+  return `${fallbackUrl}${sep}q=${encodeURIComponent(q)}`;
+}
+
 /** Build a grok.com URL that carries a search query via xplorer_grok pending id. */
 async function grokWebUrlForQuery(query, mode, fallbackUrl = 'https://grok.com/') {
   const q = String(query || '').trim();
@@ -199,6 +207,10 @@ async function initSearchHomeToggle(container, { onSwitch, pageHome } = {}) {
   };
   setActive(pageHome || currentHome);
   syncCompanionToolbarPill();
+  buttons.forEach((btn) => {
+    const label = (btn.textContent || btn.dataset.home || '').trim();
+    if (label) btn.title = `${label} — Alt+←/→ switch home`;
+  });
 
   buttons.forEach((btn) => {
     btn.addEventListener('click', async () => {
@@ -217,6 +229,13 @@ async function initSearchHomeToggle(container, { onSwitch, pageHome } = {}) {
           const m = params.get('mode') || getStoredSearchMode();
           const dest = await grokWebUrlForQuery(q, m, updated.grok_web_url || 'https://grok.com/');
           window.location.href = dest;
+        } else if (saved === SEARCH_HOME_WIKI) {
+          const params = new URLSearchParams(window.location.search);
+          const q = params.get('q') || getStoredSearchQuery();
+          window.location.href = wikiUrlForQuery(
+            q,
+            updated.grok_wiki_url || 'https://grokipedia.com/',
+          );
         } else {
           const params = new URLSearchParams(window.location.search);
           let url = `${window.location.origin}/switch-home?mode=${encodeURIComponent(saved)}`;

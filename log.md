@@ -192,10 +192,30 @@ See above. Verified: search page serves mode pills + results section (curl).
 | FAB renameapp | ✓ |
 | Build + reinstall | 41s, relaunch OK ✓ |
 
+## Loop 10 (2026-06-14 ~07:30)
+
+### Commit — feat(ui+native+fab): wiki handoff, batch export, conv rename
+- **Search:** `wikiUrlForQuery` — wiki home switch carries `?q=` to Grokipedia; web handoff from search unchanged
+- **Toolbar:** home pill tooltips show Alt+←/→ hint
+- **Chat:** double-click sidebar to rename; `POST /api/conversations/{id}/rename`
+- **Apps:** Restart button when runtime stopped; multi-select uses `POST /api/apps/export-batch` zip
+- **Native:** batch export copies app folders into single zip; `POST /api/apps/{id}/restart`
+- **FAB:** Duplicate app on runtime pages (`duplicateapp`)
+- **Test:** companion_smoke_test.py ALL OK ✓ | build 42s ✓ | reinstall ✓
+
+**Loop 10 test summary**
+| Check | Result |
+|-------|--------|
+| companion_smoke_test.py | ALL OK |
+| wikiUrlForQuery + conv rename | ✓ |
+| export-batch + restart API | ✓ |
+| FAB duplicateapp | ✓ |
+| Build + reinstall | 42s, relaunch OK ✓ |
+
 ## Next loop priorities
-- Search: Grok Web handoff when switching from wiki home with query
-- Apps: restart stopped runtime from gallery
-- FAB: duplicate app from runtime preview
-- Chat: conversation title rename in sidebar
-- Native: batch zip export endpoint for multi-app download
-- Toolbar: show Alt+arrow hint in pill tooltips
+- Native grok_web_bar: query handoff when switching wiki→web on grokipedia
+- Apps: bulk restart selected runtimes
+- Chat: delete conversation from sidebar context menu
+- Search: imagine mode handoff to grok.com/imagine
+- FAB: modify app (open builder with prefilled prompt)
+- Smoke test: conv rename + export-batch API calls

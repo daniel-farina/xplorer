@@ -39,13 +39,39 @@ function renderMessages(conv) {
   messagesEl.scrollTop = messagesEl.scrollHeight;
 }
 
+async function renameConversation(conv, nextTitle) {
+  const title = String(nextTitle || '').trim();
+  if (!title || title === conv.title) return;
+  const r = await fetch(`/api/conversations/${encodeURIComponent(conv.id)}/rename`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title }),
+  });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data.error || r.statusText);
+  conv.title = data.title || title;
+}
+
 function renderConvList() {
   convList.innerHTML = '';
   for (const c of conversations) {
     const li = document.createElement('li');
     li.textContent = c.title || 'Chat';
     li.className = c.id === activeId ? 'active' : '';
+    li.title = 'Double-click to rename';
     li.onclick = () => selectConv(c.id);
+    li.ondblclick = async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const next = window.prompt('Rename conversation', c.title || 'Chat');
+      if (!next?.trim()) return;
+      try {
+        await renameConversation(c, next.trim());
+        renderConvList();
+      } catch (err) {
+        alert(err.message);
+      }
+    };
     convList.appendChild(li);
   }
 }

@@ -80,6 +80,22 @@ void SendDownload(net::HttpServer* server,
   server->SendResponse(connection_id, resp, TRAFFIC_ANNOTATION_FOR_TESTS);
 }
 
+std::string SanitizeFolderName(const std::string& raw) {
+  std::string out;
+  out.reserve(raw.size());
+  for (char c : raw) {
+    if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+        (c >= '0' && c <= '9') || c == '.' || c == '-' || c == '_') {
+      out.push_back(c);
+    } else if (c == ' ') {
+      out.push_back('_');
+    }
+  }
+  if (out.empty())
+    out = "app";
+  return out.substr(0, 48);
+}
+
 std::string SanitizeExportFilename(const std::string& raw) {
   std::string out;
   out.reserve(raw.size());
@@ -717,6 +733,68 @@ bool TryHandleAppsRequest(
   const std::string path = PathOnly(info.path);
   const std::string prefix = "/api/apps/";
 
+  if (info.method == "POST" && path == "/api/apps/export-batch") {
+    auto body = base::JSONReader::ReadDict(info.data, base::JSON_PARSE_RFC);
+    const base::ListValue* ids = body ? body->FindList("ids") : nullptr;
+    if (!ids || ids->empty()) {
+      base::DictValue err;
+      err.Set("error", "ids required");
+      SendJson(server, connection_id, net::HTTP_BAD_REQUEST, std::move(err));
+      return true;
+    }
+    base::DictValue registry = LoadRegistry();
+    base::FilePath temp_dir;
+    if (!base::CreateNewTempDirectory(FILE_PATH_LITERAL("xplorer-batch"),
+                                      &temp_dir)) {
+      base::DictValue err;
+      err.Set("error", "could not create batch export");
+      SendJson(server, connection_id, net::HTTP_INTERNAL_SERVER_ERROR,
+               std::move(err));
+      return true;
+    }
+    int copied = 0;
+    std::set<std::string> used_names;
+    for (const auto& id_val : *ids) {
+      if (!id_val.is_string())
+        continue;
+      const std::string& id = id_val.GetString();
+      base::DictValue* app = FindAppDict(registry, id);
+      if (!app)
+        continue;
+      base::FilePath src = ResolveAppPath(*app);
+      if (src.empty() || !base::DirectoryExists(src))
+        continue;
+      std::string folder = SanitizeFolderName(
+          app->FindString("name") ? *app->FindString("name") : id);
+      if (used_names.count(folder)) {
+        folder += "_" + id.substr(0, 6);
+      }
+      used_names.insert(folder);
+      if (base::CopyDirectory(src, temp_dir.AppendASCII(folder), true))
+        ++copied;
+    }
+    if (copied == 0) {
+      base::DeletePathRecursively(temp_dir);
+      base::DictValue err;
+      err.Set("error", "no exportable apps in selection");
+      SendJson(server, connection_id, net::HTTP_BAD_REQUEST, std::move(err));
+      return true;
+    }
+    std::string zip_bytes;
+    const bool zipped = ZipAppDirectoryOnWorker(temp_dir, &zip_bytes);
+    base::DeletePathRecursively(temp_dir);
+    if (!zipped) {
+      base::DictValue err;
+      err.Set("error", "could not create batch zip");
+      SendJson(server, connection_id, net::HTTP_INTERNAL_SERVER_ERROR,
+               std::move(err));
+      return true;
+    }
+    SendDownload(server, connection_id, net::HTTP_OK, std::move(zip_bytes),
+                 "application/zip", "xplorer-apps.zip");
+    return true;
+  }
+
   if (info.method == "GET" && path == "/api/apps") {
     base::DictValue registry = LoadRegistry();
     ReconcileRegistryStates(registry);
@@ -977,6 +1055,31 @@ bool TryHandleAppsRequest(
     AppendUserMessage(conv_id, text);
     RunGrokAgentStream(server, io_task_runner, connection_id, conv_id, app_id,
                        text, session_id, model, cwd);
+    return true;
+  }
+
+  if (info.method == "POST" && sub == "restart") {
+    base::FilePath app_path = ResolveAppPath(*app);
+    if (app_path.empty() || !base::DirectoryExists(app_path)) {
+      base::DictValue err;
+      err.Set("error", "app folder missing");
+      SendJson(server, connection_id, net::HTTP_BAD_REQUEST, std::move(err));
+      return true;
+    }
+    StopAppRuntimeServer(app_id);
+    const int port = GetOrAssignRuntimePort(registry, app);
+    if (!LaunchAppRuntimeServer(app_id, app_path, port)) {
+      base::DictValue err;
+      err.Set("error", "could not start runtime server");
+      SendJson(server, connection_id, net::HTTP_INTERNAL_SERVER_ERROR,
+               std::move(err));
+      return true;
+    }
+    SaveRegistry(registry);
+    base::DictValue result;
+    result.Set("ok", true);
+    result.Set("app", AppToJson(*app, gateway_port));
+    SendJson(server, connection_id, net::HTTP_OK, std::move(result));
     return true;
   }
 

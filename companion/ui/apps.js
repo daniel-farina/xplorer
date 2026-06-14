@@ -111,6 +111,9 @@ function renderApps(data) {
         ${app.status === 'ready' && app.open_url
           ? `<button type="button" class="apps-btn" data-preview="${escapeHtml(app.open_url)}">Preview</button>`
           : ''}
+        ${app.runtime_ready && !app.runtime_alive
+          ? `<button type="button" class="apps-btn" data-restart="${escapeHtml(app.id)}">Restart</button>`
+          : ''}
         <button type="button" class="apps-btn" data-rename="${escapeHtml(app.id)}" data-name="${escapeHtml(app.name || 'App')}">Rename</button>
         <button type="button" class="apps-btn" data-duplicate="${escapeHtml(app.id)}">Duplicate</button>
         ${app.exportable
@@ -124,6 +127,25 @@ function renderApps(data) {
   grid.querySelectorAll('[data-open]').forEach((btn) => {
     btn.onclick = () => {
       window.location.href = `/app?id=${encodeURIComponent(btn.dataset.open)}`;
+    };
+  });
+  grid.querySelectorAll('[data-restart]').forEach((btn) => {
+    btn.onclick = async () => {
+      btn.disabled = true;
+      try {
+        const r = await fetch(`/api/apps/${encodeURIComponent(btn.dataset.restart)}/restart`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: '{}',
+        });
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(data.error || r.statusText);
+        showAppsToast('Runtime restarted');
+        await refresh();
+      } catch (e) {
+        showAppsToast(e.message, true);
+        btn.disabled = false;
+      }
     };
   });
   grid.querySelectorAll('[data-preview]').forEach((btn) => {
@@ -319,18 +341,33 @@ deleteSelectedBtn?.addEventListener('click', async () => {
 });
 
 exportSelectedBtn?.addEventListener('click', async () => {
-  const ids = selectedAppIds();
+  const ids = selectedAppIds().filter((id) => lastApps.find((a) => a.id === id)?.exportable);
   if (!ids.length) return;
   exportSelectedBtn.disabled = true;
-  let ok = 0;
   try {
-    for (const id of ids) {
-      const app = lastApps.find((a) => a.id === id);
-      if (!app?.exportable) continue;
-      await downloadAppZip(app);
-      ok += 1;
+    if (ids.length === 1) {
+      const app = lastApps.find((a) => a.id === ids[0]);
+      const filename = await downloadAppZip(app);
+      showAppsToast(`Exported ${filename}`);
+    } else {
+      const res = await fetch('/api/apps/export-batch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || res.statusText || 'Batch export failed');
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'xplorer-apps.zip';
+      a.click();
+      URL.revokeObjectURL(url);
+      showAppsToast(`Exported ${ids.length} apps`);
     }
-    showAppsToast(ok === 1 ? 'Exported 1 app' : `Exported ${ok} apps`);
   } catch (e) {
     showAppsToast(e.message, true);
   } finally {

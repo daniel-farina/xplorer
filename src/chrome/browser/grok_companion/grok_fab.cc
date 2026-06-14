@@ -171,6 +171,7 @@ std::string BuildFabInjectScript() {
     if(appCtx){
       appendMenuItem(menu,'openappbuilder','\u2699','Open in builder');
       appendMenuItem(menu,'renameapp','\u270e','Rename app');
+      appendMenuItem(menu,'duplicateapp','\u2398','Duplicate app');
       appendMenuItem(menu,'exportapp','\u2b07','Export app');
     }
     appendMenuItem(menu,'analyze','\u2726','Analyze with Grok');
@@ -287,8 +288,8 @@ std::string BuildFabInjectScript() {
     }else if(fab.parentNode!==wrap){
       wrap.appendChild(fab);
     }
-    if(menu.dataset.version!=='10'){
-      menu.dataset.version='10';
+    if(menu.dataset.version!=='11'){
+      menu.dataset.version='11';
       buildMenu(menu);
       fab.dataset.wired='';
     }
@@ -297,8 +298,8 @@ std::string BuildFabInjectScript() {
     buildFabButton(fab);
     var oldPanel=document.getElementById('xplorer-grok-panel');
     if(oldPanel)oldPanel.remove();
-    if(fab.dataset.wired==='10')return;
-    fab.dataset.wired='10';
+    if(fab.dataset.wired==='11')return;
+    fab.dataset.wired='11';
     function setBusy(on){
       state.busy=on;
       fab.disabled=on;
@@ -342,6 +343,30 @@ std::string BuildFabInjectScript() {
           });});
         }).catch(function(e){
           if(e&&e.message)alert('Rename failed: '+e.message);
+        }).finally(function(){setBusy(false);});
+        return;
+      }
+      if(action==='duplicateapp'){
+        var ctx=detectAppContext();
+        if(!ctx){
+          alert('Not viewing an Xplorer app.');
+          return;
+        }
+        setBusy(true);
+        fetch(GW+'/api/apps').then(function(r){return r.json();}).then(function(d){
+          if(d.error)throw new Error(d.error);
+          var app=resolveAppFromContext(ctx,d.apps||[]);
+          if(!app)throw new Error('App not found');
+          return fetch(GW+'/api/apps/'+encodeURIComponent(app.id)+'/duplicate',{
+            method:'POST',
+            headers:{'Content-Type':'application/json'},
+            body:'{}'
+          }).then(function(r){return r.json().then(function(j){
+            if(!r.ok)throw new Error(j.error||'duplicate failed');
+            if(j.app&&j.app.id)window.open(GW+'/app?id='+encodeURIComponent(j.app.id),'_blank');
+          });});
+        }).catch(function(e){
+          alert('Duplicate failed: '+(e.message||e));
         }).finally(function(){setBusy(false);});
         return;
       }
