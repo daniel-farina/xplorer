@@ -6,7 +6,7 @@ gotchas hit along the way so you don't rediscover them.
 
 > Layout note: the overlay lives in the `aether/` directory (kept as the
 > internal codename); the Chromium checkout sits next to it at `../chromium/src`.
-> Repo: https://github.com/daniel-farina/xbrowser
+> Repo: https://github.com/daniel-farina/xplorer (private)
 
 ---
 

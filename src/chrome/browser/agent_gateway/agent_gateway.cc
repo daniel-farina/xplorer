@@ -138,7 +138,7 @@ void AgentGateway::OnHttpRequest(int connection_id,
     resp.SetBody(
         "{\"service\":\"xplorer-agent-gateway\",\"auth\":\"Bearer token from "
         "~/.xplorer/gateway.json\",\"docs\":\"https://github.com/daniel-farina/"
-        "aether/blob/master/AGENTS.md\"}",
+        "xplorer/blob/master/AGENTS.md\"}",
         "application/json");
     server_->SendResponse(connection_id, resp, TRAFFIC_ANNOTATION_FOR_TESTS);
     return;

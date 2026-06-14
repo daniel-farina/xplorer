@@ -1,6 +1,6 @@
 # Xplorer improvement log
 
-Autonomous 30-minute improvement loop. Each entry: change, test result, commit.
+Autonomous 20-minute improvement loop. Each entry: change, test result, commit.
 
 ---
 
@@ -69,6 +69,13 @@ See above. Verified: search page serves mode pills + results section (curl).
 - switch-home 302 with explicit empty body
 
 **Test:** Build 40s ✓ | rename API ✓ | smoke passed ✓
+
+## Loop config (2026-06-14)
+
+- Interval changed from **30m → 20m** per user request
+- GitHub repo renamed **xbrowser → xplorer**, visibility set to **private**
+- Remote: `https://github.com/daniel-farina/xplorer.git`
+- Pushed 35 local commits to origin
 
 ## Next loop priorities
 - App export/download zip

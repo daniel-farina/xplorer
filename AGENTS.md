@@ -25,7 +25,7 @@ You need macOS + Xcode, ~100 GB free disk, and a few hours.
 git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git
 export PATH="$PWD/depot_tools:$PATH"
 mkdir chromium && cd chromium && fetch --no-history chromium && cd ..
-git clone https://github.com/daniel-farina/xbrowser.git
+git clone https://github.com/daniel-farina/xplorer.git
 ./aether/apply.sh ./chromium/src      # overlay XBrowser onto Chromium
 ./aether/build.sh ./chromium/src      # gn gen + autoninja  (the long step)
 open ./chromium/src/out/aether/XBrowser.app
