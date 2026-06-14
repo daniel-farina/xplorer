@@ -552,6 +552,7 @@ html.grok-build body {
 }
 
 .markdown pre.code-block {
+  position: relative;
   margin: 0.75em 0;
   padding: 12px 14px;
   overflow-x: auto;
@@ -567,6 +568,26 @@ html.grok-build body {
   white-space: pre;
   font-size: 12px;
   line-height: 1.45;
+}
+
+.markdown pre.code-block .code-copy-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  opacity: 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text-secondary);
+  font: 11px/1 ui-sans-serif, system-ui, sans-serif;
+  padding: 4px 8px;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.markdown pre.code-block:hover .code-copy-btn,
+.markdown pre.code-block .code-copy-btn:focus {
+  opacity: 1;
 }
 
 .markdown .hl-kw { color: #7c3aed; }

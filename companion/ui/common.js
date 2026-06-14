@@ -6,6 +6,7 @@ const SEARCH_DEFAULT_MODEL = 'grok-build';
 const MODEL_STORAGE_KEY = 'grok_model';
 const SEARCH_MODEL_STORAGE_KEY = 'grok_search_model';
 const SEARCH_HOME_STORAGE_KEY = 'grok_search_home';
+const SEARCH_QUERY_STORAGE_KEY = 'xplorer_search_query';
 const SEARCH_HOME_BUILD = 'build';
 const SEARCH_HOME_WEB = 'web';
 const SEARCH_HOME_WIKI = 'wiki';
@@ -49,6 +50,22 @@ function getStoredSearchHome() {
 function persistSearchHome(mode) {
   try {
     localStorage.setItem(SEARCH_HOME_STORAGE_KEY, mode);
+  } catch { /* ignore */ }
+}
+
+function getStoredSearchQuery() {
+  try {
+    return localStorage.getItem(SEARCH_QUERY_STORAGE_KEY) || '';
+  } catch {
+    return '';
+  }
+}
+
+function persistSearchQuery(query) {
+  try {
+    const q = String(query || '').trim();
+    if (q) localStorage.setItem(SEARCH_QUERY_STORAGE_KEY, q);
+    else localStorage.removeItem(SEARCH_QUERY_STORAGE_KEY);
   } catch { /* ignore */ }
 }
 
@@ -133,7 +150,7 @@ async function initSearchHomeToggle(container, { onSwitch, pageHome } = {}) {
         else {
           const params = new URLSearchParams(window.location.search);
           let url = `${window.location.origin}/switch-home?mode=${encodeURIComponent(saved)}`;
-          const q = params.get('q');
+          const q = params.get('q') || getStoredSearchQuery();
           const m = params.get('mode');
           if (q) url += `&q=${encodeURIComponent(q)}`;
           if (m) url += `&m=${encodeURIComponent(m)}`;
@@ -387,7 +404,7 @@ function renderMarkdown(raw) {
     if (!block) return '';
     const lang = block.lang ? ` language-${escapeHtml(block.lang)}` : '';
     const body = highlightCodeLight(block.code.trim());
-    return `<pre class="code-block"><code class="${lang.trim()}">${body}</code></pre>`;
+    return `<pre class="code-block"><button type="button" class="code-copy-btn" title="Copy code">Copy</button><code class="${lang.trim()}">${body}</code></pre>`;
   });
 
   s = s.replace(
@@ -430,6 +447,25 @@ function renderMarkdown(raw) {
     .join('\n');
 
   return s;
+}
+
+/** Wire copy buttons injected by renderMarkdown into code fences. */
+function wireCodeCopyButtons(root) {
+  if (!root) return;
+  root.querySelectorAll('pre.code-block .code-copy-btn').forEach((btn) => {
+    if (btn.dataset.wired) return;
+    btn.dataset.wired = '1';
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const pre = btn.closest('pre.code-block');
+      const text = pre?.querySelector('code')?.textContent || '';
+      navigator.clipboard.writeText(text).then(() => {
+        btn.textContent = 'Copied';
+        setTimeout(() => { btn.textContent = 'Copy'; }, 1500);
+      }).catch(() => prompt('Copy code:', text));
+    });
+  });
 }
 
 /** Resize/compress image for vision API (keeps CLI args under limits). */

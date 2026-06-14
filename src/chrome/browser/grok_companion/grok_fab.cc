@@ -149,8 +149,22 @@ std::string BuildFabInjectScript() {
     menu.appendChild(btn);
     return btn;
   }
+  function detectAppContext(){
+    var href=location.href||'';
+    var run=href.match(/\/run\/([^/?#]+)/);
+    if(run&&run[1])return {id:run[1]};
+    var m=href.match(/^https?:\/\/127\.0\.0\.1:(\d+)(?:\/|$|\?|#)/);
+    if(!m)return null;
+    var port=parseInt(m[1],10);
+    if(!port||port===parseInt(String(new URL(GW).port||'9334'),10))return null;
+    return {port:port};
+  }
   function buildMenu(menu){
     clearNode(menu);
+    var appCtx=detectAppContext();
+    if(appCtx){
+      appendMenuItem(menu,'exportapp','\u2b07','Export app');
+    }
     appendMenuItem(menu,'analyze','\u2726','Analyze with Grok');
     appendMenuItem(menu,'summarize','\u21b3','Summarize this','\u203a');
     appendMenuItem(menu,'factcheck','\u2713','Is this true?');
@@ -265,8 +279,8 @@ std::string BuildFabInjectScript() {
     }else if(fab.parentNode!==wrap){
       wrap.appendChild(fab);
     }
-    if(menu.dataset.version!=='7'){
-      menu.dataset.version='7';
+    if(menu.dataset.version!=='8'){
+      menu.dataset.version='8';
       buildMenu(menu);
       fab.dataset.wired='';
     }
@@ -275,8 +289,8 @@ std::string BuildFabInjectScript() {
     buildFabButton(fab);
     var oldPanel=document.getElementById('xplorer-grok-panel');
     if(oldPanel)oldPanel.remove();
-    if(fab.dataset.wired==='7')return;
-    fab.dataset.wired='7';
+    if(fab.dataset.wired==='8')return;
+    fab.dataset.wired='8';
     function setBusy(on){
       state.busy=on;
       fab.disabled=on;
@@ -284,6 +298,7 @@ std::string BuildFabInjectScript() {
     }
     function toggleMenu(open){
       if(open===undefined)open=!menu.classList.contains('open');
+      if(open)buildMenu(menu);
       menu.classList.toggle('open',open);
     }
     function runGrokWeb(action){
@@ -296,6 +311,36 @@ std::string BuildFabInjectScript() {
         return;
       }
       state.pageData=extractPage();
+      if(action==='exportapp'){
+        var ctx=detectAppContext();
+        if(!ctx){
+          alert('Not viewing an Xplorer app.');
+          return;
+        }
+        setBusy(true);
+        fetch(GW+'/api/apps').then(function(r){return r.json();}).then(function(d){
+          if(d.error)throw new Error(d.error);
+          var apps=(d.apps||[]);
+          var app=null;
+          if(ctx.id)app=apps.find(function(a){return a.id===ctx.id;});
+          else if(ctx.port)app=apps.find(function(a){return a.runtime_port===ctx.port;});
+          if(!app||!app.exportable)throw new Error('App not exportable');
+          return fetch(GW+'/api/apps/'+encodeURIComponent(app.id)+'/export').then(function(r){
+            if(!r.ok)return r.json().then(function(e){throw new Error(e.error||'export failed');});
+            return r.blob().then(function(blob){
+              var slug=(app.name||'app').replace(/[^\w.-]+/g,'_').slice(0,48);
+              var a=document.createElement('a');
+              a.href=URL.createObjectURL(blob);
+              a.download=slug+'.zip';
+              a.click();
+              URL.revokeObjectURL(a.href);
+            });
+          });
+        }).catch(function(e){
+          alert('Export failed: '+(e.message||e));
+        }).finally(function(){setBusy(false);});
+        return;
+      }
       if(action==='buildapp'){
         if(!state.pageData.text){
           alert('No readable text on this page.');

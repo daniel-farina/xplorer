@@ -77,12 +77,33 @@ body {
 }
 
 .messages .markdown pre.code-block {
+  position: relative;
   margin: 0.6em 0;
   padding: 10px 12px;
   overflow-x: auto;
   border-radius: 8px;
   border: 1px solid var(--border);
   background: var(--surface-elevated);
+}
+
+.messages .markdown pre.code-block .code-copy-btn {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  opacity: 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text-secondary);
+  font: 11px/1 ui-sans-serif, system-ui, sans-serif;
+  padding: 4px 8px;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.messages .markdown pre.code-block:hover .code-copy-btn,
+.messages .markdown pre.code-block .code-copy-btn:focus {
+  opacity: 1;
 }
 
 .messages .markdown pre.code-block code {

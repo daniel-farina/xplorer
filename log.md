@@ -132,10 +132,30 @@ See above. Verified: search page serves mode pills + results section (curl).
 - **Markdown:** `highlightCodeLight()` — keywords/strings/comments/numbers in code fences
 - **Test:** companion_smoke_test.py ALL OK ✓ | live curl search.js/app-view.js ✓
 
+## Loop 7 (2026-06-14 ~06:50)
+
+### Commit — feat(ui+fab): query persistence, search fallback, export shortcuts
+- **Search:** `persistSearchQuery` / `getStoredSearchQuery` — query survives home toggle; restore from localStorage when URL has no `q`
+- **Search:** native stream errors show "Try Grok Web instead →" button (grok-web handoff fallback)
+- **Markdown:** copy button on code fences (`wireCodeCopyButtons`) in search, chat, app builder
+- **App builder:** Cmd+Shift+E exports zip (`exportAppZip`)
+- **FAB:** "Export app" menu item on localhost app runtime or `/run/{id}/` pages
+- **Welcome:** dev hint for `python3 sdk/companion_smoke_test.py`
+- **Test:** companion_smoke_test.py ALL OK ✓ | apply.sh + build 43s ✓ | reinstall Xplorer.app ✓
+
+**Loop 7 test summary**
+| Check | Result |
+|-------|--------|
+| companion_smoke_test.py | ALL OK |
+| persistSearchQuery in common.js | ✓ |
+| search grok-web fallback button | ✓ |
+| FAB exportapp in grok_fab.cc | ✓ |
+| Build + reinstall | 43s, relaunch OK ✓ |
+
 ## Next loop priorities
-- FAB: quick-export current app from runtime preview
-- Welcome tour: companion smoke test in dev docs
-- Search: persist last query across home toggle
-- App builder: keyboard shortcut for export (Cmd+Shift+E)
-- Chat: copy code block button on hover
-- Native: grok-web handoff fallback when native search errors
+- Search: restore mode from localStorage on switch-home return
+- Chat: copy code block keyboard shortcut
+- Apps gallery: bulk export or multi-select
+- FAB: open app builder for current runtime app
+- Smoke test: switch-home with q+m params
+- Syntax highlighting: more languages / dark-theme tuning

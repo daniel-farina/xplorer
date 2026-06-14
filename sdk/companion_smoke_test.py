@@ -60,7 +60,17 @@ def main() -> int:
     _, common = get("/common.js")
     assert "syncCompanionToolbarPill" in common
     assert "renderMarkdown" in common
+    assert "persistSearchQuery" in common
+    assert "wireCodeCopyButtons" in common
     print("common.js markers: OK")
+
+    _, search_js = get("/search.js")
+    assert "Try Grok Web instead" in search_js
+    print("search.js fallback: OK")
+
+    _, welcome = get("/welcome")
+    assert "companion_smoke_test" in welcome
+    print("welcome dev hint: OK")
 
     class NoRedirect(urllib.request.HTTPRedirectHandler):
         def redirect_request(self, req, fp, code, msg, headers, newurl):

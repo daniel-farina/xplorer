@@ -189,6 +189,7 @@ function renderSearchResults(query, data) {
     html = '<div class="result-card"><p>No results returned. Try rephrasing your query.</p></div>';
   }
   resultsEl.innerHTML = html;
+  wireCodeCopyButtons(resultsEl);
 
   const grokBtn = document.createElement('button');
   grokBtn.type = 'button';
@@ -262,7 +263,10 @@ async function runNativeSearch(query) {
         } else if (evt.type === 'text') {
           if (ui) ui.answerPanel.classList.remove('hidden');
           answerText += evt.data || '';
-          if (ui) ui.answerEl.innerHTML = renderMarkdown(answerText);
+          if (ui) {
+            ui.answerEl.innerHTML = renderMarkdown(answerText);
+            wireCodeCopyButtons(ui.answerEl);
+          }
         } else if (evt.type === 'result') {
           resultData = evt;
         } else if (evt.type === 'error') {
@@ -279,7 +283,11 @@ async function runNativeSearch(query) {
     }
   } catch (err) {
     if (resultsEl) {
-      resultsEl.innerHTML = `<div class="result-card error"><p>${escapeHtml(err.message)}</p></div>`;
+      resultsEl.innerHTML = `<div class="result-card error"><p>${escapeHtml(err.message)}</p>
+        <button type="button" class="open-grok-web">Try Grok Web instead →</button></div>`;
+      resultsEl.querySelector('.open-grok-web')?.addEventListener('click', () => {
+        openGrokWebQuery(query);
+      });
     }
   } finally {
     if (submitBtn) submitBtn.disabled = false;
@@ -377,6 +385,7 @@ form?.addEventListener('submit', async (e) => {
   const q = input.value.trim();
   if (!q && !attachedImage) return;
   const prompt = q || 'Describe this image and find similar images';
+  persistSearchQuery(q);
   syncUrl();
   if (usesNativeSearch()) {
     await runNativeSearch(prompt);
@@ -385,7 +394,10 @@ form?.addEventListener('submit', async (e) => {
   await openGrokWebQuery(prompt);
 });
 
-input?.addEventListener('input', () => syncUrl());
+input?.addEventListener('input', () => {
+  persistSearchQuery(input.value.trim());
+  syncUrl();
+});
 
 initSearchHomeToggle($('#home-toggle'), {
   onSwitch: (saved, updated) => {
@@ -419,7 +431,12 @@ if (modeParam && ['web', 'images', 'videos', 'imagine'].includes(modeParam)) {
     }
   } catch { /* ignore */ }
 }
-if (urlParams.get('q')) {
-  input.value = urlParams.get('q');
+const urlQuery = urlParams.get('q');
+const initialQuery = urlQuery || getStoredSearchQuery();
+if (initialQuery) {
+  input.value = initialQuery;
+  syncUrl();
+}
+if (urlQuery) {
   form.requestSubmit();
 }

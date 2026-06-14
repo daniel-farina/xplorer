@@ -98,6 +98,7 @@ function renderMessageContent(el, role, content) {
   if (role === 'assistant' && text) {
     el.classList.add('markdown');
     el.innerHTML = renderMarkdown(text);
+    wireCodeCopyButtons(el);
   } else {
     el.classList.remove('markdown');
     el.textContent = text;
@@ -195,6 +196,15 @@ async function loadApp() {
   updateOpenTabLink();
   updateExportButton();
   $('#export-app').onclick = exportAppZip;
+  if (!window.__xplorerExportHotkey) {
+    window.__xplorerExportHotkey = true;
+    document.addEventListener('keydown', (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 'e') {
+        e.preventDefault();
+        exportAppZip();
+      }
+    });
+  }
   $('#copy-cli').onclick = () => {
     const cmd = app.cli_command || `grok --cwd ${app.path || '.'}`;
     navigator.clipboard.writeText(cmd).then(() => {
@@ -359,6 +369,7 @@ async function runAgentStream({ text, mode = 'message' }) {
           sawAnswer = true;
           answerText += evt.data || '';
           ui.answerEl.innerHTML = renderMarkdown(answerText);
+          wireCodeCopyButtons(ui.answerEl);
           scrollChat(box);
         } else if (evt.type === 'result') {
           if (evt.reply) answerText = stripAnsi(evt.reply);
@@ -367,6 +378,7 @@ async function runAgentStream({ text, mode = 'message' }) {
             sawAnswer = true;
             ui.answerPanel.classList.remove('hidden');
             ui.answerEl.innerHTML = renderMarkdown(answerText);
+            wireCodeCopyButtons(ui.answerEl);
             if (sawThought) ui.thinkingPanel.removeAttribute('open');
           }
         } else if (evt.type === 'max_turns_reached') {

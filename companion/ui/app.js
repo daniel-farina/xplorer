@@ -30,6 +30,7 @@ function renderMessages(conv) {
     if (m.role === 'assistant') {
       div.innerHTML = renderMarkdown(m.content || '');
       div.classList.add('markdown');
+      wireCodeCopyButtons(div);
     } else {
       div.textContent = m.content || '';
     }
@@ -133,6 +134,7 @@ async function sendMessage(text) {
             })();
           div.innerHTML = renderMarkdown(reply);
           div.classList.add('markdown');
+          wireCodeCopyButtons(div);
           messagesEl.scrollTop = messagesEl.scrollHeight;
         } else if (evt.type === 'result') {
           if (evt.reply) reply = evt.reply;
