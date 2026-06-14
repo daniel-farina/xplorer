@@ -389,18 +389,13 @@ def main(src: Path):
         '        base::Unretained(browser_)));\n'
         '    grok_btn->SetTooltipText(u"Grok Search");\n'
         '    grok_btn->SetAccessibleName(u"Grok Search");\n'
-        '    grok_btn->SetImageModel(views::Button::STATE_NORMAL,\n'
-        '                            grok_companion::GetGrokToolbarIcon());\n'
-        '    grok_btn->SetImageModel(views::Button::STATE_HOVERED,\n'
-        '                            grok_companion::GetGrokToolbarIcon());\n'
-        '    grok_btn->SetImageModel(views::Button::STATE_PRESSED,\n'
-        '                            grok_companion::GetGrokToolbarIcon());\n'
+        '    grok_btn->SetVectorIcon(kGrokIcon);\n'
         '    grok_btn->SetProperty(views::kElementIdentifierKey,\n'
         '                          kToolbarGrokButtonElementId);\n'
         '    AddChildView(std::move(grok_btn));\n'
         '  }\n\n'
     )
-    if "GetGrokToolbarIcon" not in toolbar.read_text():
+    if "kGrokIcon" not in toolbar.read_text():
         if "ToggleGrokSidePanel" in toolbar.read_text():
             edit(
                 toolbar,
@@ -427,8 +422,24 @@ def main(src: Path):
                 '#include "components/vector_icons/vector_icons.h"\n'
                 '#include "chrome/browser/ui/views/toolbar/toolbar_button.h"\n',
                 '#include "chrome/browser/grok_companion/grok_companion_util.h"  // AETHER\n'
-                '#include "chrome/browser/grok_companion/grok_toolbar_icon.h"  // AETHER\n'
+                '#include "chrome/app/vector_icons/vector_icons.h"  // AETHER\n'
                 '#include "chrome/browser/ui/views/toolbar/toolbar_button.h"\n',
+            )
+        elif "GetGrokToolbarIcon" in toolbar.read_text():
+            edit(
+                toolbar,
+                '    grok_btn->SetImageModel(views::Button::STATE_NORMAL,\n'
+                '                            grok_companion::GetGrokToolbarIcon());\n'
+                '    grok_btn->SetImageModel(views::Button::STATE_HOVERED,\n'
+                '                            grok_companion::GetGrokToolbarIcon());\n'
+                '    grok_btn->SetImageModel(views::Button::STATE_PRESSED,\n'
+                '                            grok_companion::GetGrokToolbarIcon());\n',
+                '    grok_btn->SetVectorIcon(kGrokIcon);\n',
+            )
+            edit(
+                toolbar,
+                '#include "chrome/browser/grok_companion/grok_toolbar_icon.h"  // AETHER\n',
+                '#include "chrome/app/vector_icons/vector_icons.h"  // AETHER\n',
             )
         else:
             edit(
@@ -441,9 +452,17 @@ def main(src: Path):
                 toolbar,
                 '#include "chrome/browser/ui/views/toolbar/toolbar_view.h"',
                 '\n#include "chrome/browser/grok_companion/grok_companion_util.h"  // AETHER\n'
-                '#include "chrome/browser/grok_companion/grok_toolbar_icon.h"  // AETHER\n'
+                '#include "chrome/app/vector_icons/vector_icons.h"  // AETHER\n'
                 '#include "chrome/browser/ui/views/toolbar/toolbar_button.h"\n',
             )
+    # Grok logo vector icon for toolbar button.
+    vector_icons_gn = src / "chrome/app/vector_icons/BUILD.gn"
+    edit(
+        vector_icons_gn,
+        '    "grid_view.icon",\n',
+        '    "grid_view.icon",\n    "grok.icon",\n',
+    )
+
     # Element id for the Grok toolbar button (local to toolbar_view.cc).
     browser_elements = src / "chrome/browser/ui/browser_element_identifiers.h"
     edit(

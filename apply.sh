@@ -12,6 +12,9 @@ cp -R "$AETHER/src/chrome" "$SRC/"
 echo "Installing Aether app icon..."
 cp "$AETHER/branding/app.icns" "$SRC/chrome/app/theme/chromium/mac/app.icns"
 
+echo "Installing Grok toolbar vector icon..."
+cp "$AETHER/branding/grok.icon" "$SRC/chrome/app/vector_icons/grok.icon"
+
 echo "Applying integration edits..."
 python3 "$AETHER/patches/apply_integration.py" "$SRC"
 
