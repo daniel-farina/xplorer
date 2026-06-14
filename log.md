@@ -22,3 +22,31 @@ Autonomous 30-minute improvement loop. Each entry: change, test result, commit.
   imagine uses native API, web/videos use Grok Web handoff, results panel with
   media grids, URL sync for q/mode, home toggle uses settings not hardcoded web
 - **Test:** Companion UI only — no native rebuild required for static files
+
+### Commit 2ed53b4 — feat(search)
+See above. Verified: search page serves mode pills + results section (curl).
+
+### Commit 1d69fa8 — feat(apps)
+- Delete button, Enter-to-send in app builder, reconcile stale builds, switch-home q/m
+- **Test:** `switch-home?mode=build&q=testquery&m=images` → `Location: .../search?q=testquery&mode=images` ✓
+- Build succeeded (40s), reinstalled to /Applications/Xplorer.app
+
+### Commit 1d417f4 — fix(nav)
+- Grok Web handoff polling capped; legacy hash support; app Preview button
+- Build succeeded (42s), reinstall + relaunch
+
+## Loop 1 test summary (2026-06-14 ~01:30)
+| Check | Result |
+|-------|--------|
+| Gateway discovery | `xplorer-agent-gateway` ✓ |
+| /search | 200, mode pills present ✓ |
+| /welcome | Xplorer h1 ✓ |
+| /api/apps | 6 apps listed ✓ |
+| switch-home query preserve | q + mode in Location ✓ |
+| Data dir | ~/.xplorer ✓ |
+
+## Next loop priorities
+- App view delete button + runtime auto-restart on open
+- Search stream UI for long native searches
+- Toolbar SPA navigation edge cases on x.com/i/chat
+- Welcome screen "tour" links to apps/search

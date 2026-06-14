@@ -1,4 +1,4 @@
-/* Black / white theme — light and dark */
+/* Black / white theme — light and dark, no purple accents */
 :root,
 html[data-theme="light"] {
   color-scheme: light;
