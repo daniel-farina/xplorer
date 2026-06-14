@@ -376,35 +376,74 @@ def main(src: Path):
         '  // --- Section 1: Common tab helpers ---',
     )
 
-    # Toolbar Grok button (opens same side panel as AI Mode chip).
+    # Toolbar Grok button (opens local search page; Grok logo icon).
     toolbar = src / "chrome/browser/ui/views/toolbar/toolbar_view.cc"
-    edit(
-        toolbar,
-        '  overflow_button_ = AddChildView(std::make_unique<OverflowButton>());',
+    grok_btn_block = (
         '  // AETHER: Grok companion toolbar button.\n'
         '  {\n'
         '    auto grok_btn = std::make_unique<ToolbarButton>(base::BindRepeating(\n'
         '        [](Browser* b) {\n'
         '          if (b)\n'
-        '            grok_companion::ToggleGrokSidePanel(b);\n'
+        '            grok_companion::OpenGrokSearchPage(b);\n'
         '        },\n'
         '        base::Unretained(browser_)));\n'
-        '    grok_btn->SetTooltipText(u"Grok");\n'
-        '    grok_btn->SetAccessibleName(u"Grok");\n'
-        '    grok_btn->SetVectorIcon(vector_icons::kLightbulbIcon);\n'
+        '    grok_btn->SetTooltipText(u"Grok Search");\n'
+        '    grok_btn->SetAccessibleName(u"Grok Search");\n'
+        '    grok_btn->SetImageModel(views::Button::STATE_NORMAL,\n'
+        '                            grok_companion::GetGrokToolbarIcon());\n'
+        '    grok_btn->SetImageModel(views::Button::STATE_HOVERED,\n'
+        '                            grok_companion::GetGrokToolbarIcon());\n'
+        '    grok_btn->SetImageModel(views::Button::STATE_PRESSED,\n'
+        '                            grok_companion::GetGrokToolbarIcon());\n'
         '    grok_btn->SetProperty(views::kElementIdentifierKey,\n'
         '                          kToolbarGrokButtonElementId);\n'
         '    AddChildView(std::move(grok_btn));\n'
         '  }\n\n'
-        '  overflow_button_ = AddChildView(std::make_unique<OverflowButton>());',
     )
-    edit(
-        toolbar,
-        '#include "chrome/browser/ui/views/toolbar/toolbar_view.h"',
-        '\n#include "chrome/browser/grok_companion/grok_companion_util.h"  // AETHER\n'
-        '#include "chrome/browser/ui/views/toolbar/toolbar_button.h"\n'
-        '#include "components/vector_icons/vector_icons.h"\n',
-    )
+    if "GetGrokToolbarIcon" not in toolbar.read_text():
+        if "ToggleGrokSidePanel" in toolbar.read_text():
+            edit(
+                toolbar,
+                '  // AETHER: Grok companion toolbar button.\n'
+                '  {\n'
+                '    auto grok_btn = std::make_unique<ToolbarButton>(base::BindRepeating(\n'
+                '        [](Browser* b) {\n'
+                '          if (b)\n'
+                '            grok_companion::ToggleGrokSidePanel(b);\n'
+                '        },\n'
+                '        base::Unretained(browser_)));\n'
+                '    grok_btn->SetTooltipText(u"Grok");\n'
+                '    grok_btn->SetAccessibleName(u"Grok");\n'
+                '    grok_btn->SetVectorIcon(vector_icons::kLightbulbIcon);\n'
+                '    grok_btn->SetProperty(views::kElementIdentifierKey,\n'
+                '                          kToolbarGrokButtonElementId);\n'
+                '    AddChildView(std::move(grok_btn));\n'
+                '  }\n\n',
+                grok_btn_block,
+            )
+            edit(
+                toolbar,
+                '#include "chrome/browser/grok_companion/grok_companion_util.h"  // AETHER\n'
+                '#include "components/vector_icons/vector_icons.h"\n'
+                '#include "chrome/browser/ui/views/toolbar/toolbar_button.h"\n',
+                '#include "chrome/browser/grok_companion/grok_companion_util.h"  // AETHER\n'
+                '#include "chrome/browser/grok_companion/grok_toolbar_icon.h"  // AETHER\n'
+                '#include "chrome/browser/ui/views/toolbar/toolbar_button.h"\n',
+            )
+        else:
+            edit(
+                toolbar,
+                '  overflow_button_ = AddChildView(std::make_unique<OverflowButton>());',
+                grok_btn_block +
+                '  overflow_button_ = AddChildView(std::make_unique<OverflowButton>());',
+            )
+            edit(
+                toolbar,
+                '#include "chrome/browser/ui/views/toolbar/toolbar_view.h"',
+                '\n#include "chrome/browser/grok_companion/grok_companion_util.h"  // AETHER\n'
+                '#include "chrome/browser/grok_companion/grok_toolbar_icon.h"  // AETHER\n'
+                '#include "chrome/browser/ui/views/toolbar/toolbar_button.h"\n',
+            )
     # Element id for the Grok toolbar button (local to toolbar_view.cc).
     browser_elements = src / "chrome/browser/ui/browser_element_identifiers.h"
     edit(

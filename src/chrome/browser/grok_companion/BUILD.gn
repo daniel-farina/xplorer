@@ -6,6 +6,8 @@ source_set("grok_companion") {
     "grok_companion_util.h",
     "grok_fab.cc",
     "grok_fab.h",
+    "grok_toolbar_icon.cc",
+    "grok_toolbar_icon.h",
     "grok_web_bar.cc",
     "grok_web_bar.h",
   ]
