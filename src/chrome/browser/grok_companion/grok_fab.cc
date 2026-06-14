@@ -41,6 +41,16 @@ int GatewayPort() {
   return kCompanionPort;
 }
 
+bool IsGrokWebHost(const GURL& url) {
+  if (!url.is_valid() || !url.SchemeIsHTTPOrHTTPS())
+    return false;
+  const std::string_view host = url.host();
+  return host == "grok.com" || host == "www.grok.com" ||
+         base::EndsWith(host, ".grok.com") || host == "grokipedia.com" ||
+         host == "www.grokipedia.com" ||
+         base::EndsWith(host, ".grokipedia.com");
+}
+
 bool IsFabHost(const GURL& url) {
   if (!url.is_valid() || !url.SchemeIsHTTPOrHTTPS())
     return false;
@@ -48,13 +58,8 @@ bool IsFabHost(const GURL& url) {
       url.EffectiveIntPort() == GatewayPort()) {
     return false;
   }
-  const std::string_view host = url.host();
-  if (host == "grok.com" || host == "www.grok.com" ||
-      base::EndsWith(host, ".grok.com") || host == "grokipedia.com" ||
-      host == "www.grokipedia.com" ||
-      base::EndsWith(host, ".grokipedia.com")) {
+  if (IsGrokWebHost(url))
     return false;
-  }
   return true;
 }
 
@@ -115,30 +120,37 @@ std::string BuildFabInjectScript() {
       R"((function(){
   if(!document.documentElement)return;
   var GW=%s;
-  var FAB_ID='xbrowser-grok-fab',STYLE_ID='xbrowser-grok-fab-style';
-  var DOC_ICON='<span class="xfab-doc" aria-hidden="true">'
-    +'<span class="xfab-doc-fold"></span>'
-    +'<span class="xfab-doc-art">'
-    +'<svg viewBox="0 0 36 24" class="xfab-landscape"><rect width="36" height="24" rx="4" fill="#b0b0b0"/>'
-    +'<circle cx="26" cy="7" r="3" fill="#9a9a9a"/>'
-    +'<path d="M3 20 L13 12 L19 16 L27 8 L36 20 Z" fill="#9a9a9a"/></svg>'
-    +'</span><span class="xfab-doc-label">Grok</span></span>';
-  var css='#xbrowser-grok-fab{position:fixed;bottom:22px;right:22px;z-index:2147483646;border:none;background:transparent;padding:0;cursor:pointer;-webkit-font-smoothing:antialiased;transition:transform .15s,filter .15s}'
-    +'#xbrowser-grok-fab:hover{transform:translateY(-2px);filter:brightness(1.03)}'
-    +'#xbrowser-grok-fab:disabled{opacity:.6;cursor:wait;transform:none}'
-    +'.xfab-doc{position:relative;display:flex;flex-direction:column;align-items:center;width:54px;padding:10px 8px 8px;background:#f8f8f8;border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.22),0 1px 3px rgba(0,0,0,.12)}'
-    +'.xfab-doc-fold{position:absolute;top:0;right:0;width:0;height:0;border-style:solid;border-width:0 18px 18px 0;border-color:transparent #e4e4e4 transparent transparent;border-top-right-radius:12px;filter:drop-shadow(-1px 1px 1px rgba(0,0,0,.08))}'
-    +'.xfab-doc-fold::after{content:"";position:absolute;top:0;right:-18px;width:0;height:0;border-style:solid;border-width:0 17px 17px 0;border-color:transparent #fff transparent transparent}'
-    +'.xfab-doc-art{display:flex;align-items:center;justify-content:center;width:38px;height:28px;margin-top:2px;border-radius:5px;overflow:hidden;background:#b8b8b8}'
-    +'.xfab-landscape{display:block;width:38px;height:28px}'
-    +'.xfab-doc-label{margin-top:6px;font:500 11px/1 -apple-system,BlinkMacSystemFont,sans-serif;letter-spacing:.14em;color:#a0a0a0;text-transform:uppercase}'
-    +'#xbrowser-grok-fab.busy .xfab-doc-label::after{content:"…"}';
+  var WRAP_ID='xbrowser-grok-wrap',FAB_ID='xbrowser-grok-fab',MENU_ID='xbrowser-grok-menu',STYLE_ID='xbrowser-grok-fab-style';
+  var GROK_ICON='<svg viewBox="0 0 33 32" aria-hidden="true" class="xfab-grok-icon"><path d="M12.745 20.54l10.97-8.19c.539-.4 1.307-.244 1.564.38 1.349 3.288.746 7.241-1.938 9.955-2.683 2.714-6.417 3.31-9.83 1.954l-3.728 1.745c5.347 3.697 11.84 2.782 15.898-1.324 3.219-3.255 4.216-7.692 3.284-11.693l.008.009c-1.351-5.878.332-8.227 3.782-13.031L33 0l-4.54 4.59v-.014L12.743 20.544m-2.263 1.987c-3.837-3.707-3.175-9.446.1-12.755 2.42-2.449 6.388-3.448 9.852-1.979l3.72-1.737c-.67-.49-1.53-1.017-2.515-1.387-4.455-1.854-9.789-.931-13.41 2.728-3.483 3.523-4.579 8.94-2.697 13.561 1.405 3.454-.899 5.898-3.22 8.364C1.49 30.2.666 31.074 0 32l10.478-9.466"></path></svg>';
+  var css='#xbrowser-grok-wrap{position:fixed;bottom:20px;right:20px;z-index:2147483646;display:flex;flex-direction:column;align-items:flex-end;gap:0;font:13px/1.4 -apple-system,BlinkMacSystemFont,sans-serif}'
+    +'#xbrowser-grok-wrap::before{content:"";position:absolute;left:0;right:0;bottom:100%%;height:12px}'
+    +'#xbrowser-grok-menu{display:none;flex-direction:column;min-width:240px;margin-bottom:8px;padding:6px;background:#fff;border:1px solid #eff3f4;border-radius:16px;box-shadow:0 8px 28px rgba(15,20,25,.18);overflow:hidden}'
+    +'#xbrowser-grok-menu.open{display:flex}'
+    +'.xfab-menu-item{display:flex;align-items:center;gap:12px;width:100%%;border:none;background:transparent;padding:12px 14px;text-align:left;font:inherit;font-size:15px;color:#0f1419;cursor:pointer;border-radius:10px}'
+    +'.xfab-menu-item:hover{background:#f7f9f9}'
+    +'.xfab-menu-item:disabled{opacity:.5;cursor:wait}'
+    +'.xfab-menu-icon{width:20px;text-align:center;font-size:16px;color:#536471;flex-shrink:0}'
+    +'.xfab-menu-grok-mark{color:#0f1419}'
+    +'.xfab-menu-label{flex:1}'
+    +'.xfab-menu-chevron{color:#536471;font-size:14px}'
+    +'#xbrowser-grok-fab{display:inline-flex;align-items:center;gap:6px;border:1px solid #cfd9de;border-radius:999px;background:#fff;color:#0f1419;padding:6px 12px 6px 10px;font:600 13px/1 -apple-system,BlinkMacSystemFont,sans-serif;cursor:pointer;box-shadow:0 2px 10px rgba(15,20,25,.12);transition:transform .15s,box-shadow .15s,background .15s,border-color .15s}'
+    +'#xbrowser-grok-fab:hover{background:#f7f9f9;border-color:#aab8c2;transform:translateY(-1px);box-shadow:0 4px 14px rgba(15,20,25,.16)}'
+    +'#xbrowser-grok-fab:disabled{opacity:.65;cursor:wait;transform:none}'
+    +'.xfab-grok-icon{width:15px;height:15px;fill:currentColor;display:block;flex-shrink:0}'
+    +'@media (prefers-color-scheme:dark){'
+    +'#xbrowser-grok-fab{background:#000;color:#fff;border-color:#2f3336;box-shadow:0 2px 12px rgba(0,0,0,.45)}'
+    +'#xbrowser-grok-fab:hover{background:#16181c;border-color:#536471}'
+    +'#xbrowser-grok-menu{background:#000;border-color:#2f3336;box-shadow:0 8px 28px rgba(0,0,0,.55)}'
+    +'.xfab-menu-item{color:#e7e9ea}'
+    +'.xfab-menu-item:hover{background:#16181c}'
+    +'.xfab-menu-icon,.xfab-menu-chevron,.xfab-menu-grok-mark{color:#e7e9ea}'
+    +'}';
   var state=window.__xbrowserGrokFabState||(window.__xbrowserGrokFabState={busy:false,pageData:null});
   function xlog(){
     try{console.log.apply(console,['[xbrowser-fab]'].concat(Array.prototype.slice.call(arguments)));}catch(e){}
   }
   function extractPage(){
-    var kill='script,style,noscript,svg,nav,footer,aside,iframe,#xbrowser-grok-bar,#xbrowser-grok-fab,[data-aether-hud]';
+    var kill='script,style,noscript,svg,nav,footer,aside,iframe,#xbrowser-grok-bar,#xbrowser-grok-wrap,#xbrowser-grok-fab,#xbrowser-grok-menu,[data-aether-hud]';
     var selText=(window.getSelection&&window.getSelection().toString()||'').replace(/\s+/g,' ').trim();
     if(selText.length>80){
       xlog('extract: user selection',selText.length,'chars');
@@ -170,8 +182,13 @@ std::string BuildFabInjectScript() {
     if(text.length>50000)text=text.slice(0,50000)+'\n\n[truncated]';
     return {title:document.title||'',url:location.href,text:text,source:text?'select-all':'empty'};
   }
+  function isGrokWebPage(){
+    var host=location.hostname||'';
+    return host.indexOf('grok.com')>=0||host.indexOf('grokipedia.com')>=0;
+  }
   function ensureFab(){
     if(!document.documentElement)return;
+    if(isGrokWebPage())return;
     var style=document.getElementById(STYLE_ID);
     if(!style){
       style=document.createElement('style');
@@ -179,40 +196,87 @@ std::string BuildFabInjectScript() {
       document.documentElement.appendChild(style);
     }
     style.textContent=css;
+    var wrap=document.getElementById(WRAP_ID);
+    if(!wrap){
+      wrap=document.createElement('div');
+      wrap.id=WRAP_ID;
+      document.documentElement.appendChild(wrap);
+    }else if(wrap.parentNode!==document.documentElement){
+      document.documentElement.appendChild(wrap);
+    }
+    var menu=document.getElementById(MENU_ID);
+    if(!menu){
+      menu=document.createElement('div');
+      menu.id=MENU_ID;
+      wrap.appendChild(menu);
+    }
     var fab=document.getElementById(FAB_ID);
     if(!fab){
       fab=document.createElement('button');
       fab.id=FAB_ID;
       fab.type='button';
-      document.documentElement.appendChild(fab);
-    }else if(fab.parentNode!==document.documentElement){
-      document.documentElement.appendChild(fab);
+      wrap.appendChild(fab);
+    }else if(fab.parentNode!==wrap){
+      wrap.appendChild(fab);
     }
-    fab.title='Grok this page on Grok Web';
-    fab.setAttribute('aria-label','Grok this page on Grok Web');
-    fab.innerHTML=DOC_ICON;
+    if(menu.dataset.version!=='5'){
+      menu.dataset.version='5';
+      menu.innerHTML='<button type="button" class="xfab-menu-item" data-action="analyze">'
+        +'<span class="xfab-menu-icon">\u2726</span><span class="xfab-menu-label">Analyze with Grok</span></button>'
+        +'<button type="button" class="xfab-menu-item" data-action="summarize">'
+        +'<span class="xfab-menu-icon">\u21b3</span><span class="xfab-menu-label">Summarize this</span>'
+        +'<span class="xfab-menu-chevron">\u203a</span></button>'
+        +'<button type="button" class="xfab-menu-item" data-action="factcheck">'
+        +'<span class="xfab-menu-icon">\u2713</span><span class="xfab-menu-label">Is this true?</span></button>'
+        +'<button type="button" class="xfab-menu-item" data-action="explain">'
+        +'<span class="xfab-menu-icon">\u2026</span><span class="xfab-menu-label">Explain this</span></button>'
+        +'<button type="button" class="xfab-menu-item" data-action="open">'
+        +'<span class="xfab-menu-icon xfab-menu-grok-mark">\u2726</span>'
+        +'<span class="xfab-menu-label">Open in Grok</span></button>';
+      fab.dataset.wired='';
+    }
+    fab.title='Grok this page';
+    fab.setAttribute('aria-label','Grok this page');
+    fab.innerHTML=GROK_ICON+'<span>Grok</span>';
     var oldPanel=document.getElementById('xbrowser-grok-panel');
     if(oldPanel)oldPanel.remove();
-    if(fab.dataset.wired==='4')return;
-    fab.dataset.wired='4';
+    if(fab.dataset.wired==='5')return;
+    fab.dataset.wired='5';
     function setBusy(on){
       state.busy=on;
       fab.disabled=on;
-      fab.classList.toggle('busy',on);
+      menu.querySelectorAll('.xfab-menu-item').forEach(function(btn){btn.disabled=on;});
     }
-    function runGrokWeb(){
+    function toggleMenu(open){
+      if(open===undefined)open=!menu.classList.contains('open');
+      menu.classList.toggle('open',open);
+    }
+    function runGrokWeb(action){
       if(state.busy)return;
+      toggleMenu(false);
+      if(action==='open'){
+        setBusy(true);
+        window.open('https://grok.com/','_blank');
+        setBusy(false);
+        return;
+      }
       state.pageData=extractPage();
       if(!state.pageData.text){
         alert('No readable text on this page.');
         return;
       }
       setBusy(true);
-      xlog('grok web',state.pageData.source,state.pageData.text.length);
+      xlog('grok web',action,state.pageData.source,state.pageData.text.length);
+      var payload={
+        url:state.pageData.url,
+        title:state.pageData.title,
+        text:state.pageData.text,
+        action:action||'summarize'
+      };
       fetch(GW+'/api/page/grok-web',{
         method:'POST',
         headers:{'Content-Type':'application/json'},
-        body:JSON.stringify(state.pageData)
+        body:JSON.stringify(payload)
       }).then(function(r){return r.json();}).then(function(d){
         if(d.error)throw new Error(d.error);
         if(d.grok_url)window.open(d.grok_url,'_blank');
@@ -221,7 +285,21 @@ std::string BuildFabInjectScript() {
         alert('Grok Web failed: '+(e.message||e));
       }).finally(function(){setBusy(false);});
     }
-    fab.onclick=runGrokWeb;
+    fab.onclick=function(e){
+      e.stopPropagation();
+      toggleMenu();
+    };
+    menu.querySelectorAll('[data-action]').forEach(function(btn){
+      btn.onclick=function(e){
+        e.stopPropagation();
+        runGrokWeb(btn.getAttribute('data-action'));
+      };
+    });
+    if(!window.__xbrowserGrokMenuClose){
+      window.__xbrowserGrokMenuClose=true;
+      document.addEventListener('click',function(){toggleMenu(false);});
+      wrap.addEventListener('click',function(e){e.stopPropagation();});
+    }
   }
   function getGrokWebPendingId(){
     var id=new URLSearchParams(location.search).get('xbrowser_grok');
@@ -280,7 +358,9 @@ std::string BuildFabInjectScript() {
     }
     function findComposer(){
       var selectors=[
+        'textarea[placeholder*="What do you want" i]',
         'textarea[placeholder*="Ask" i]','textarea[placeholder*="Grok" i]',
+        'textarea[placeholder*="know" i]',
         'textarea[aria-label*="Ask" i]','textarea[aria-label*="Message" i]',
         'div[contenteditable="true"][role="textbox"]','div[contenteditable="true"]',
         '[role="textbox"][contenteditable="true"]',
@@ -414,8 +494,9 @@ std::string BuildFabInjectScript() {
       });
   }
   function fabNeedsMount(){
-    var fab=document.getElementById(FAB_ID);
-    return !fab||fab.parentNode!==document.documentElement;
+    if(isGrokWebPage())return false;
+    var wrap=document.getElementById(WRAP_ID);
+    return !wrap||wrap.parentNode!==document.documentElement;
   }
   ensureFab();
   tryConsumeGrokWebPending();
@@ -469,11 +550,11 @@ class GrokFabInjector : public content::WebContentsObserver,
       RedirectLegacyNewTabIfNeeded(web_contents());
       return;
     }
+    if (!ExtractGrokWebPendingId(url).empty())
+      ScheduleGrokWebSubmitBurst();
     if (!IsFabHost(url))
       return;
     ScheduleInject();
-    if (!ExtractGrokWebPendingId(url).empty())
-      ScheduleGrokWebSubmitBurst();
   }
 
   void DocumentOnLoadCompletedInPrimaryMainFrame() override {
@@ -500,6 +581,10 @@ class GrokFabInjector : public content::WebContentsObserver,
   bool ShouldInject(content::WebContents* contents) const {
     if (!contents)
       return false;
+    if (IsGrokWebHost(contents->GetLastCommittedURL()) ||
+        IsGrokWebHost(contents->GetVisibleURL())) {
+      return true;
+    }
     if (IsFabHost(contents->GetLastCommittedURL()))
       return true;
     return IsFabHost(contents->GetVisibleURL());

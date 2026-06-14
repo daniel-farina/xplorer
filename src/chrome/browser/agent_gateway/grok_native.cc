@@ -1157,10 +1157,40 @@ std::string TruncateForPrompt(const std::string& text, size_t max_len) {
   return text.substr(0, max_len) + "\n\n[page content truncated]";
 }
 
+std::string BuildPageGrokWebPromptForAction(const std::string& action,
+                                            const std::string& url,
+                                            const std::string& title,
+                                            const std::string& text) {
+  std::string instruction;
+  if (action == "analyze") {
+    instruction =
+        "Analyze this web page. Break down the key points, context, and "
+        "implications. Do not invent content not present on the page.\n\n";
+  } else if (action == "factcheck") {
+    instruction =
+        "Fact-check this web page. Assess the claims and note what is "
+        "supported, unclear, or questionable. Do not invent content not "
+        "present on the page.\n\n";
+  } else if (action == "explain") {
+    instruction =
+        "Explain this web page clearly and simply, as if helping someone "
+        "understand it. Do not invent content not present on the page.\n\n";
+  } else {
+    instruction =
+        "Summarize this web page clearly and concisely. Use short paragraphs "
+        "or bullet points. Focus on the main ideas, facts, and takeaways. Do "
+        "not invent content not present on the page.\n\n";
+  }
+  const std::string page_title = title.empty() ? "Web page" : title;
+  const std::string page_url = url.empty() ? "(unknown)" : url;
+  return base::StringPrintf("%sTitle: %s\nURL: %s\n\nPage content:\n%s",
+                              instruction.c_str(), page_title.c_str(),
+                              page_url.c_str(),
+                              TruncateForPrompt(text, 12000).c_str());
+}
+
 std::string BuildPageGrokWebPrompt(const std::string& text) {
-  return "Summarize the following text I selected from a web page. "
-         "Be clear and concise. Use short paragraphs or bullet points.\n\n" +
-         TruncateForPrompt(text, 12000);
+  return BuildPageGrokWebPromptForAction("summarize", "", "", text);
 }
 
 std::string GetGrokWebPendingPrompt(const std::string& id) {
@@ -1730,6 +1760,15 @@ bool GrokNative::TryHandleRequest(
     const std::string* url = body ? body->FindString("url") : nullptr;
     const std::string* title = body ? body->FindString("title") : nullptr;
     const std::string* text = body ? body->FindString("text") : nullptr;
+    const std::string* action = body ? body->FindString("action") : nullptr;
+    const std::string action_id = action ? *action : "summarize";
+    if (action_id == "open") {
+      base::DictValue result;
+      result.Set("ok", true);
+      result.Set("grok_url", "https://grok.com/");
+      SendJson(server, connection_id, net::HTTP_OK, std::move(result));
+      return true;
+    }
     if (!text || text->empty()) {
       base::DictValue err;
       err.Set("error", "page text required");
@@ -1738,10 +1777,11 @@ bool GrokNative::TryHandleRequest(
     }
     const std::string page_url = url ? *url : "";
     const std::string page_title = title ? *title : "Web page";
-    const std::string prompt = BuildPageGrokWebPrompt(*text);
+    const std::string prompt = BuildPageGrokWebPromptForAction(
+        action_id, page_url, page_title, *text);
     const std::string id = StoreGrokWebPending(prompt);
     LOG(INFO) << "[grok-web] stored pending id=" << id
-              << " text_chars=" << text->size()
+              << " action=" << action_id << " text_chars=" << text->size()
               << " prompt_chars=" << prompt.size();
     base::DictValue result;
     result.Set("ok", true);
