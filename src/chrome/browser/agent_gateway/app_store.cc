@@ -11,6 +11,9 @@
 #include "base/command_line.h"
 #include "base/files/file_enumerator.h"
 #include "base/files/file_util.h"
+#include "base/synchronization/waitable_event.h"
+#include "base/task/thread_pool.h"
+#include "base/time/time.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
 #include "base/logging.h"
@@ -61,6 +64,99 @@ void SendBytes(net::HttpServer* server,
   resp.SetBody(std::move(body), content_type);
   resp.AddHeader("Access-Control-Allow-Origin", "*");
   server->SendResponse(connection_id, resp, TRAFFIC_ANNOTATION_FOR_TESTS);
+}
+
+void SendDownload(net::HttpServer* server,
+                  int connection_id,
+                  net::HttpStatusCode code,
+                  std::string body,
+                  const char* content_type,
+                  const std::string& filename) {
+  net::HttpServerResponseInfo resp(code);
+  resp.SetBody(std::move(body), content_type);
+  resp.AddHeader("Access-Control-Allow-Origin", "*");
+  resp.AddHeader("Content-Disposition",
+                 "attachment; filename=\"" + filename + "\"");
+  server->SendResponse(connection_id, resp, TRAFFIC_ANNOTATION_FOR_TESTS);
+}
+
+std::string SanitizeExportFilename(const std::string& raw) {
+  std::string out;
+  out.reserve(raw.size());
+  for (char c : raw) {
+    if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+        (c >= '0' && c <= '9') || c == '.' || c == '-' || c == '_') {
+      out.push_back(c);
+    } else if (c == ' ') {
+      out.push_back('_');
+    }
+  }
+  if (out.empty())
+    out = "app";
+  if (!base::EndsWith(out, ".zip"))
+    out += ".zip";
+  return out;
+}
+
+bool ZipAppDirectoryOnWorker(const base::FilePath& dir, std::string* out_bytes) {
+  if (dir.empty() || !base::DirectoryExists(dir) || !out_bytes)
+    return false;
+  base::FilePath temp_dir;
+  if (!base::CreateNewTempDirectory(FILE_PATH_LITERAL("xplorer-export"),
+                                    &temp_dir)) {
+    return false;
+  }
+  base::FilePath zip_path = temp_dir.AppendASCII("export.zip");
+  base::FilePath zip_bin(FILE_PATH_LITERAL("/usr/bin/zip"));
+  if (!base::PathExists(zip_bin))
+    zip_bin = base::FilePath(FILE_PATH_LITERAL("/bin/zip"));
+  if (!base::PathExists(zip_bin)) {
+    base::DeletePathRecursively(temp_dir);
+    return false;
+  }
+
+  base::CommandLine cmd(zip_bin);
+  cmd.AppendArg("-r");
+  cmd.AppendArg("-q");
+  cmd.AppendArgPath(zip_path);
+  cmd.AppendArg(".");
+
+  base::LaunchOptions options;
+  options.current_directory = dir;
+  base::Process process = base::LaunchProcess(cmd, options);
+  if (!process.IsValid()) {
+    base::DeletePathRecursively(temp_dir);
+    return false;
+  }
+  int exit_code = 0;
+  const bool finished = process.WaitForExitWithTimeout(base::Seconds(60),
+                                                     &exit_code);
+  const bool ok = finished && exit_code == 0 &&
+                  base::ReadFileToString(zip_path, out_bytes) &&
+                  !out_bytes->empty();
+  base::DeletePathRecursively(temp_dir);
+  return ok;
+}
+
+bool ZipAppDirectory(const base::FilePath& dir, std::string* out_bytes) {
+  if (!out_bytes)
+    return false;
+  base::WaitableEvent done;
+  bool ok = false;
+  std::string zip_bytes;
+  base::ThreadPool::CreateTaskRunner({base::MayBlock(), base::TaskPriority::USER_VISIBLE})
+      ->PostTask(FROM_HERE, base::BindOnce(
+                                [](const base::FilePath& app_dir,
+                                   base::WaitableEvent* event, bool* success,
+                                   std::string* bytes) {
+                                  *success = ZipAppDirectoryOnWorker(app_dir, bytes);
+                                  event->Signal();
+                                },
+                                dir, &done, &ok, &zip_bytes));
+  done.Wait();
+  if (ok)
+    *out_bytes = std::move(zip_bytes);
+  return ok;
 }
 
 void SendJson(net::HttpServer* server,
@@ -714,6 +810,45 @@ bool TryHandleAppsRequest(
     result.Set("ok", true);
     result.Set("app", AppToJson(*app, gateway_port));
     SendJson(server, connection_id, net::HTTP_OK, std::move(result));
+    return true;
+  }
+
+  if (info.method == "GET" && sub == "export") {
+    base::FilePath app_path = ResolveAppPath(*app);
+    if (app_path.empty() || !base::DirectoryExists(app_path)) {
+      base::DictValue err;
+      err.Set("error", "app folder missing");
+      SendJson(server, connection_id, net::HTTP_BAD_REQUEST, std::move(err));
+      return true;
+    }
+    std::string zip_bytes;
+    if (!ZipAppDirectory(app_path, &zip_bytes)) {
+      base::DictValue err;
+      err.Set("error", "could not create zip export");
+      SendJson(server, connection_id, net::HTTP_INTERNAL_SERVER_ERROR,
+               std::move(err));
+      return true;
+    }
+    std::string filename = "app.zip";
+    if (const std::string* name = app->FindString("name"))
+      filename = SanitizeExportFilename(*name);
+    const size_t q = info.path.find('?');
+    if (q != std::string::npos) {
+      const std::string query = info.path.substr(q + 1);
+      for (const auto& part :
+           base::SplitString(query, "&", base::TRIM_WHITESPACE,
+                             base::SPLIT_WANT_NONEMPTY)) {
+        if (base::StartsWith(part, "filename=")) {
+          std::string raw = part.substr(std::string("filename=").size());
+          base::ReplaceSubstringsAfterOffset(&raw, 0, "%20", " ");
+          if (!raw.empty())
+            filename = SanitizeExportFilename(raw);
+          break;
+        }
+      }
+    }
+    SendDownload(server, connection_id, net::HTTP_OK, std::move(zip_bytes),
+                 "application/zip", filename);
     return true;
   }
 
