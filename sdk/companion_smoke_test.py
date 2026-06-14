@@ -111,6 +111,8 @@ def main() -> int:
     assert "restart-batch" in apps_js
     assert "statusFilter" in apps_js
     assert "updateFilterCounts" in apps_js
+    assert "previewUrl" in apps_js
+    assert "runtime_url" in apps_js
     _, apps_html = get("/apps")
     assert "apps-filter-bar" in apps_html
     exportable_count = sum(1 for a in apps["apps"] if a.get("exportable"))
@@ -136,9 +138,10 @@ def main() -> int:
         print("api/apps runtime health: skipped (native rebuild pending)")
 
     _, search_js = get("/search.js")
-    assert "Try Grok Web instead" in search_js
-    assert "Continue in Imagine" in search_js
-    print("search.js fallback: OK")
+    assert "openGrokWebQuery" in search_js
+    assert "/api/page/grok-web" in search_js
+    assert "runNativeSearch" not in search_js
+    print("search.js grok-web handoff: OK")
 
     _, welcome = get("/welcome")
     assert "companion_smoke_test" in welcome
@@ -156,11 +159,22 @@ def main() -> int:
     except urllib.error.HTTPError as e:
         assert e.code in (302, 303, 307), f"switch-home status {e.code}"
         location = e.headers.get("Location", "")
-        assert "search" in location, f"unexpected Location: {location}"
-    print("switch-home redirect: OK")
+        assert "/search" not in location, f"build should not go to search: {location}"
+        assert ":9334/" in location, f"unexpected Location: {location}"
+    print("switch-home build redirect: OK")
+
+    req = urllib.request.Request(f"{BASE}/switch-home?mode=web", method="GET")
+    try:
+        opener.open(req, timeout=10)
+        raise AssertionError("switch-home web should redirect")
+    except urllib.error.HTTPError as e:
+        assert e.code in (302, 303, 307), f"switch-home web status {e.code}"
+        location = e.headers.get("Location", "")
+        assert "/search" in location, f"web should go to search: {location}"
+    print("switch-home web redirect: OK")
 
     req = urllib.request.Request(
-        f"{BASE}/switch-home?mode=build&q=testquery&m=images", method="GET"
+        f"{BASE}/switch-home?mode=web&q=testquery&m=imagine", method="GET"
     )
     try:
         opener.open(req, timeout=10)
@@ -169,7 +183,8 @@ def main() -> int:
         assert e.code in (302, 303, 307), f"switch-home q+m status {e.code}"
         location = e.headers.get("Location", "")
         assert "q=testquery" in location, f"missing q in Location: {location}"
-        assert "mode=images" in location, f"missing mode in Location: {location}"
+        assert "mode=imagine" in location, f"missing mode in Location: {location}"
+        assert "/search" in location, f"web should go to search: {location}"
     print("switch-home q+m redirect: OK")
 
     exportable = [a for a in apps["apps"] if a.get("exportable")]

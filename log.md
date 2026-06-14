@@ -272,6 +272,17 @@ See above. Verified: search page serves mode pills + results section (curl).
 | FAB copybuilderlink | ✓ |
 | Build + reinstall | 42s, relaunch OK ✓ |
 
+## Loop stopped (2026-06-14)
+
+User ran `/loop stop`. Removed all scheduled Xplorer improvement loops in this workspace:
+
+| Task ID | Session | Interval |
+|---------|---------|----------|
+| `019ec4ca0fa0` | `019ec4c9-f240-7a61-a249-1ec95d39fd16` | 15m |
+| `019ec4d34bc1` | `019ec4d1-e654-7bc3-9cfd-e0e5ea854756` | 15m |
+
+No recurring scheduler tasks remain. Restart with `/loop 15m …` when ready.
+
 ## Next loop priorities
 - Apps: idle filter tab + exportable-only filter
 - Chat: Esc clears conv filter

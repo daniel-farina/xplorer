@@ -457,17 +457,12 @@ void SetAppRuntimeUrls(base::DictValue& out,
     return;
   const int runtime_port = app.FindInt("runtime_port").value_or(0);
   out.Set("runtime_port", runtime_port);
-  out.Set("runtime_url",
-          base::StringPrintf("http://127.0.0.1:%d/run/%s/", gateway_port,
-                             app_id->c_str()));
-  if (runtime_port > 0) {
-    out.Set("open_url",
-            base::StringPrintf("http://127.0.0.1:%d/", runtime_port));
-  } else {
-    out.Set("open_url",
-            base::StringPrintf("http://127.0.0.1:%d/run/%s/", gateway_port,
-                               app_id->c_str()));
-  }
+  const std::string gateway_run_url = base::StringPrintf(
+      "http://127.0.0.1:%d/run/%s/", gateway_port, app_id->c_str());
+  out.Set("runtime_url", gateway_run_url);
+  // Serve via gateway /run/{id}/ so preview works after browser restart
+  // (per-app python http.server ports are ephemeral).
+  out.Set("open_url", gateway_run_url);
 }
 
 base::DictValue AppToJson(const base::DictValue& app, int gateway_port) {

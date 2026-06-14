@@ -205,6 +205,12 @@ bool ServeUiFile(net::HttpServer* server,
     ctype = "text/css";
   else if (base::EndsWith(name, ".js"))
     ctype = "application/javascript";
+  else if (base::EndsWith(name, ".ico"))
+    ctype = "image/x-icon";
+  else if (base::EndsWith(name, ".png"))
+    ctype = "image/png";
+  else if (base::EndsWith(name, ".svg"))
+    ctype = "image/svg+xml";
   SendBytes(server, connection_id, net::HTTP_OK, std::move(content), ctype);
   return true;
 }
@@ -286,7 +292,7 @@ std::string GetSearchHomeMode() {
     if (*mode == kSearchHomeWiki)
       return kSearchHomeWiki;
   }
-  return kSearchHomeBuild;
+  return kSearchHomeWeb;
 }
 
 void SetSearchHomeMode(const std::string& mode) {
@@ -1530,9 +1536,19 @@ bool GrokNative::TryHandleRequest(
     return true;
   }
 
+  if (info.method == "GET" && path == "/favicon.ico") {
+    if (ServeUiFile(server, connection_id, "favicon.ico"))
+      return true;
+    net::HttpServerResponseInfo resp(net::HTTP_NO_CONTENT);
+    server->SendResponse(connection_id, resp, TRAFFIC_ANNOTATION_FOR_TESTS);
+    return true;
+  }
+
   // Static assets before /search page route (not app runtime files).
   if (info.method == "GET" && !base::StartsWith(path, "/run/") &&
-      (base::EndsWith(path, ".css") || base::EndsWith(path, ".js"))) {
+      (base::EndsWith(path, ".css") || base::EndsWith(path, ".js") ||
+       base::EndsWith(path, ".ico") || base::EndsWith(path, ".png") ||
+       base::EndsWith(path, ".svg"))) {
     return ServeUiFile(server, connection_id, path.substr(path.rfind('/') + 1));
   }
 
@@ -1572,11 +1588,11 @@ bool GrokNative::TryHandleRequest(
     SetSearchHomeMode(mode);
     std::string dest;
     if (mode == kSearchHomeWeb)
-      dest = "https://grok.com/";
+      dest = base::StringPrintf("http://127.0.0.1:%d/search", gateway_port);
     else if (mode == kSearchHomeWiki)
       dest = kGrokWikiHomeURL;
     else
-      dest = base::StringPrintf("http://127.0.0.1:%d/search", gateway_port);
+      dest = base::StringPrintf("http://127.0.0.1:%d/", gateway_port);
     auto qit = params.find("q");
     if (qit != params.end() && !qit->second.empty()) {
       dest += (dest.find('?') == std::string::npos ? "?" : "&");

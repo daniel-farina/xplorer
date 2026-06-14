@@ -344,15 +344,19 @@ html[data-theme="dark"] .app-status.error { color: #f28b82; }
 }
 
 .app-actions {
-  display: flex;
-  gap: 8px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
   margin-top: auto;
 }
 
 .app-actions .apps-btn {
-  flex: 1;
   font-size: 12px;
-  padding: 7px 10px;
+  padding: 7px 8px;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .apps-empty {

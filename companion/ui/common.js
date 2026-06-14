@@ -42,9 +42,9 @@ function persistSearchModel(model) {
 
 function getStoredSearchHome() {
   try {
-    return localStorage.getItem(SEARCH_HOME_STORAGE_KEY) || SEARCH_HOME_BUILD;
+    return localStorage.getItem(SEARCH_HOME_STORAGE_KEY) || SEARCH_HOME_WEB;
   } catch {
-    return SEARCH_HOME_BUILD;
+    return SEARCH_HOME_WEB;
   }
 }
 
@@ -73,7 +73,7 @@ function persistSearchQuery(query) {
 function getStoredSearchMode() {
   try {
     const m = localStorage.getItem(SEARCH_MODE_STORAGE_KEY) || 'web';
-    return ['web', 'images', 'videos', 'imagine'].includes(m) ? m : 'web';
+    return ['web', 'imagine'].includes(m) ? m : 'web';
   } catch {
     return 'web';
   }
@@ -81,7 +81,7 @@ function getStoredSearchMode() {
 
 function persistSearchMode(mode) {
   try {
-    if (['web', 'images', 'videos', 'imagine'].includes(mode)) {
+    if (['web', 'imagine'].includes(mode)) {
       localStorage.setItem(SEARCH_MODE_STORAGE_KEY, mode);
     }
   } catch { /* ignore */ }
@@ -205,7 +205,7 @@ async function initSearchHomeToggle(container, { onSwitch, pageHome } = {}) {
   } catch {
     settings = { search_home: getStoredSearchHome() };
   }
-  let currentHome = settings.search_home || SEARCH_HOME_BUILD;
+  let currentHome = settings.search_home || SEARCH_HOME_WEB;
   persistSearchHome(currentHome);
 
   const setActive = (mode) => {
@@ -236,10 +236,13 @@ async function initSearchHomeToggle(container, { onSwitch, pageHome } = {}) {
           const params = new URLSearchParams(window.location.search);
           const q = params.get('q') || getStoredSearchQuery();
           const m = params.get('mode') || getStoredSearchMode();
-          const dest = m === 'imagine'
-            ? await imagineUrlForQuery(q, 'https://grok.com/imagine')
-            : await grokWebUrlForQuery(q, m, updated.grok_web_url || 'https://grok.com/');
-          window.location.href = dest;
+          let url = `${window.location.origin}/search`;
+          const qs = new URLSearchParams();
+          if (q) qs.set('q', q);
+          if (m && m !== 'web') qs.set('mode', m);
+          const s = qs.toString();
+          if (s) url += `?${s}`;
+          window.location.href = url;
         } else if (saved === SEARCH_HOME_WIKI) {
           const params = new URLSearchParams(window.location.search);
           const q = params.get('q') || getStoredSearchQuery();
@@ -248,13 +251,7 @@ async function initSearchHomeToggle(container, { onSwitch, pageHome } = {}) {
             updated.grok_wiki_url || 'https://grokipedia.com/',
           );
         } else {
-          const params = new URLSearchParams(window.location.search);
-          let url = `${window.location.origin}/switch-home?mode=${encodeURIComponent(saved)}`;
-          const q = params.get('q') || getStoredSearchQuery();
-          const m = params.get('mode') || getStoredSearchMode();
-          if (q) url += `&q=${encodeURIComponent(q)}`;
-          if (m && m !== 'web') url += `&m=${encodeURIComponent(m)}`;
-          window.location.href = url;
+          window.location.href = `${window.location.origin}/switch-home?mode=${encodeURIComponent(saved)}`;
         }
       } catch (e) {
         alert(`Could not save preference: ${e.message}`);

@@ -177,7 +177,7 @@ std::string BuildInjectScript(const std::string& active_mode) {
       R"(<div class="grok-pill-menu"><a href="%s">Conversations</a><a href="%s">Apps</a></div></div>)"
       R"(<div class="grok-pill-wrap">)"
       R"(<a class="grok-pill" data-pill="web" href="%s">Grok Web</a>)"
-      R"(<div class="grok-pill-menu"><a href="https://grok.com/imagine" target="_blank" rel="noopener noreferrer">Imagine</a></div></div>)"
+      R"(<div class="grok-pill-menu"><a href="%s">Search</a><a href="https://grok.com/imagine" target="_blank" rel="noopener noreferrer">Imagine</a></div></div>)"
       R"(<div class="grok-pill-wrap">)"
       R"(<a class="grok-pill" data-pill="wiki" href="%s">Wiki</a>)"
       R"(<div class="grok-pill-menu"><a href="https://grokipedia.com/" target="_blank" rel="noopener noreferrer">Grokipedia</a></div></div>)"
@@ -186,7 +186,8 @@ std::string BuildInjectScript(const std::string& active_mode) {
       R"(<div class="grok-pill-menu"><a href="https://x.com/" rel="noopener noreferrer">Home</a></div></div>)"
       R"(</div></div>)",
       search_href.c_str(), build_href.c_str(), chat_href.c_str(),
-      apps_href.c_str(), web_href.c_str(), wiki_href.c_str());
+      apps_href.c_str(), web_href.c_str(), search_href.c_str(),
+      wiki_href.c_str());
   const std::string html_json = JsonStringLiteral(html);
   const std::string gw =
       base::StringPrintf("http://%s:%d", kCompanionHost, GatewayPort());

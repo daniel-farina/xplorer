@@ -153,7 +153,7 @@ std::string GetSearchHomeMode() {
     if (*mode == kSearchHomeWiki)
       return kSearchHomeWiki;
   }
-  return kSearchHomeBuild;
+  return kSearchHomeWeb;
 }
 
 void SetSearchHomeMode(const std::string& mode) {
@@ -170,10 +170,10 @@ void SetSearchHomeMode(const std::string& mode) {
 GURL GetDefaultSearchHomeURL() {
   const std::string home = GetSearchHomeMode();
   if (home == kSearchHomeWeb)
-    return GURL(kGrokWebHomeURL);
+    return GetSearchURL();
   if (home == kSearchHomeWiki)
     return GURL(kGrokWikiHomeURL);
-  return GetSearchURL();
+  return GetCompanionURL();
 }
 
 bool IsLegacyChromeNewTab(const GURL& url) {

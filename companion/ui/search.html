@@ -29,7 +29,7 @@
           </div>
         </div>
         <div class="grok-pill-wrap">
-          <button type="button" class="grok-pill" data-home="web">Grok Web</button>
+          <button type="button" class="grok-pill active" data-home="web">Grok Web</button>
           <div class="grok-pill-menu">
             <a href="/search" data-route="search">Search</a>
             <a href="https://grok.com/imagine" target="_blank" rel="noopener noreferrer">Imagine</a>
@@ -64,29 +64,17 @@
       </div>
       <nav id="search-modes" class="search-modes" aria-label="Search mode">
         <button type="button" class="search-mode active" data-mode="web">Web</button>
-        <button type="button" class="search-mode" data-mode="images">Images</button>
-        <button type="button" class="search-mode" data-mode="videos">Videos</button>
         <button type="button" class="search-mode" data-mode="imagine">Imagine</button>
       </nav>
       <form id="search-form" class="search-box">
         <input id="q" type="search" placeholder="Search with Grok…" autocomplete="off" autofocus>
-        <div id="image-tools" class="image-tools hidden">
-          <input id="image-file" type="file" accept="image/*" class="hidden" aria-hidden="true">
-          <button type="button" id="upload-image" class="img-btn" title="Upload image">Upload</button>
-          <button type="button" id="screenshot-page" class="img-btn" title="Screenshot active tab">Screenshot</button>
-        </div>
         <button type="submit">Search</button>
       </form>
       <div class="search-tagline">
         <h1>Search the web with Grok</h1>
-        <p>Web results, images, videos, and AI image generation — powered by your native AI companion.</p>
+        <p>Type a query here — Xplorer opens grok.com and runs your search, same as the Grok It button.</p>
       </div>
     </section>
-    <div id="image-preview" class="image-preview hidden">
-      <img id="preview-img" alt="Search image">
-      <button type="button" id="clear-image" class="clear-image" title="Remove image">×</button>
-    </div>
-    <section id="results" class="results hidden" aria-live="polite"></section>
   </main>
   <script src="/common.js"></script>
   <script src="/search.js"></script>

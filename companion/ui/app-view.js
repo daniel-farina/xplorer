@@ -9,7 +9,7 @@ let busy = false;
 
 function appPreviewUrl() {
   if (!app) return '';
-  return app.open_url || app.runtime_url ||
+  return app.runtime_url || app.open_url ||
     `/api/apps/${encodeURIComponent(appId)}/preview/index.html`;
 }
 

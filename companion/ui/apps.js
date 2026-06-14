@@ -41,6 +41,10 @@ function statusLabel(status) {
   return 'Idle';
 }
 
+function previewUrl(app) {
+  return app.runtime_url || app.open_url || '';
+}
+
 async function downloadAppZip(app) {
   const res = await fetch(`/api/apps/${encodeURIComponent(app.id)}/export`);
   if (!res.ok) {
@@ -157,8 +161,8 @@ function renderApps(data) {
       ${app.last_error ? '<p class="app-error">' + escapeHtml(app.last_error) + '</p>' : ''}
       <div class="app-actions">
         <button type="button" class="apps-btn primary" data-open="${escapeHtml(app.id)}">Build</button>
-        ${app.status === 'ready' && app.open_url
-          ? `<button type="button" class="apps-btn" data-preview="${escapeHtml(app.open_url)}">Preview</button>`
+        ${app.status === 'ready' && app.runtime_ready && previewUrl(app)
+          ? `<button type="button" class="apps-btn" data-preview="${escapeHtml(previewUrl(app))}">Preview</button>`
           : ''}
         ${app.runtime_ready && !app.runtime_alive
           ? `<button type="button" class="apps-btn" data-restart="${escapeHtml(app.id)}">Restart</button>`

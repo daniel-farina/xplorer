@@ -382,7 +382,7 @@ std::string BuildFabInjectScript() {
         fetch(GW+'/api/apps').then(function(r){return r.json();}).then(function(d){
           if(d.error)throw new Error(d.error);
           var app=resolveAppFromContext(ctx,d.apps||[]);
-          var link=(app&&app.open_url)||location.href;
+          var link=(app&&(app.runtime_url||app.open_url))||location.href;
           if(navigator.clipboard&&navigator.clipboard.writeText){
             return navigator.clipboard.writeText(link).then(function(){
               alert('App link copied');
