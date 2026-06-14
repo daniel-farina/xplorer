@@ -50,21 +50,32 @@ def main() -> int:
     assert mcp_group_tool_present(), "xbrowser_group_tabs missing from aether MCP"
     print("mcp xbrowser_group_tabs: OK")
 
+    # Native one-shot API (no grok agent loop).
+    req = urllib.request.Request(
+        f"{BASE}/api/browser/organize-tabs",
+        data=b"{}",
+        method="POST",
+        headers={"Content-Type": "application/json"},
+    )
+    with urllib.request.urlopen(req, timeout=30) as resp:
+        native = json.loads(resp.read().decode())
+    assert native.get("ok") is True, native
+    assert native.get("groups_created", 0) >= 1, native
+    print(f"native organize-tabs: {native.get('groups_created')} groups")
+
     conv = api("POST", "/api/conversations", {})
     conv_id = conv["id"]
 
     req = urllib.request.Request(
         f"{BASE}/api/conversations/{conv_id}/message/stream",
         data=json.dumps({
-            "message": "List my open tabs with aether_tabs, then group any two "
-                       "localhost tabs with xbrowser_group_tabs titled SmokeTest. "
-                       "Confirm with a one-line summary.",
-            "model": "grok-build",
+            "message": "organize my tabs into logical groups",
+            "model": "grok-composer-2.5-fast",
         }).encode(),
         method="POST",
         headers={"Content-Type": "application/json"},
     )
-    with urllib.request.urlopen(req, timeout=180) as resp:
+    with urllib.request.urlopen(req, timeout=30) as resp:
         body = resp.read().decode("utf-8", errors="replace")
 
     lines = [ln.strip() for ln in body.splitlines() if ln.strip().startswith("{")]
@@ -83,13 +94,16 @@ def main() -> int:
 
     assert "text" in types or "result" in types, f"unexpected stream: {types}"
     assert reply.strip(), "empty reply"
-    assert session_id, "session_id not returned"
+    # Fast path uses native organizer — no grok session required.
+    if session_id:
+        print(f"session_id: {session_id}")
     print(f"stream types: {sorted(types)}")
     print(f"session_id: {session_id}")
     print(f"reply excerpt: {reply[:200]}")
 
     loaded = api("GET", f"/api/conversations/{conv_id}")
-    assert loaded.get("session_id") == session_id, loaded
+    if session_id:
+        assert loaded.get("session_id") == session_id, loaded
     msgs = loaded.get("messages") or []
     assert any(m.get("role") == "assistant" for m in msgs), loaded
     print("session persistence: OK")

@@ -252,13 +252,12 @@ constexpr char kBrowserChatRules[] =
     "You are Grok, the native AI companion built into Xplorer (Chromium). "
     "You MUST control the real browser through MCP tools — never give manual "
     "instructions the user must follow themselves. "
-    "Tabs: call aether_tabs to list open tabs, then xbrowser_group_tabs to "
-    "organize them into named groups. Use xbrowser_activate_tab to focus a tab "
-    "and xbrowser_close_tab to close tabs. "
+    "To organize tabs in one step, call xbrowser_organize_tabs (or "
+    "POST /api/browser/organize-tabs on the companion). "
+    "For custom grouping: aether_tabs then xbrowser_group_tabs. "
+    "Use xbrowser_activate_tab / xbrowser_close_tab for focus and close. "
     "Bookmarks: xbrowser_bookmarks, xbrowser_add_bookmark, "
-    "xbrowser_remove_bookmark. "
-    "Navigation: aether_navigate or aether_new_tab. "
-    "Always verify actions by re-listing tabs after grouping.";
+    "xbrowser_remove_bookmark. Navigation: aether_navigate or aether_new_tab.";
 
 base::FilePath SettingsFile() {
   return xplorer_paths::Resolve("grok_settings.json");
@@ -926,6 +925,93 @@ void SaveChatAssistantReply(const std::string& conv_id,
     break;
   }
   SaveSessions(data);
+}
+
+bool MessageWantsOrganizeTabs(const std::string& message) {
+  std::string lower = base::ToLowerASCII(message);
+  if (lower.find("tab") == std::string::npos)
+    return false;
+  return lower.find("organiz") != std::string::npos ||
+         lower.find("organis") != std::string::npos ||
+         (lower.find("group") != std::string::npos);
+}
+
+std::string FormatOrganizeTabsReply(const base::DictValue& result) {
+  if (const std::string* err = result.FindString("error"))
+    return std::string("Could not organize tabs: ") + *err;
+  std::string reply = "**Tabs organized** into native Chrome groups:\n\n";
+  if (const base::ListValue* groups = result.FindList("groups")) {
+    for (const auto& v : *groups) {
+      if (!v.is_dict())
+        continue;
+      const std::string* title = v.GetDict().FindString("title");
+      size_t count = 0;
+      if (const base::ListValue* ids = v.GetDict().FindList("tab_ids"))
+        count = ids->size();
+      reply += "- **";
+      reply += title && !title->empty() ? *title : "Group";
+      reply += "** (";
+      reply += base::NumberToString(count);
+      reply += " tabs)\n";
+    }
+  }
+  if (const std::optional<int> n = result.FindInt("tabs")) {
+    reply += "\n";
+    reply += base::NumberToString(*n);
+    reply += " tabs total.";
+  }
+  return reply;
+}
+
+void RunOrganizeTabsFastPath(
+    net::HttpServer* server,
+    scoped_refptr<base::SingleThreadTaskRunner> io_task_runner,
+    int connection_id,
+    std::string conv_id) {
+  content::GetUIThreadTaskRunner({})->PostTask(
+      FROM_HERE,
+      base::BindOnce(
+          [](net::HttpServer* srv,
+             scoped_refptr<base::SingleThreadTaskRunner> io, int cid,
+             std::string conv_id) {
+            BrowserApi::OrganizeTabs(base::BindOnce(
+                [](net::HttpServer* srv,
+                   scoped_refptr<base::SingleThreadTaskRunner> io, int cid,
+                   std::string conv_id, base::DictValue result) {
+                  std::string reply = FormatOrganizeTabsReply(result);
+                  if (!conv_id.empty() && !reply.empty())
+                    SaveChatAssistantReply(conv_id, reply, "");
+                  io->PostTask(
+                      FROM_HERE,
+                      base::BindOnce(
+                          [](net::HttpServer* srv, int cid,
+                             std::string reply) {
+                            BeginNdjsonStreamWithMeta(srv, cid, "native",
+                                                      "chat");
+                            base::DictValue text_evt;
+                            text_evt.Set("type", "text");
+                            text_evt.Set("data", reply);
+                            std::string line;
+                            base::JSONWriter::Write(text_evt, &line);
+                            line.push_back('\n');
+                            SendHttpChunk(srv, cid, std::move(line));
+                            base::DictValue done;
+                            done.Set("type", "result");
+                            done.Set("reply", reply);
+                            done.Set("text", reply);
+                            done.Set("model", "native");
+                            done.Set("model_label", "Xplorer");
+                            std::string done_line;
+                            base::JSONWriter::Write(done, &done_line);
+                            done_line.push_back('\n');
+                            SendHttpChunk(srv, cid, std::move(done_line));
+                            EndNdjsonStream(srv, cid);
+                          },
+                          srv, cid, std::move(reply)));
+                },
+                srv, io, cid, conv_id));
+          },
+          server, io_task_runner, connection_id, std::move(conv_id)));
 }
 
 void PumpGrokStream(net::HttpServer* server,
@@ -1670,6 +1756,27 @@ bool GrokNative::TryHandleRequest(
     return true;
   }
 
+  // One-shot native tab organization (no MCP / grok agent loop).
+  if (info.method == "POST" &&
+      (path == "/api/browser/organize-tabs" ||
+       path == "/browser/organize-tabs")) {
+    content::GetUIThreadTaskRunner({})->PostTask(
+        FROM_HERE,
+        base::BindOnce(
+            [](net::HttpServer* srv,
+               scoped_refptr<base::SingleThreadTaskRunner> io, int cid) {
+              BrowserApi::OrganizeTabs(base::BindOnce(
+                  [](net::HttpServer* srv,
+                     scoped_refptr<base::SingleThreadTaskRunner> io, int cid,
+                     base::DictValue result) {
+                    ReplyJsonOnIO(srv, io, cid, std::move(result));
+                  },
+                  srv, io, cid));
+            },
+            server, io_task_runner, connection_id));
+    return true;
+  }
+
   // Browser theme for companion UI (no auth — same as other native UI routes).
   if (info.method == "GET" && (path == "/theme" || path == "/api/theme")) {
     content::GetUIThreadTaskRunner({})->PostTask(
@@ -2115,6 +2222,11 @@ bool GrokNative::TryHandleRequest(
       session_id = *sid;
     SaveSessions(data);
     if (chat_stream) {
+      if (MessageWantsOrganizeTabs(*message)) {
+        RunOrganizeTabsFastPath(server, io_task_runner, connection_id,
+                                conv_id);
+        return true;
+      }
       RunGrokChatStream(server, io_task_runner, connection_id, conv_id,
                         *message, session_id, model);
       return true;

@@ -33,6 +33,8 @@ class BrowserApi {
   static void GroupTabs(const std::vector<std::string>& tab_ids,
                         const std::string& title,
                         DictCallback callback);
+  // Heuristic tab grouping (Grok, Xplorer, News, …) — one native call.
+  static void OrganizeTabs(DictCallback callback);
   static void SplitTab(const std::string& tab_id,
                        const std::string& layout,
                        DictCallback callback);

@@ -265,6 +265,13 @@ void AgentGateway::RouteRequest(int connection_id,
       return;
     }
   }
+  // POST /browser/organize-tabs — heuristic native tab grouping.
+  if (parts.size() == 2 && parts[0] == "browser" &&
+      parts[1] == "organize-tabs" && info.method == "POST") {
+    BrowserApi::OrganizeTabs(std::move(browser_reply));
+    return;
+  }
+
   // POST /tabs/group {"tab_ids": [...], "title": "..."}
   if (parts.size() == 2 && parts[0] == "tabs" && parts[1] == "group" &&
       info.method == "POST") {

@@ -533,6 +533,25 @@ std::string CreateAppConversation(const std::string& app_id,
   return conv_id;
 }
 
+void RemoveAppConversation(const std::string& conv_id) {
+  if (conv_id.empty())
+    return;
+  base::DictValue data = LoadCompanionSessions();
+  base::ListValue filtered;
+  if (const base::ListValue* convs = data.FindList("conversations")) {
+    for (const auto& v : *convs) {
+      if (!v.is_dict())
+        continue;
+      const std::string* cid = v.GetDict().FindString("id");
+      if (cid && *cid == conv_id)
+        continue;
+      filtered.Append(v.Clone());
+    }
+  }
+  data.Set("conversations", std::move(filtered));
+  SaveCompanionSessions(data);
+}
+
 void AppendUserMessage(const std::string& conv_id, const std::string& message) {
   base::DictValue data = LoadCompanionSessions();
   base::ListValue* convs = data.FindList("conversations");
@@ -1188,6 +1207,13 @@ bool TryHandleAppsRequest(
   }
 
   if (info.method == "DELETE" && sub.empty()) {
+    // Snapshot before mutating registry — |app| dangles after Set("apps", …).
+    const bool imported = app->FindBool("imported").value_or(false);
+    const base::FilePath app_path = ResolveAppPath(*app);
+    std::string conv_id;
+    if (const std::string* cid = app->FindString("conversation_id"))
+      conv_id = *cid;
+
     StopAppRuntimeServer(app_id);
     g_active_app_builds->erase(app_id);
     base::ListValue* apps = AppsList(registry);
@@ -1202,10 +1228,16 @@ bool TryHandleAppsRequest(
     }
     registry.Set("apps", std::move(filtered));
     SaveRegistry(registry);
-    if (!app->FindBool("imported").value_or(false)) {
-      base::FilePath app_path = ResolveAppPath(*app);
-      if (!app_path.empty())
-        base::DeletePathRecursively(app_path);
+    if (!conv_id.empty())
+      RemoveAppConversation(conv_id);
+    if (!imported && !app_path.empty()) {
+      base::ThreadPool::CreateSequencedTaskRunner(
+          {base::MayBlock(), base::TaskPriority::BEST_EFFORT})
+          ->PostTask(FROM_HERE, base::BindOnce(
+                                    [](base::FilePath path) {
+                                      base::DeletePathRecursively(path);
+                                    },
+                                    app_path));
     }
     base::DictValue result;
     result.Set("ok", true);

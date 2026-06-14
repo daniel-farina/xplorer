@@ -3,6 +3,7 @@
 
 #include "chrome/browser/agent_gateway/browser_api.h"
 
+#include <map>
 #include <optional>
 #include <string>
 #include <utility>
@@ -11,6 +12,7 @@
 #include "base/functional/bind.h"
 #include "base/location.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/cancelable_task_tracker.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
@@ -240,6 +242,99 @@ void BrowserApi::CloseTab(const std::string& tab_id, DictCallback callback) {
   }
   model->CloseWebContentsAt(index, TabCloseTypes::CLOSE_USER_GESTURE);
   result.Set("ok", true);
+  std::move(callback).Run(std::move(result));
+}
+
+std::string TabCategory(const GURL& url, const std::string& title) {
+  const std::string spec = base::ToLowerASCII(url.spec());
+  const std::string host = base::ToLowerASCII(url.host());
+  const std::string lower_title = base::ToLowerASCII(title);
+  if (host == "grok.com" || lower_title.find("grok") != std::string::npos)
+    return "Grok";
+  if (host == "grokipedia.com")
+    return "Wiki";
+  if (host == "127.0.0.1" && (url.port() == "9334" || spec.find(":9334") != std::string::npos))
+    return "Xplorer";
+  if (host.find("news") != std::string::npos ||
+      host.find("cnn.com") != std::string::npos ||
+      host.find("bbc.") != std::string::npos ||
+      lower_title.find("news") != std::string::npos)
+    return "News";
+  if (spec.find("/travel/flights") != std::string::npos ||
+      lower_title.find("flight") != std::string::npos)
+    return "Travel";
+  if (host == "localhost" ||
+      (host == "127.0.0.1" && url.port() != "9334"))
+    return "Development";
+  if (url.SchemeIs("chrome"))
+    return "Browser";
+  return "Misc";
+}
+
+tab_groups::TabGroupColorId ColorForCategory(const std::string& category) {
+  if (category == "Grok")
+    return tab_groups::TabGroupColorId::kPurple;
+  if (category == "Xplorer")
+    return tab_groups::TabGroupColorId::kBlue;
+  if (category == "News")
+    return tab_groups::TabGroupColorId::kRed;
+  if (category == "Travel")
+    return tab_groups::TabGroupColorId::kGreen;
+  if (category == "Development")
+    return tab_groups::TabGroupColorId::kYellow;
+  if (category == "Wiki")
+    return tab_groups::TabGroupColorId::kCyan;
+  if (category == "Browser")
+    return tab_groups::TabGroupColorId::kGrey;
+  return tab_groups::TabGroupColorId::kOrange;
+}
+
+void BrowserApi::OrganizeTabs(DictCallback callback) {
+  base::DictValue result;
+  base::ListValue groups_out;
+  int total_tabs = 0;
+  int groups_created = 0;
+
+  for (BrowserWindowInterface* browser : GetAllBrowserWindowInterfaces()) {
+    TabStripModel* model = browser->GetTabStripModel();
+    std::map<std::string, std::vector<int>> buckets;
+    for (int i = 0; i < model->count(); ++i) {
+      content::WebContents* wc = model->GetWebContentsAt(i);
+      if (!wc)
+        continue;
+      ++total_tabs;
+      const std::string category = TabCategory(
+          wc->GetLastCommittedURL(),
+          base::UTF16ToUTF8(wc->GetTitle()));
+      buckets[category].push_back(i);
+    }
+    for (auto& [category, indices] : buckets) {
+      if (indices.empty())
+        continue;
+      tab_groups::TabGroupId group = model->AddToNewGroup(indices);
+      tab_groups::TabGroupVisualData visual_data(
+          base::UTF8ToUTF16(category), ColorForCategory(category));
+      model->ChangeTabGroupVisuals(group, visual_data);
+      ++groups_created;
+
+      base::DictValue g;
+      g.Set("title", category);
+      g.Set("group_id", group.ToString());
+      base::ListValue tab_ids;
+      const int sid = browser->GetSessionID().id();
+      for (int idx : indices) {
+        tab_ids.Append(base::NumberToString(sid) + ":" +
+                       base::NumberToString(idx));
+      }
+      g.Set("tab_ids", std::move(tab_ids));
+      groups_out.Append(std::move(g));
+    }
+  }
+
+  result.Set("ok", true);
+  result.Set("tabs", total_tabs);
+  result.Set("groups_created", groups_created);
+  result.Set("groups", std::move(groups_out));
   std::move(callback).Run(std::move(result));
 }
 

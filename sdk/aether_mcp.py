@@ -203,6 +203,18 @@ def t_group_tabs(a):
     return text(json.dumps(api("POST", "/tabs/group", body)))
 
 
+def t_organize_tabs(_):
+    g = gateway()
+    req = urllib.request.Request(
+        g["url"] + "/api/browser/organize-tabs",
+        data=b"{}",
+        method="POST",
+        headers={"Content-Type": "application/json"},
+    )
+    with urllib.request.urlopen(req, timeout=30) as r:
+        return text(json.dumps(json.load(r), indent=2))
+
+
 def t_split_tab(a):
     tab = a.get("tab") or _first_tab()
     layout = a.get("layout", "side_by_side")
@@ -301,6 +313,11 @@ TOOLS = {
             "tab_ids": {"type": "array", "items": {"type": "string"}},
             "title": {"type": "string"}},
          "required": ["tab_ids"]}, t_group_tabs),
+    "xbrowser_organize_tabs": (
+        "Organize all open tabs into logical native Chrome groups in one call "
+        "(Grok, Xplorer, News, Travel, Development, …). Prefer this over manual "
+        "grouping when the user asks to organize tabs.",
+        {"type": "object", "properties": {}}, t_organize_tabs),
     "xbrowser_split_tab": (
         "Open split view from a tab (side_by_side or stacked).",
         {"type": "object", "properties": {
