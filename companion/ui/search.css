@@ -180,6 +180,37 @@ html.grok-build body {
   text-overflow: ellipsis;
 }
 
+.search-modes {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+}
+
+.search-mode {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-secondary);
+  border-radius: 999px;
+  padding: 6px 14px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.search-mode:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.search-mode.active {
+  background: var(--button-bg);
+  color: var(--button-text);
+  border-color: var(--button-bg);
+}
+
 .hero {
   text-align: center;
   width: 100%;
@@ -219,6 +250,30 @@ html.grok-build body {
 }
 
 .hidden { display: none !important; }
+
+.thinking {
+  text-align: center;
+  color: var(--text-secondary);
+  padding: 24px;
+  font-size: 15px;
+}
+
+.open-grok-web {
+  display: block;
+  margin: 16px auto 0;
+  border: 1px solid var(--border);
+  background: var(--surface-elevated);
+  color: var(--text);
+  border-radius: 999px;
+  padding: 10px 20px;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.open-grok-web:hover {
+  border-color: var(--accent);
+}
 
 .results { margin-top: 28px; }
 

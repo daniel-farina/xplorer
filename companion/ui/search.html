@@ -29,7 +29,7 @@
           </div>
         </div>
         <div class="grok-pill-wrap">
-          <button type="button" class="grok-pill active" data-home="web">Grok Web</button>
+          <button type="button" class="grok-pill" data-home="web">Grok Web</button>
           <div class="grok-pill-menu">
             <a href="/search">Search</a>
             <a href="https://grok.com/imagine" target="_blank" rel="noopener noreferrer">Imagine</a>
@@ -62,6 +62,12 @@
           <path d="M10.9503 23.0313C7.07343 19.3235 7.74185 13.5853 11.0498 10.2763C13.4959 7.82722 17.5036 6.82767 21.0021 8.2971L24.7595 6.55998C24.0826 6.07017 23.215 5.54334 22.2195 5.17313C17.7198 3.31926 12.3326 4.24192 8.67479 7.90126C5.15635 11.4239 4.0499 16.8403 5.94992 21.4622C7.36924 24.9165 5.04257 27.3598 2.69884 29.826C1.86829 30.7002 1.0349 31.5745 0.36364 32.5L10.9474 23.0341" fill="currentColor"></path>
         </svg>
       </div>
+      <nav id="search-modes" class="search-modes" aria-label="Search mode">
+        <button type="button" class="search-mode active" data-mode="web">Web</button>
+        <button type="button" class="search-mode" data-mode="images">Images</button>
+        <button type="button" class="search-mode" data-mode="videos">Videos</button>
+        <button type="button" class="search-mode" data-mode="imagine">Imagine</button>
+      </nav>
       <form id="search-form" class="search-box">
         <input id="q" type="search" placeholder="Search with Grok…" autocomplete="off" autofocus>
         <div id="image-tools" class="image-tools hidden">
@@ -80,6 +86,7 @@
       <img id="preview-img" alt="Search image">
       <button type="button" id="clear-image" class="clear-image" title="Remove image">×</button>
     </div>
+    <section id="results" class="results hidden" aria-live="polite"></section>
   </main>
   <script src="/common.js"></script>
   <script src="/search.js"></script>
