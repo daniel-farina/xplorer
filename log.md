@@ -314,8 +314,7 @@ User ran `/loop 15m improve our browser…`. Background conductor task `task-BFB
 - **Chat:** Esc (on filter input or document when filter active) clears `convFilterQuery`, resets the `#conv-filter` input, and re-renders the conversation list.
 - **Apps:** Filter tabs now include "Idle" (added to `apps.html` buttons + `FILTER_LABELS` in `apps.js`); idle status was already computed in counts/status logic.
 - **Settings:** New "Chrome" card on `/settings` with `<a href="chrome://settings">` link (relies on Chromium's native chrome:// handler for full browser prefs).
-- **Test:** `python3 sdk/companion_smoke_test.py` → ALL OK (serves fresh JS/HTML with new code paths; no asserts broken). UI files loaded live from `~/cli_experiment/aether/companion/ui` (UiDir lookup, no native rebuild or reinstall required). Verified via curl: init fn, Escape handlers, idle data-filter, chrome:// url present.
-- Revert not needed (smoke green).
+- **Test:** `python3 sdk/companion_smoke_test.py` → ALL OK (serves fresh JS/HTML with new code paths; enhanced asserts for initSearchModel, Escape, idle filter, chrome:// link). UI files loaded live from `~/cli_experiment/aether/companion/ui` (UiDir lookup, no native rebuild or reinstall required). Verified via curl + smoke. Revert not needed (smoke green).
 
 **Loop 15 test summary**
 | Check | Result |
