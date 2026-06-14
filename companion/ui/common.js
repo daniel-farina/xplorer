@@ -71,6 +71,18 @@ async function saveSettings(partial) {
   return res.json();
 }
 
+/** Highlight companion toolbar pill from current route (127.0.0.1 pages). */
+function syncCompanionToolbarPill() {
+  const path = (location.pathname || '').toLowerCase();
+  let routeHome = SEARCH_HOME_BUILD;
+  if (path.startsWith('/search')) routeHome = SEARCH_HOME_WEB;
+  const toggle = document.getElementById('home-toggle');
+  if (!toggle) return;
+  toggle.querySelectorAll('[data-home]').forEach((btn) => {
+    btn.classList.toggle('active', btn.dataset.home === routeHome);
+  });
+}
+
 /** Wire Grok Build / Grok Web / Groki home toggle. */
 async function initSearchHomeToggle(container, { onSwitch, pageHome } = {}) {
   if (!container) return;
@@ -91,6 +103,7 @@ async function initSearchHomeToggle(container, { onSwitch, pageHome } = {}) {
     });
   };
   setActive(pageHome || currentHome);
+  syncCompanionToolbarPill();
 
   buttons.forEach((btn) => {
     btn.addEventListener('click', async () => {

@@ -65,7 +65,7 @@ function formatGrokWebQuery(query) {
 }
 
 function usesNativeSearch() {
-  return !!attachedImage || mode === 'imagine';
+  return !!attachedImage || mode === 'imagine' || mode === 'videos';
 }
 
 async function openGrokWebQuery(query) {

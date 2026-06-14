@@ -44,6 +44,7 @@ function renderApps(data) {
           : ''}
         <button type="button" class="apps-btn" data-rename="${escapeHtml(app.id)}" data-name="${escapeHtml(app.name || 'App')}">Rename</button>
         <button type="button" class="apps-btn" data-duplicate="${escapeHtml(app.id)}">Duplicate</button>
+        <button type="button" class="apps-btn" data-export="${escapeHtml(app.id)}" data-name="${escapeHtml(app.name || 'App')}">Export</button>
         <button type="button" class="apps-btn" data-modify="${escapeHtml(app.id)}">Modify</button>
         <button type="button" class="apps-btn danger" data-delete="${escapeHtml(app.id)}" data-name="${escapeHtml(app.name || 'App')}">Delete</button>
       </div>`;
@@ -95,6 +96,12 @@ function renderApps(data) {
         alert(e.message);
         btn.disabled = false;
       }
+    };
+  });
+  grid.querySelectorAll('[data-export]').forEach((btn) => {
+    btn.onclick = () => {
+      const slug = (btn.dataset.name || 'app').trim().replace(/[^\w.-]+/g, '_').slice(0, 48);
+      window.location.href = `/api/apps/${encodeURIComponent(btn.dataset.export)}/export?filename=${encodeURIComponent(slug)}.zip`;
     };
   });
   grid.querySelectorAll('[data-modify]').forEach((btn) => {

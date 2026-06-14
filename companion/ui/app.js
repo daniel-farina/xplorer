@@ -27,7 +27,12 @@ function renderMessages(conv) {
   for (const m of conv.messages || []) {
     const div = document.createElement('div');
     div.className = `msg ${m.role}`;
-    div.textContent = m.content;
+    if (m.role === 'assistant') {
+      div.innerHTML = renderMarkdown(m.content || '');
+      div.classList.add('markdown');
+    } else {
+      div.textContent = m.content || '';
+    }
     messagesEl.appendChild(div);
   }
   messagesEl.scrollTop = messagesEl.scrollHeight;
