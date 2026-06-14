@@ -1,6 +1,6 @@
 # Xplorer improvement log
 
-Autonomous 20-minute improvement loop. Each entry: change, test result, commit.
+Autonomous 15-minute improvement loop. Each entry: change, test result, commit.
 
 ---
 
@@ -72,13 +72,38 @@ See above. Verified: search page serves mode pills + results section (curl).
 
 ## Loop config (2026-06-14)
 
-- Interval changed from **30m → 20m** per user request
+- Scheduler task `019ec4b284f0`: **15m** recurring (`intervalSecs: 900`)
 - GitHub repo renamed **xbrowser → xplorer**, visibility set to **private**
 - Remote: `https://github.com/daniel-farina/xplorer.git`
-- Pushed 35 local commits to origin
+
+## Loop 4 (2026-06-14 ~02:00)
+
+### Commit 5bce270 — feat(ui)
+- **Videos:** `usesNativeSearch()` includes `videos` → `/api/search/stream` + results grid
+- **Chat:** `renderMessages()` renders assistant replies with `renderMarkdown()`
+- **Toolbar:** `syncCompanionToolbarPill()` highlights Grok Web on `/search`, Build on `/` `/apps`
+- **Apps:** Export button in gallery (links to export API)
+- **apps.html:** Search link in Grok Web pill menu
+- **Test:** curl `/search.js` shows video native path ✓ (no native rebuild for UI)
+
+### Commit ad170d3 — feat(apps) native
+- `GET /api/apps/{id}/export` → `application/zip` with `Content-Disposition`
+- Zip runs on `MayBlock` thread pool (fixes IO-thread deadlock with `/usr/bin/zip`)
+- **Test:** Build 41s ✓ | reinstall Xplorer.app ✓ | export `B7A73401C992B4D9` → 200, 220-byte zip with index.html ✓
+
+**Loop 4 test summary**
+| Check | Result |
+|-------|--------|
+| Companion /api/apps | 200 ✓ |
+| Export zip | 200, valid zip archive ✓ |
+| search.js video native | `mode === 'videos'` in usesNativeSearch ✓ |
+| common.js toolbar sync | syncCompanionToolbarPill present ✓ |
+| Build + reinstall | 41s, relaunch OK ✓ |
 
 ## Next loop priorities
-- App export/download zip
-- Search: video mode uses native stream with results grid
-- Toolbar: companion localhost pill highlighting on 127.0.0.1
-- Chat: streaming markdown in main conversations view
+- Web search: optional native stream (currently Grok Web handoff)
+- App export: disable button when folder missing; show error toast
+- Companion smoke test script (curl-based API checks in sdk/)
+- Chat: code blocks + syntax highlighting in markdown
+- Toolbar: highlight active sub-route (Conversations vs Apps vs App builder)
+- Migrate stale ~/.aether/apps registry paths to ~/.xplorer
