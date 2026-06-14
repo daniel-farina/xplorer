@@ -1590,6 +1590,7 @@ bool GrokNative::TryHandleRequest(
     net::HttpServerResponseInfo resp(net::HTTP_FOUND);
     resp.AddHeader("Location", dest);
     resp.AddHeader("Cache-Control", "no-store");
+    resp.AddHeader("Connection", "close");
     server->SendResponse(connection_id, resp, TRAFFIC_ANNOTATION_FOR_TESTS);
     return true;
   }

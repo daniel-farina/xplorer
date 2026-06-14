@@ -215,7 +215,8 @@ std::string BuildInjectScript(const std::string& active_mode) {
     if(host.indexOf('grok.com')>=0)return 'web';
     if(host.indexOf('grokipedia.com')>=0)return 'wiki';
     if(isXHost(host)){
-      if(path==='/i/chat'||path.indexOf('/i/chat/')===0)return 'xchat';
+      if(path==='/i/chat'||path.indexOf('/i/chat/')===0||
+         path==='/messages'||path.indexOf('/messages/')===0)return 'xchat';
       return 'xcom';
     }
     if(host==='127.0.0.1'||host==='localhost'){
@@ -281,19 +282,33 @@ std::string BuildInjectScript(const std::string& active_mode) {
     return !bar||bar.parentNode!==document.documentElement||
       document.documentElement.firstChild!==bar;
   }
+  function onRouteChange(){
+    applyActivePill();
+  }
   ensureBar();
   hookHistory();
+  window.addEventListener('popstate',onRouteChange);
+  window.addEventListener('pageshow',onRouteChange);
+  document.addEventListener('visibilitychange',function(){
+    if(!document.hidden) onRouteChange();
+  });
   if(!window.__xplorerGrokBarWatch){
     window.__xplorerGrokBarWatch=true;
-    var lastHref=location.href;
+    var lastPath=location.pathname+location.search+location.hash;
     new MutationObserver(function(){
       if(barNeedsMount()) ensureBar();
-      else if(location.href!==lastHref){lastHref=location.href;applyActivePill();}
+      else{
+        var p=location.pathname+location.search+location.hash;
+        if(p!==lastPath){lastPath=p;onRouteChange();}
+      }
     }).observe(document.documentElement,{childList:true,subtree:true});
     setInterval(function(){
       if(barNeedsMount()) ensureBar();
-      else if(location.href!==lastHref){lastHref=location.href;applyActivePill();}
-    },500);
+      else{
+        var p=location.pathname+location.search+location.hash;
+        if(p!==lastPath){lastPath=p;onRouteChange();}
+      }
+    },400);
   }
 })();)",
       css_json.c_str(), html_json.c_str(), fallback_pill_json.c_str(),
