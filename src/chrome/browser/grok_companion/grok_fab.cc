@@ -174,6 +174,7 @@ std::string BuildFabInjectScript() {
       appendMenuItem(menu,'renameapp','\u270e','Rename app');
       appendMenuItem(menu,'duplicateapp','\u2398','Duplicate app');
       appendMenuItem(menu,'shareapp','\u29c9','Copy app link');
+      appendMenuItem(menu,'copybuilderlink','\u2699','Copy builder link');
       appendMenuItem(menu,'exportapp','\u2b07','Export app');
     }
     appendMenuItem(menu,'analyze','\u2726','Analyze with Grok');
@@ -290,8 +291,8 @@ std::string BuildFabInjectScript() {
     }else if(fab.parentNode!==wrap){
       wrap.appendChild(fab);
     }
-    if(menu.dataset.version!=='13'){
-      menu.dataset.version='13';
+    if(menu.dataset.version!=='14'){
+      menu.dataset.version='14';
       buildMenu(menu);
       fab.dataset.wired='';
     }
@@ -300,8 +301,8 @@ std::string BuildFabInjectScript() {
     buildFabButton(fab);
     var oldPanel=document.getElementById('xplorer-grok-panel');
     if(oldPanel)oldPanel.remove();
-    if(fab.dataset.wired==='13')return;
-    fab.dataset.wired='13';
+    if(fab.dataset.wired==='14')return;
+    fab.dataset.wired='14';
     function setBusy(on){
       state.busy=on;
       fab.disabled=on;
@@ -345,6 +346,29 @@ std::string BuildFabInjectScript() {
           });});
         }).catch(function(e){
           if(e&&e.message)alert('Rename failed: '+e.message);
+        }).finally(function(){setBusy(false);});
+        return;
+      }
+      if(action==='copybuilderlink'){
+        var ctx=detectAppContext();
+        if(!ctx){
+          alert('Not viewing an Xplorer app.');
+          return;
+        }
+        setBusy(true);
+        fetch(GW+'/api/apps').then(function(r){return r.json();}).then(function(d){
+          if(d.error)throw new Error(d.error);
+          var app=resolveAppFromContext(ctx,d.apps||[]);
+          if(!app)throw new Error('App not found');
+          var link=GW+'/app?id='+encodeURIComponent(app.id);
+          if(navigator.clipboard&&navigator.clipboard.writeText){
+            return navigator.clipboard.writeText(link).then(function(){
+              alert('Builder link copied');
+            });
+          }
+          window.prompt('Copy builder link:',link);
+        }).catch(function(e){
+          alert('Copy failed: '+(e.message||e));
         }).finally(function(){setBusy(false);});
         return;
       }

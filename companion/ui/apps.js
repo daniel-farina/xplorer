@@ -97,6 +97,32 @@ function appsForFilter(apps) {
   return apps.filter((a) => (a.status || 'idle') === statusFilter);
 }
 
+function statusCounts(apps) {
+  const counts = { all: apps.length, ready: 0, building: 0, error: 0, idle: 0 };
+  for (const app of apps) {
+    const s = app.status || 'idle';
+    if (s in counts) counts[s] += 1;
+  }
+  return counts;
+}
+
+const FILTER_LABELS = {
+  all: 'All',
+  ready: 'Ready',
+  building: 'Building',
+  error: 'Error',
+};
+
+function updateFilterCounts(apps) {
+  const counts = statusCounts(apps);
+  filterBar?.querySelectorAll('[data-filter]').forEach((btn) => {
+    const key = btn.dataset.filter || 'all';
+    const n = counts[key] ?? 0;
+    const label = FILTER_LABELS[key] || key;
+    btn.textContent = n ? `${label} (${n})` : label;
+  });
+}
+
 function renderApps(data) {
   const apps = data.apps || [];
   lastApps = apps;
@@ -109,6 +135,7 @@ function renderApps(data) {
   filterBar?.querySelectorAll('[data-filter]').forEach((btn) => {
     btn.classList.toggle('active', btn.dataset.filter === statusFilter);
   });
+  updateFilterCounts(apps);
   for (const app of visible) {
     const card = document.createElement('article');
     card.className = 'app-card' + (app.status === 'building' ? ' building' : '');

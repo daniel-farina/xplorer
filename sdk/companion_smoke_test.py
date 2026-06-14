@@ -110,11 +110,17 @@ def main() -> int:
     assert "data-restart" in apps_js
     assert "restart-batch" in apps_js
     assert "statusFilter" in apps_js
+    assert "updateFilterCounts" in apps_js
     _, apps_html = get("/apps")
     assert "apps-filter-bar" in apps_html
+    exportable_count = sum(1 for a in apps["apps"] if a.get("exportable"))
+    ready_count = sum(1 for a in apps["apps"] if a.get("status") == "ready")
+    assert exportable_count >= 0 and ready_count >= 0
+    print(f"apps filter counts: ready={ready_count} exportable={exportable_count}")
     print("apps.js bulk actions: OK")
 
     assert "convFilterQuery" in app_js
+    assert "convFilterInput.focus" in app_js
     req = urllib.request.Request(f"{BASE}/", headers={"Accept": "text/html"})
     with urllib.request.urlopen(req, timeout=10) as resp:
         app_html = resp.read().decode()
@@ -131,6 +137,7 @@ def main() -> int:
 
     _, search_js = get("/search.js")
     assert "Try Grok Web instead" in search_js
+    assert "Continue in Imagine" in search_js
     print("search.js fallback: OK")
 
     _, welcome = get("/welcome")

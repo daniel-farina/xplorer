@@ -197,7 +197,10 @@ function renderSearchResults(query, data) {
   const grokBtn = document.createElement('button');
   grokBtn.type = 'button';
   grokBtn.className = 'open-grok-web';
-  grokBtn.textContent = 'Continue in Grok Web →';
+  const activeMode = data.mode || mode;
+  grokBtn.textContent = activeMode === 'imagine'
+    ? 'Continue in Imagine →'
+    : 'Continue in Grok Web →';
   grokBtn.onclick = () => openGrokWebQuery(query);
   resultsEl.appendChild(grokBtn);
 }

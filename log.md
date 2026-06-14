@@ -252,10 +252,30 @@ See above. Verified: search page serves mode pills + results section (curl).
 | FAB shareapp + wiki localStorage | ✓ |
 | Build + reinstall | 42s, relaunch OK ✓ |
 
+## Loop 13 (2026-06-14 ~08:15)
+
+### Commit — feat(ui+native+fab): filter counts, imagine handoff, builder link
+- **Apps:** status tab labels show counts (`Ready (5)`, etc.) via `updateFilterCounts`
+- **Chat:** `/` focuses conversation filter (when not in an input)
+- **Search:** results button reads **Continue in Imagine →** in imagine mode (uses `openGrokWebQuery`)
+- **Native bar:** Imagine menu link handoff with query + mode-aware prompts; wiki→web uses `pageSearchMode`
+- **FAB:** **Copy builder link** (`/app?id=`) on runtime pages
+- **Smoke:** filter count markers, imagine button text, conv `/` shortcut
+- **Test:** companion_smoke_test.py ALL OK ✓ | build 42s ✓ | reinstall ✓
+
+**Loop 13 test summary**
+| Check | Result |
+|-------|--------|
+| companion_smoke_test.py | ALL OK (filter counts) |
+| updateFilterCounts | ✓ |
+| grok_web_bar imagine handoff | ✓ |
+| FAB copybuilderlink | ✓ |
+| Build + reinstall | 42s, relaunch OK ✓ |
+
 ## Next loop priorities
-- Apps: filter counts on status tabs
-- Chat: keyboard shortcut to focus conv filter (/)
-- Search: Continue in Grok Web uses imagine URL in imagine mode
-- Native: grok_web_bar imagine pill handoff
-- FAB: copy builder link (companion /app?id=)
-- Smoke test: apps filter tab interaction via exportable counts
+- Apps: idle filter tab + exportable-only filter
+- Chat: Esc clears conv filter
+- Search: error fallback uses imagine URL in imagine mode
+- Native: grok.com search page Imagine submenu handoff
+- FAB: open app preview in new tab from builder link
+- Smoke test: filter tab switches ready count in live UI

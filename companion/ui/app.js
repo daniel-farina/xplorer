@@ -276,6 +276,16 @@ convFilterInput?.addEventListener('input', () => {
   renderConvList();
 });
 
+document.addEventListener('keydown', (e) => {
+  if (e.key !== '/' || e.metaKey || e.ctrlKey || e.altKey) return;
+  const tag = (document.activeElement?.tagName || '').toLowerCase();
+  if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+  if (!convFilterInput) return;
+  e.preventDefault();
+  convFilterInput.focus();
+  convFilterInput.select();
+});
+
 initSearchHomeToggle($('#home-toggle'));
 
 startThemeWatcher();

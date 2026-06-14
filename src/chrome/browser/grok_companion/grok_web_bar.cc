@@ -279,7 +279,7 @@ std::string BuildInjectScript(const std::string& active_mode) {
     mountBar(bar);
     applyPadding(bar);
     applyActivePill();
-    wireWikiWebHandoff(bar);
+    wirePillHandoffs(bar);
   }
   function barNeedsMount(){
     var bar=document.getElementById(BAR_ID);
@@ -296,10 +296,41 @@ std::string BuildInjectScript(const std::string& active_mode) {
       try{return localStorage.getItem('xplorer_search_query')||'';}catch(e){return '';}
     }catch(e){return '';}
   }
-  function wireWikiWebHandoff(bar){
-    if(!bar||bar.dataset.wikiHandoff==='1')return;
-    bar.dataset.wikiHandoff='1';
+  function pageSearchMode(){
+    try{return localStorage.getItem('xplorer_search_mode')||'';}catch(e){return '';}
+  }
+  function handoffQuery(q,mode,fallback){
+    var prompt=q;
+    if(mode==='imagine')prompt='Generate an image: '+q;
+    else if(mode==='videos')prompt='Search for videos: '+q;
+    else if(mode==='images')prompt='Search for images: '+q;
+    fetch(GW+'/api/page/grok-web',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({query:prompt})
+    }).then(function(r){return r.json().then(function(d){
+      if(!r.ok)throw new Error(d.error||'handoff failed');
+      var url=d.grok_url||fallback;
+      if(mode==='imagine'&&url.indexOf('xplorer_grok=')>=0){
+        url=url.replace(/^https:\/\/grok\.com\/?/,'https://grok.com/imagine');
+      }
+      location.href=url;
+    });}).catch(function(){location.href=fallback;});
+  }
+  function wirePillHandoffs(bar){
+    if(!bar||bar.dataset.pillHandoff==='1')return;
+    bar.dataset.pillHandoff='1';
     bar.addEventListener('click',function(ev){
+      var imagineLink=ev.target&&ev.target.closest?
+        ev.target.closest('a[href*="grok.com/imagine"]'):null;
+      if(imagineLink){
+        var iq=pageQuery();
+        if(!iq)return;
+        ev.preventDefault();
+        ev.stopPropagation();
+        handoffQuery(iq,'imagine','https://grok.com/imagine');
+        return;
+      }
       var pill=ev.target&&ev.target.closest?ev.target.closest('.grok-pill[data-pill]'):null;
       if(!pill||pill.getAttribute('data-pill')!=='web')return;
       var host=(location.hostname||'').toLowerCase();
@@ -308,17 +339,7 @@ std::string BuildInjectScript(const std::string& active_mode) {
       if(!q)return;
       ev.preventDefault();
       ev.stopPropagation();
-      fetch(GW+'/api/page/grok-web',{
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({query:q})
-      }).then(function(r){return r.json().then(function(d){
-        if(!r.ok)throw new Error(d.error||'handoff failed');
-        if(d.grok_url)location.href=d.grok_url;
-        else throw new Error('missing grok_url');
-      });}).catch(function(){
-        location.href='https://grok.com/';
-      });
+      handoffQuery(q,pageSearchMode(),'https://grok.com/');
     },true);
   }
   ensureBar();
