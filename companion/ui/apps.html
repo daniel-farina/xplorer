@@ -3,12 +3,12 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Grok — XBrowser</title>
+  <title>Grok Apps — XBrowser</title>
   <link rel="stylesheet" href="/theme.css">
   <link rel="stylesheet" href="/toolbar.css">
-  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="/apps.css">
 </head>
-<body>
+<body class="apps-page">
   <header class="grok-toolbar">
     <a class="grok-logo" href="/search">✦ Grok</a>
     <div class="grok-toolbar-spacer"></div>
@@ -48,22 +48,27 @@
       </div>
     </div>
   </header>
-  <aside class="sidebar">
-    <div class="sidebar-head">
-      <div class="sidebar-label">Conversations</div>
-      <button type="button" id="new-chat" class="sidebar-new" title="New conversation">+ New</button>
-    </div>
-    <ul id="conv-list"></ul>
-  </aside>
-  <main class="chat">
-    <div id="messages" class="messages"></div>
-    <form id="composer" class="composer">
-      <select id="model-select" class="composer-model-select" title="Model" aria-label="Model"></select>
-      <textarea id="input" rows="1" placeholder="Ask Grok to browse, organize tabs, manage bookmarks…"></textarea>
-      <button type="submit" id="send">Send</button>
-    </form>
+  <main class="apps-main">
+    <section class="apps-hero">
+      <h1>Apps</h1>
+      <p>Build, import, and manage apps with Grok Build agents. Each app lives in its own folder with a dedicated conversation.</p>
+    </section>
+    <section class="apps-create">
+      <textarea id="create-prompt" placeholder="Describe an app to build or changes to make…"></textarea>
+      <div class="apps-create-row">
+        <input id="create-name" type="text" placeholder="App name (optional)">
+        <button type="button" class="apps-btn primary" id="create-btn">Create app</button>
+      </div>
+    </section>
+    <section class="apps-import">
+      <input id="import-path" type="text" placeholder="Import existing app folder path…">
+      <input id="import-name" type="text" placeholder="Display name (optional)">
+      <button type="button" class="apps-btn" id="import-btn">Import</button>
+    </section>
+    <section id="apps-grid" class="apps-grid"></section>
+    <p id="apps-empty" class="apps-empty hidden">No apps yet. Create one above.</p>
   </main>
   <script src="/common.js"></script>
-  <script src="/app.js"></script>
+  <script src="/apps.js"></script>
 </body>
 </html>

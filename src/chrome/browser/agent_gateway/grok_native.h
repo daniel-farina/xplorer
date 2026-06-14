@@ -24,6 +24,21 @@ std::string BuildPageGrokWebPrompt(const std::string& text);
 std::string GetGrokWebPendingPrompt(const std::string& id);
 void ConsumeGrokWebPendingPrompt(const std::string& id);
 
+base::DictValue LoadCompanionSessions();
+void SaveCompanionSessions(const base::DictValue& data);
+std::string ResolveConfiguredModel(const std::string* model_override);
+
+void RunGrokAgentStream(
+    net::HttpServer* server,
+    scoped_refptr<base::SingleThreadTaskRunner> io_task_runner,
+    int connection_id,
+    const std::string& conv_id,
+    const std::string& app_id,
+    const std::string& message,
+    const std::string& session_id,
+    const std::string& model,
+    const base::FilePath& cwd);
+
 class GrokNative {
  public:
   // Returns true if |info| was handled (response sent or async work started).

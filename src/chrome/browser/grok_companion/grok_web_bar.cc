@@ -160,6 +160,8 @@ std::string BuildInjectScript(const std::string& active_mode) {
   const std::string search_href = SearchPageURL("").spec();
   const std::string chat_href =
       base::StringPrintf("http://%s:%d/", kCompanionHost, GatewayPort());
+  const std::string apps_href =
+      base::StringPrintf("http://%s:%d/apps", kCompanionHost, GatewayPort());
   const std::string build_active =
       active_mode == kSearchHomeBuild ? " active" : "";
   const std::string web_active = active_mode == kSearchHomeWeb ? " active" : "";
@@ -179,7 +181,7 @@ std::string BuildInjectScript(const std::string& active_mode) {
       R"(<div class="grok-pill-menu"><a href="https://x.com/i/chat" target="_blank" rel="noopener noreferrer">Open X Chat</a></div></div>)"
       R"(<div class="grok-pill-wrap">)"
       R"(<a class="grok-pill%s" href="%s">Grok Build</a>)"
-      R"(<div class="grok-pill-menu"><a href="%s">Conversations</a></div></div>)"
+      R"(<div class="grok-pill-menu"><a href="%s">Conversations</a><a href="%s">Apps</a></div></div>)"
       R"(<div class="grok-pill-wrap">)"
       R"(<a class="grok-pill%s" href="%s">Grok Web</a>)"
       R"(<div class="grok-pill-menu"><a href="https://grok.com/imagine" target="_blank" rel="noopener noreferrer">Imagine</a></div></div>)"
@@ -191,7 +193,7 @@ std::string BuildInjectScript(const std::string& active_mode) {
       R"(<div class="grok-pill-menu"><a href="https://x.com/" target="_blank" rel="noopener noreferrer">Home</a></div></div>)"
       R"(</div></div>)",
       search_href.c_str(), build_active.c_str(), build_href.c_str(),
-      chat_href.c_str(), web_active.c_str(), web_href.c_str(),
+      chat_href.c_str(), apps_href.c_str(), web_active.c_str(), web_href.c_str(),
       wiki_active.c_str(), wiki_href.c_str());
   const std::string html_json = JsonStringLiteral(html);
 

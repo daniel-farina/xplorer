@@ -33,6 +33,7 @@
 #include "base/task/single_thread_task_runner.h"
 #include "base/task/thread_pool.h"
 #include "base/time/time.h"
+#include "chrome/browser/agent_gateway/app_store.h"
 #include "chrome/browser/agent_gateway/browser_api.h"
 #include "chrome/browser/agent_gateway/tab_screenshot.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
@@ -846,7 +847,7 @@ void SendStreamError(net::HttpServer* server,
   EndNdjsonStream(server, connection_id);
 }
 
-enum class GrokStreamKind { kSearch, kChat };
+enum class GrokStreamKind { kSearch, kChat, kAppBuild };
 
 void SaveChatAssistantReply(const std::string& conv_id,
                             const std::string& text,
@@ -880,7 +881,8 @@ void PumpGrokStream(net::HttpServer* server,
                     std::string model,
                     std::string mode,
                     GrokStreamKind kind,
-                    std::string conv_id) {
+                    std::string conv_id,
+                    std::string app_id) {
   int pipe_fds[2];
   if (pipe(pipe_fds) != 0) {
     io_task_runner->PostTask(
@@ -959,6 +961,10 @@ void PumpGrokStream(net::HttpServer* server,
   process.WaitForExit(&exit_code);
 
   if (exit_code != 0) {
+    if (!app_id.empty()) {
+      OnAppBuildStreamFinished(app_id, conv_id, exit_code, session_id,
+                               full_text);
+    }
     base::DictValue err;
     err.Set("type", "error");
     err.Set("error", "grok failed (exit " + base::NumberToString(exit_code) +
@@ -999,6 +1005,9 @@ void PumpGrokStream(net::HttpServer* server,
       result_event.Set("sessionId", session_id);
     if (!conv_id.empty() && !full_text.empty())
       SaveChatAssistantReply(conv_id, full_text, session_id);
+    if (!app_id.empty())
+      OnAppBuildStreamFinished(app_id, conv_id, exit_code, session_id,
+                               full_text);
   }
   std::string result_line;
   base::JSONWriter::Write(result_event, &result_line);
@@ -1028,7 +1037,7 @@ void RunGrokSearchStream(
                      BuildGrokSearchCommand(query, mode, model, true,
                                             image.data.empty() ? nullptr
                                                                : &image),
-                     model, mode, GrokStreamKind::kSearch, ""));
+                     model, mode, GrokStreamKind::kSearch, "", ""));
 }
 
 content::WebContents* FindWebContentsByTabId(const std::string& tab_id) {
@@ -1253,6 +1262,52 @@ base::CommandLine BuildGrokChatCommand(const std::string& message,
   return cmd;
 }
 
+base::CommandLine BuildGrokAgentCommand(const std::string& message,
+                                        const std::string& session_id,
+                                        const std::string& model,
+                                        bool streaming,
+                                        const base::FilePath& cwd,
+                                        const std::string& rules) {
+  base::CommandLine cmd = BuildGrokChatCommand(message, session_id, model,
+                                             streaming);
+  if (!cwd.empty()) {
+    cmd.AppendArg("--cwd");
+    cmd.AppendArgPath(cwd);
+  }
+  if (!rules.empty()) {
+    cmd.AppendArg("--rules");
+    cmd.AppendArg(rules);
+  }
+  return cmd;
+}
+
+constexpr char kAppBuildRules[] =
+    "You are Grok Build, an app builder inside XBrowser. Work only inside the "
+    "app directory (--cwd). Create and modify files to build working apps. "
+    "Prefer simple HTML/CSS/JS or a small local server. Write a README with "
+    "how to run the app. Be concise in chat; put code in files.";
+
+void RunGrokAgentStream(
+    net::HttpServer* server,
+    scoped_refptr<base::SingleThreadTaskRunner> io_task_runner,
+    int connection_id,
+    const std::string& conv_id,
+    const std::string& app_id,
+    const std::string& message,
+    const std::string& session_id,
+    const std::string& model,
+    const base::FilePath& cwd) {
+  base::ThreadPool::CreateSequencedTaskRunner(
+      {base::MayBlock(), base::TaskPriority::USER_VISIBLE})
+      ->PostTask(
+          FROM_HERE,
+          base::BindOnce(
+              &PumpGrokStream, server, io_task_runner, connection_id,
+              BuildGrokAgentCommand(message, session_id, model, true, cwd,
+                                    kAppBuildRules),
+              model, "app-build", GrokStreamKind::kAppBuild, conv_id, app_id));
+}
+
 base::CommandLine BuildPageSummarizeCommand(const std::string& url,
                                             const std::string& title,
                                             const std::string& text,
@@ -1277,7 +1332,8 @@ void RunGrokChatStream(
                                 connection_id,
                                 BuildGrokChatCommand(message, session_id, model,
                                                      true),
-                                model, "chat", GrokStreamKind::kChat, conv_id));
+                                model, "chat", GrokStreamKind::kChat, conv_id,
+                                ""));
 }
 
 base::DictValue RunGrokSearch(const std::string& query,
@@ -1396,6 +1452,18 @@ void RunAsync(net::HttpServer* server,
               server, connection_id));
 }
 
+base::DictValue LoadCompanionSessions() {
+  return LoadSessions();
+}
+
+void SaveCompanionSessions(const base::DictValue& data) {
+  SaveSessions(data);
+}
+
+std::string ResolveConfiguredModel(const std::string* model_override) {
+  return ResolveModel(model_override);
+}
+
 bool GrokNative::TryHandleRequest(
     int connection_id,
     const net::HttpServerRequestInfo& info,
@@ -1403,6 +1471,11 @@ bool GrokNative::TryHandleRequest(
     int gateway_port,
     scoped_refptr<base::SingleThreadTaskRunner> io_task_runner) {
   const std::string path = PathOnly(info.path);
+
+  if (TryHandleAppsRequest(connection_id, info, server, gateway_port,
+                           io_task_runner)) {
+    return true;
+  }
 
   if (info.method == "OPTIONS") {
     net::HttpServerResponseInfo resp(net::HTTP_NO_CONTENT);
@@ -1427,6 +1500,14 @@ bool GrokNative::TryHandleRequest(
 
   if (info.method == "GET" && (path == "/search" || path == "/search/")) {
     return ServeUiFile(server, connection_id, "search.html");
+  }
+
+  if (info.method == "GET" && (path == "/apps" || path == "/apps/")) {
+    return ServeUiFile(server, connection_id, "apps.html");
+  }
+
+  if (info.method == "GET" && (path == "/app" || path == "/app/")) {
+    return ServeUiFile(server, connection_id, "app.html");
   }
 
   if (info.method == "GET" &&
@@ -1640,7 +1721,7 @@ bool GrokNative::TryHandleRequest(
                 &PumpGrokStream, server, io_task_runner, connection_id,
                 BuildPageSummarizeCommand(page_url, page_title, *text, model,
                                           true),
-                model, "summarize", GrokStreamKind::kChat, ""));
+                model, "summarize", GrokStreamKind::kChat, "", ""));
     return true;
   }
 

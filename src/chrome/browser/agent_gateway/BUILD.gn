@@ -4,6 +4,8 @@ source_set("agent_gateway") {
   sources = [
     "agent_gateway.cc",
     "agent_gateway.h",
+    "app_store.cc",
+    "app_store.h",
     "agent_session.cc",
     "agent_session.h",
     "browser_api.cc",
