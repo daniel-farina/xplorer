@@ -150,13 +150,44 @@ html[data-theme="dark"] .markdown .hl-num { color: #fbbf24; }
 }
 
 #conv-list li {
-  padding: 8px 14px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px 8px 14px;
   cursor: pointer;
   font-size: 13px;
   color: var(--text-secondary);
+}
+
+#conv-list li .conv-title {
+  flex: 1;
+  min-width: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+#conv-list li .conv-delete {
+  flex-shrink: 0;
+  opacity: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 16px;
+  line-height: 1;
+  padding: 2px 6px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+#conv-list li:hover .conv-delete,
+#conv-list li:focus-within .conv-delete {
+  opacity: 1;
+}
+
+#conv-list li .conv-delete:hover {
+  background: rgba(220, 38, 38, 0.12);
+  color: #dc2626;
 }
 
 #conv-list li:hover {
@@ -217,6 +248,50 @@ html[data-theme="dark"] .markdown .hl-num { color: #fbbf24; }
   font-size: 13px;
   font-style: italic;
   border: 1px dashed var(--border);
+}
+
+.msg.thinking.error {
+  font-style: normal;
+  border-color: rgba(220, 38, 38, 0.35);
+  color: var(--text);
+}
+
+.msg.thinking .stream-status {
+  font-style: italic;
+}
+
+.msg.thinking .stream-status-line {
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-top: 4px;
+}
+
+.msg.thinking .retry-btn {
+  margin-top: 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+
+.composer-stop {
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-elevated);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.composer-stop:hover {
+  border-color: #dc2626;
+  color: #dc2626;
 }
 
 .composer {

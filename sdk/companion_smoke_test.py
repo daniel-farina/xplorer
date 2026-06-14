@@ -67,6 +67,7 @@ def main() -> int:
     assert "grokWebUrlForQuery" in common
     assert "initToolbarHomeHotkeys" in common
     assert "persistConvModel" in common
+    assert "messageNeedsBrowserTools" in common
     assert "wikiUrlForQuery" in common
     assert "imagineUrlForQuery" in common
     print("common.js markers: OK")
@@ -74,7 +75,10 @@ def main() -> int:
     _, app_js = get("/app.js")
     assert "renameConversation" in app_js
     assert "deleteConversation" in app_js
-    print("app.js conv rename: OK")
+    assert "chatConversations" in app_js
+    assert "streamAbort" in app_js
+    assert "conv-delete" in app_js
+    print("app.js conv management: OK")
 
     # Conversation rename API
     req = urllib.request.Request(
@@ -127,6 +131,7 @@ def main() -> int:
     with urllib.request.urlopen(req, timeout=10) as resp:
         app_html = resp.read().decode()
     assert "conv-filter" in app_html
+    assert "composer-stop" in app_html or 'id="stop"' in app_html
     print("chat conv filter: OK")
 
     assert "runtime_alive" in apps_js

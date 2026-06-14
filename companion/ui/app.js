@@ -8,11 +8,17 @@ const modelSelect = $('#model-select');
 let conversations = [];
 let activeId = null;
 let busy = false;
+let streamAbort = null;
 let models = [];
 let activeModel = getStoredModel();
 let convFilterQuery = '';
 
 const convFilterInput = document.getElementById('conv-filter');
+const stopBtn = document.getElementById('stop');
+
+function chatConversations() {
+  return conversations.filter((c) => c.kind !== 'app');
+}
 
 async function api(path, opts = {}) {
   const r = await fetch(path, {
@@ -65,8 +71,9 @@ async function renameConversation(conv, nextTitle) {
 
 function filteredConversations() {
   const q = convFilterQuery.trim().toLowerCase();
-  if (!q) return conversations;
-  return conversations.filter((c) => (c.title || 'Chat').toLowerCase().includes(q));
+  const list = chatConversations();
+  if (!q) return list;
+  return list.filter((c) => (c.title || 'Chat').toLowerCase().includes(q));
 }
 
 function renderConvList() {
@@ -81,18 +88,30 @@ function renderConvList() {
   }
   for (const c of list) {
     const li = document.createElement('li');
-    li.textContent = c.title || 'Chat';
     li.className = c.id === activeId ? 'active' : '';
-    li.title = 'Double-click to rename · right-click to delete';
+    li.title = 'Double-click to rename';
     li.onclick = () => selectConv(c.id);
-    li.oncontextmenu = async (e) => {
-      e.preventDefault();
+
+    const title = document.createElement('span');
+    title.className = 'conv-title';
+    title.textContent = c.title || 'Chat';
+    li.appendChild(title);
+
+    const del = document.createElement('button');
+    del.type = 'button';
+    del.className = 'conv-delete';
+    del.title = 'Delete conversation';
+    del.setAttribute('aria-label', 'Delete conversation');
+    del.textContent = '×';
+    del.onclick = async (e) => {
+      e.stopPropagation();
       if (!confirm(`Delete "${c.title || 'Chat'}"?`)) return;
       try {
         await deleteConversation(c.id);
         conversations = conversations.filter((x) => x.id !== c.id);
         if (activeId === c.id) {
-          activeId = conversations[0]?.id || null;
+          const next = chatConversations()[0];
+          activeId = next?.id || null;
           if (!activeId) {
             await newChat();
             return;
@@ -104,6 +123,8 @@ function renderConvList() {
         alert(err.message);
       }
     };
+    li.appendChild(del);
+
     li.ondblclick = async (e) => {
       e.preventDefault();
       e.stopPropagation();
@@ -132,7 +153,11 @@ function selectConv(id) {
 async function refresh() {
   const data = await api('/api/conversations');
   conversations = data.conversations || [];
-  if (!activeId && conversations.length) activeId = conversations[0].id;
+  const chats = chatConversations();
+  if (!activeId && chats.length) activeId = chats[0].id;
+  if (activeId && !chats.some((c) => c.id === activeId)) {
+    activeId = chats[0]?.id || null;
+  }
   renderConvList();
   selectConv(activeId);
 }
@@ -146,19 +171,48 @@ async function newChat() {
   input.focus();
 }
 
-async function sendMessage(text) {
+function setStreamingUi(active) {
+  busy = active;
+  sendBtn.disabled = active;
+  if (stopBtn) stopBtn.hidden = !active;
+}
+
+function appendStatusLine(container, text) {
+  const line = document.createElement('div');
+  line.className = 'stream-status-line';
+  line.textContent = text;
+  container.appendChild(line);
+  while (container.children.length > 6) {
+    container.firstChild.remove();
+  }
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+}
+
+async function sendMessage(text, { retry = false } = {}) {
   if (!text.trim() || busy || !activeId) return;
-  busy = true;
-  sendBtn.disabled = true;
   const conv = conversations.find((c) => c.id === activeId);
-  conv.messages = conv.messages || [];
-  conv.messages.push({ role: 'user', content: text });
-  renderMessages(conv);
-  input.value = '';
+  if (!conv) return;
+
+  const model = messageNeedsBrowserTools(text)
+    ? modelForSearchMode('web', activeModel, models)
+    : activeModel;
+
+  if (!retry) {
+    conv.messages = conv.messages || [];
+    conv.messages.push({ role: 'user', content: text });
+    renderMessages(conv);
+    input.value = '';
+  }
+
+  setStreamingUi(true);
+  streamAbort = new AbortController();
 
   const thinking = document.createElement('div');
   thinking.className = 'msg assistant thinking';
-  thinking.textContent = 'Grok is thinking…';
+  const status = document.createElement('div');
+  status.className = 'stream-status';
+  status.textContent = 'Grok is thinking…';
+  thinking.appendChild(status);
   messagesEl.appendChild(thinking);
   messagesEl.scrollTop = messagesEl.scrollHeight;
 
@@ -166,7 +220,8 @@ async function sendMessage(text) {
     const res = await fetch(`/api/conversations/${activeId}/message/stream`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message: text, model: activeModel }),
+      body: JSON.stringify({ message: text, model }),
+      signal: streamAbort.signal,
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
@@ -177,7 +232,7 @@ async function sendMessage(text) {
     const decoder = new TextDecoder();
     let buffer = '';
     let reply = '';
-    let streamModelLabel = modelLabel(activeModel, models);
+    let thoughtBuf = '';
 
     while (true) {
       const { done, value } = await reader.read();
@@ -191,27 +246,31 @@ async function sendMessage(text) {
         const evt = parseStreamLine(line);
         if (!evt) continue;
         if (evt.type === 'meta') {
-          if (evt.model_label) streamModelLabel = evt.model_label;
+          if (evt.model_label) {
+            appendStatusLine(status, `Model: ${evt.model_label}`);
+          }
         } else if (evt.type === 'thought') {
-          thinking.textContent = evt.data || 'Grok is thinking…';
+          thoughtBuf += evt.data || '';
+          if (thoughtBuf.length > 120) thoughtBuf = thoughtBuf.slice(-120);
+          status.textContent = thoughtBuf || 'Grok is thinking…';
+        } else if (evt.type === 'tool' || evt.type === 'tool_use') {
+          const name = evt.name || evt.tool || evt.data || 'tool';
+          appendStatusLine(status, `Using ${name}…`);
         } else if (evt.type === 'text') {
-          thinking.remove();
           reply += evt.data || '';
           const div = messagesEl.querySelector('.msg.assistant.streaming') ||
             (() => {
               const el = document.createElement('div');
-              el.className = 'msg assistant streaming';
-              messagesEl.appendChild(el);
+              el.className = 'msg assistant streaming markdown';
+              messagesEl.insertBefore(el, thinking);
               return el;
             })();
           div.innerHTML = renderMarkdown(reply);
-          div.classList.add('markdown');
           wireCodeCopyButtons(div);
           messagesEl.scrollTop = messagesEl.scrollHeight;
         } else if (evt.type === 'result') {
           if (evt.reply) reply = evt.reply;
           if (evt.sessionId) conv.session_id = evt.sessionId;
-          if (evt.model_label) streamModelLabel = evt.model_label;
         } else if (evt.type === 'error') {
           throw new Error(evt.error || 'chat failed');
         }
@@ -220,15 +279,36 @@ async function sendMessage(text) {
 
     thinking.remove();
     messagesEl.querySelector('.msg.assistant.streaming')?.remove();
-    conv.messages.push({ role: 'assistant', content: reply });
-    renderMessages(conv);
-    await refresh();
+    if (reply.trim()) {
+      conv.messages.push({ role: 'assistant', content: reply });
+      renderMessages(conv);
+      renderConvList();
+    } else {
+      throw new Error('empty response from Grok');
+    }
   } catch (e) {
-    thinking.textContent = `Error: ${e.message}`;
-    thinking.classList.remove('thinking');
+    if (e.name === 'AbortError') {
+      thinking.remove();
+      messagesEl.querySelector('.msg.assistant.streaming')?.remove();
+      return;
+    }
+    thinking.classList.add('error');
+    thinking.innerHTML = '';
+    const errText = document.createElement('div');
+    errText.textContent = `Error: ${e.message}`;
+    thinking.appendChild(errText);
+    const retryBtn = document.createElement('button');
+    retryBtn.type = 'button';
+    retryBtn.className = 'retry-btn';
+    retryBtn.textContent = 'Retry';
+    retryBtn.onclick = () => {
+      thinking.remove();
+      sendMessage(text, { retry: true });
+    };
+    thinking.appendChild(retryBtn);
   } finally {
-    busy = false;
-    sendBtn.disabled = false;
+    streamAbort = null;
+    setStreamingUi(false);
     input.focus();
   }
 }
@@ -239,6 +319,10 @@ $('#composer').onsubmit = (e) => {
 };
 
 $('#new-chat').onclick = newChat;
+
+stopBtn?.addEventListener('click', () => {
+  streamAbort?.abort();
+});
 
 input.addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && !e.shiftKey) {
@@ -296,7 +380,7 @@ initModels().then(() => refresh().then(() => {
   if (convParam && conversations.some((c) => c.id === convParam)) {
     selectConv(convParam);
     input.focus();
-  } else if (!conversations.length) {
+  } else if (!chatConversations().length) {
     newChat();
   }
 }));

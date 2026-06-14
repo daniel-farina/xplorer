@@ -244,6 +244,22 @@ constexpr char kSearchHomeWeb[] = "web";
 constexpr char kSearchHomeWiki[] = "wiki";
 constexpr char kGrokWikiHomeURL[] = "https://grokipedia.com/";
 
+constexpr char kChatRules[] =
+    "You are Grok, the native AI companion built into Xplorer. You can "
+    "control the browser through MCP tools.";
+
+constexpr char kBrowserChatRules[] =
+    "You are Grok, the native AI companion built into Xplorer (Chromium). "
+    "You MUST control the real browser through MCP tools — never give manual "
+    "instructions the user must follow themselves. "
+    "Tabs: call aether_tabs to list open tabs, then xbrowser_group_tabs to "
+    "organize them into named groups. Use xbrowser_activate_tab to focus a tab "
+    "and xbrowser_close_tab to close tabs. "
+    "Bookmarks: xbrowser_bookmarks, xbrowser_add_bookmark, "
+    "xbrowser_remove_bookmark. "
+    "Navigation: aether_navigate or aether_new_tab. "
+    "Always verify actions by re-listing tabs after grouping.";
+
 base::FilePath SettingsFile() {
   return xplorer_paths::Resolve("grok_settings.json");
 }
@@ -325,6 +341,37 @@ std::string ResolveSearchModel(const std::string& mode,
   if (SearchModeNeedsWebTools(mode) && model == kDefaultModel)
     return kSearchModel;
   return model;
+}
+
+bool MessageNeedsBrowserTools(const std::string& message) {
+  std::string lower = base::ToLowerASCII(message);
+  static constexpr const char* kKeywords[] = {
+      "tab",       "tabs",      "bookmark",  "bookmarks", "organize",
+      "organise",  "group",     "browser",   "chrome",    "navigate",
+      "close tab", "split tab", "history",   "xplorer",
+  };
+  for (const char* kw : kKeywords) {
+    if (lower.find(kw) != std::string::npos)
+      return true;
+  }
+  return false;
+}
+
+// Composer is fast for Q&A; browser control needs grok-build + MCP tools.
+std::string ResolveChatModel(const std::string& message,
+                             const std::string* request_model) {
+  std::string model = ResolveModel(request_model);
+  if (MessageNeedsBrowserTools(message) &&
+      (model == kComposerModel || model == kDefaultModel)) {
+    return kSearchModel;
+  }
+  return model;
+}
+
+const char* ChatRulesForMessage(const std::string& message) {
+  if (MessageNeedsBrowserTools(message))
+    return kBrowserChatRules;
+  return kChatRules;
 }
 
 std::string ModelDisplayName(const std::string& model) {
@@ -1273,10 +1320,6 @@ base::DictValue CreatePageChatConversation(const std::string& url,
   return result;
 }
 
-constexpr char kChatRules[] =
-    "You are Grok, the native AI companion built into Xplorer. You can "
-    "control the browser through MCP tools.";
-
 base::CommandLine BuildGrokChatCommand(const std::string& message,
                                        const std::string& session_id,
                                        const std::string& model,
@@ -1366,13 +1409,14 @@ void RunGrokChatStream(
     std::string message,
     std::string session_id,
     std::string model) {
+  const char* rules = ChatRulesForMessage(message);
   base::ThreadPool::CreateSequencedTaskRunner(
       {base::MayBlock(), base::TaskPriority::USER_VISIBLE})
       ->PostTask(FROM_HERE,
                  base::BindOnce(&PumpGrokStream, server, io_task_runner,
                                 connection_id,
                                 BuildGrokChatCommand(message, session_id, model,
-                                                     true, kChatRules),
+                                                     true, rules),
                                 model, "chat", GrokStreamKind::kChat, conv_id,
                                 ""));
 }
@@ -1407,8 +1451,8 @@ base::DictValue RunGrokSearch(const std::string& query,
 base::DictValue RunGrokChat(const std::string& message,
                             const std::string& session_id,
                             const std::string& model) {
-  base::CommandLine cmd =
-      BuildGrokChatCommand(message, session_id, model, false, kChatRules);
+  base::CommandLine cmd = BuildGrokChatCommand(
+      message, session_id, model, false, ChatRulesForMessage(message));
   int exit_code = 0;
   std::string output;
   if (!base::GetAppOutputWithExitCode(cmd, &output, &exit_code) ||
@@ -2026,13 +2070,13 @@ bool GrokNative::TryHandleRequest(
     auto body = base::JSONReader::ReadDict(info.data, base::JSON_PARSE_RFC);
     const std::string* message = body ? body->FindString("message") : nullptr;
     const std::string* model_body = body ? body->FindString("model") : nullptr;
-    std::string model = ResolveModel(model_body);
     if (!message || message->empty()) {
       base::DictValue err;
       err.Set("error", "empty message");
       SendJson(server, connection_id, net::HTTP_BAD_REQUEST, std::move(err));
       return true;
     }
+    std::string model = ResolveChatModel(*message, model_body);
     base::DictValue data = LoadSessions();
     base::ListValue* convs = data.FindList("conversations");
     base::DictValue* conv = nullptr;

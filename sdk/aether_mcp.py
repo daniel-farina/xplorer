@@ -170,11 +170,59 @@ def t_eval(a):
     return text(json.dumps(r.get("result", r)))
 
 
+def t_bookmarks(_):
+    return text(json.dumps(api("GET", "/bookmarks"), indent=2))
+
+
+def t_add_bookmark(a):
+    body = {"url": a["url"], "title": a.get("title", "")}
+    if a.get("parent_id"):
+        body["parent_id"] = a["parent_id"]
+    return text(json.dumps(api("POST", "/bookmarks", body)))
+
+
+def t_remove_bookmark(a):
+    return text(json.dumps(api("DELETE", f"/bookmarks/{a['id']}")))
+
+
+def t_history(a):
+    body = {"query": a.get("query", ""), "limit": int(a.get("limit", 50))}
+    return text(json.dumps(api("POST", "/history", body), indent=2))
+
+
+def t_activate_tab(a):
+    return text(json.dumps(api("POST", f"/tabs/{a['tab']}/activate")))
+
+
+def t_close_tab(a):
+    return text(json.dumps(api("DELETE", f"/tabs/{a['tab']}")))
+
+
+def t_group_tabs(a):
+    body = {"tab_ids": a["tab_ids"], "title": a.get("title", "")}
+    return text(json.dumps(api("POST", "/tabs/group", body)))
+
+
+def t_split_tab(a):
+    tab = a.get("tab") or _first_tab()
+    layout = a.get("layout", "side_by_side")
+    return text(json.dumps(api("POST", f"/tabs/{tab}/split", {"layout": layout})))
+
+
+def t_get_theme(_):
+    return text(json.dumps(api("GET", "/theme"), indent=2))
+
+
+def t_set_theme(a):
+    return text(json.dumps(api("POST", "/theme",
+                               {"color_scheme": a["color_scheme"]})))
+
+
 def text(s):
     return {"content": [{"type": "text", "text": s}]}
 
 
-TAB = {"type": "string", "description": "tab id (default: first tab)"}
+TAB = {"type": "string", "description": "tab id (sessionId:index)"}
 TOOLS = {
     "aether_tabs": ("List open browser tabs with context (url, title, owner, "
                     "active, loading).", {"type": "object", "properties": {}},
@@ -220,6 +268,54 @@ TOOLS = {
                     {"type": "object", "properties": {
                         "expression": {"type": "string"}, "tab": TAB},
                      "required": ["expression"]}, t_eval),
+    "xbrowser_bookmarks": (
+        "List all bookmarks (bar + other folders) as a flat tree.",
+        {"type": "object", "properties": {}}, t_bookmarks),
+    "xbrowser_add_bookmark": (
+        "Add a bookmark. Optional parent_id (folder node id).",
+        {"type": "object", "properties": {
+            "url": {"type": "string"},
+            "title": {"type": "string"},
+            "parent_id": {"type": "string"}},
+         "required": ["url"]}, t_add_bookmark),
+    "xbrowser_remove_bookmark": (
+        "Remove a bookmark by node id.",
+        {"type": "object", "properties": {"id": {"type": "string"}},
+         "required": ["id"]}, t_remove_bookmark),
+    "xbrowser_history": (
+        "Search browsing history. Empty query returns recent visits.",
+        {"type": "object", "properties": {
+            "query": {"type": "string"},
+            "limit": {"type": "integer"}}}, t_history),
+    "xbrowser_activate_tab": (
+        "Focus/switch to a tab by id.",
+        {"type": "object", "properties": {"tab": TAB},
+         "required": ["tab"]}, t_activate_tab),
+    "xbrowser_close_tab": (
+        "Close a tab by id.",
+        {"type": "object", "properties": {"tab": TAB},
+         "required": ["tab"]}, t_close_tab),
+    "xbrowser_group_tabs": (
+        "Group tabs together with an optional title (native Chrome tab groups).",
+        {"type": "object", "properties": {
+            "tab_ids": {"type": "array", "items": {"type": "string"}},
+            "title": {"type": "string"}},
+         "required": ["tab_ids"]}, t_group_tabs),
+    "xbrowser_split_tab": (
+        "Open split view from a tab (side_by_side or stacked).",
+        {"type": "object", "properties": {
+            "tab": TAB,
+            "layout": {"type": "string",
+                       "enum": ["side_by_side", "stacked"]}}}, t_split_tab),
+    "xbrowser_get_theme": (
+        "Get browser theme (color_scheme: dark/light/system).",
+        {"type": "object", "properties": {}}, t_get_theme),
+    "xbrowser_set_theme": (
+        "Set browser color scheme: dark, light, or system.",
+        {"type": "object", "properties": {
+            "color_scheme": {"type": "string",
+                             "enum": ["dark", "light", "system"]}},
+         "required": ["color_scheme"]}, t_set_theme),
 }
 
 
@@ -248,7 +344,7 @@ def main():
         if m == "initialize":
             reply(id, {"protocolVersion": PROTO,
                        "capabilities": {"tools": {}},
-                       "serverInfo": {"name": "aether", "version": "0.1.0"}})
+                       "serverInfo": {"name": "aether", "version": "0.3.0"}})
         elif m == "notifications/initialized":
             pass  # no response to notifications
         elif m == "tools/list":

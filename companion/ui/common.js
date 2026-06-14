@@ -281,6 +281,17 @@ function initToolbarHomeHotkeys(container) {
   });
 }
 
+/** Browser/tab/bookmark tasks need grok-build + native MCP tools. */
+function messageNeedsBrowserTools(message) {
+  const lower = String(message || '').toLowerCase();
+  const keywords = [
+    'tab', 'tabs', 'bookmark', 'bookmarks', 'organize', 'organise', 'group',
+    'browser', 'chrome', 'navigate', 'close tab', 'split tab', 'history',
+    'xplorer',
+  ];
+  return keywords.some((kw) => lower.includes(kw));
+}
+
 /** Pick the right model for a search mode (web/videos → grok-build). */
 function modelForSearchMode(mode, selectedModel, models) {
   const needsWeb = mode === 'web' || mode === 'videos';
