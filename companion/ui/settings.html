@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en" class="grok-build">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Grok Settings — Xplorer</title>
+  <link rel="stylesheet" href="/theme.css">
+  <script>document.documentElement.setAttribute('data-theme',matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');</script>
+  <link rel="stylesheet" href="/toolbar.css">
+  <link rel="stylesheet" href="/settings.css">
+</head>
+<body data-grok-toolbar="auto">
+  <div id="grok-toolbar-mount"></div>
+  <main class="settings-page">
+    <header class="settings-head">
+      <h1>Grok settings</h1>
+      <p>Defaults for chat, search, and browser integration. Stored in <code>~/.xplorer/grok_settings.json</code>.</p>
+    </header>
+
+    <section class="settings-card">
+      <h2>Home &amp; navigation</h2>
+      <label class="settings-field">
+        <span>Default home when Xplorer starts</span>
+        <select id="search-home">
+          <option value="build">Grok Build (conversations + apps)</option>
+          <option value="web">Grok Web (search → grok.com)</option>
+          <option value="wiki">Grokipedia</option>
+        </select>
+      </label>
+    </section>
+
+    <section class="settings-card">
+      <h2>Models</h2>
+      <label class="settings-field">
+        <span>Chat &amp; conversations model</span>
+        <select id="chat-model"></select>
+      </label>
+      <label class="settings-field">
+        <span>Web search model</span>
+        <select id="search-model"></select>
+        <small>Web and video search use Grok Build for tool access.</small>
+      </label>
+    </section>
+
+    <section class="settings-card">
+      <h2>Browser appearance</h2>
+      <label class="settings-field">
+        <span>Chrome color scheme</span>
+        <select id="browser-theme">
+          <option value="system">Match system</option>
+          <option value="light">Light</option>
+          <option value="dark">Dark</option>
+        </select>
+      </label>
+    </section>
+
+    <section class="settings-card settings-readonly">
+      <h2>Integration</h2>
+      <dl class="settings-dl">
+        <dt>Companion</dt><dd id="info-companion">—</dd>
+        <dt>Agent gateway</dt><dd id="info-gateway">—</dd>
+        <dt>Grok CLI</dt><dd id="info-grok">—</dd>
+        <dt>CDP</dt><dd id="info-cdp">—</dd>
+      </dl>
+      <p class="settings-hint">Agents discover the gateway via <code>~/.xplorer/gateway.json</code>. MCP: <code>aether_mcp.py</code> / <code>xbrowser_organize_tabs</code>.</p>
+    </section>
+
+    <section class="settings-card">
+      <h2>Welcome</h2>
+      <button type="button" id="replay-welcome" class="settings-btn">Show welcome screen again</button>
+    </section>
+
+    <p id="settings-status" class="settings-status" role="status" aria-live="polite"></p>
+  </main>
+  <script src="/common.js"></script>
+  <script src="/settings.js"></script>
+</body>
+</html>

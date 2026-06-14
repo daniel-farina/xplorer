@@ -6,15 +6,27 @@ Usage: launch Xplorer, then `python3 companion_smoke_test.py`.
 from __future__ import annotations
 
 import json
+import os
 import sys
 import urllib.error
 import urllib.request
 
 BASE = "http://127.0.0.1:9334"
 
+# Load token for authenticated API calls (public pages like / and *.js do not require it)
+GATEWAY_PATH = os.path.expanduser("~/.xplorer/gateway.json")
+TOKEN = ""
+try:
+    with open(GATEWAY_PATH) as f:
+        TOKEN = json.load(f).get("token", "")
+except Exception:
+    pass
+AUTH_HEADERS = {"Authorization": f"Bearer {TOKEN}"} if TOKEN else {}
+
 
 def get(path: str, *, expect_json: bool = False) -> tuple[int, str]:
-    req = urllib.request.Request(f"{BASE}{path}")
+    headers = dict(AUTH_HEADERS)
+    req = urllib.request.Request(f"{BASE}{path}", headers=headers)
     with urllib.request.urlopen(req, timeout=10) as resp:
         body = resp.read().decode("utf-8", errors="replace")
         return resp.status, body if not expect_json else body
@@ -32,6 +44,9 @@ def main() -> int:
         ("search page", "/search"),
         ("apps page", "/apps"),
         ("welcome", "/welcome"),
+        ("settings", "/settings"),
+        ("settings.css", "/settings.css"),
+        ("settings.js", "/settings.js"),
         ("common.js", "/common.js"),
         ("search.js", "/search.js"),
     ]
@@ -49,6 +64,8 @@ def main() -> int:
     assert status == 200
     settings = json.loads(settings_body)
     assert "search_home" in settings, settings
+    assert "search_model" in settings, settings
+    assert "companion_url" in settings, settings
     print("api/settings: OK")
 
     status, models_body = get("/api/models")
@@ -68,6 +85,8 @@ def main() -> int:
     assert "initToolbarHomeHotkeys" in common
     assert "persistConvModel" in common
     assert "messageNeedsBrowserTools" in common
+    assert "mountGrokToolbar" in common
+    assert "grokToolbarHTML" in common
     assert "wikiUrlForQuery" in common
     assert "imagineUrlForQuery" in common
     print("common.js markers: OK")
@@ -81,11 +100,12 @@ def main() -> int:
     print("app.js conv management: OK")
 
     # Conversation rename API
+    conv_headers = {"Content-Type": "application/json", **AUTH_HEADERS}
     req = urllib.request.Request(
         f"{BASE}/api/conversations",
         data=b"{}",
         method="POST",
-        headers={"Content-Type": "application/json"},
+        headers=conv_headers,
     )
     with urllib.request.urlopen(req, timeout=10) as resp:
         conv = json.loads(resp.read().decode())
@@ -94,16 +114,14 @@ def main() -> int:
         f"{BASE}/api/conversations/{conv_id}/rename",
         data=json.dumps({"title": "Smoke rename"}).encode(),
         method="POST",
-        headers={"Content-Type": "application/json"},
+        headers=conv_headers,
     )
     with urllib.request.urlopen(req, timeout=10) as resp:
         renamed = json.loads(resp.read().decode())
     assert renamed.get("title") == "Smoke rename", renamed
     print("conv rename API: OK")
-    urllib.request.urlopen(
-        urllib.request.Request(f"{BASE}/api/conversations/{conv_id}", method="DELETE"),
-        timeout=10,
-    )
+    del_req = urllib.request.Request(f"{BASE}/api/conversations/{conv_id}", method="DELETE", headers=AUTH_HEADERS)
+    urllib.request.urlopen(del_req, timeout=10)
     print("conv delete API: OK")
 
     _, apps_js = get("/apps.js")
@@ -149,7 +167,11 @@ def main() -> int:
     print("search.js grok-web handoff: OK")
 
     _, welcome = get("/welcome")
-    assert "companion_smoke_test" in welcome
+    assert "grok-toolbar-mount" in welcome or 'data-grok-toolbar="auto"' in welcome
+    assert "/settings" in welcome
+    _, settings_html = get("/settings")
+    assert "settings-page" in settings_html
+    assert "grok-toolbar-mount" in settings_html
     print("welcome dev hint: OK")
 
     class NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -195,11 +217,12 @@ def main() -> int:
     exportable = [a for a in apps["apps"] if a.get("exportable")]
     if len(exportable) >= 2:
         ids = [a["id"] for a in exportable[:2]]
+        batch_headers = {"Content-Type": "application/json", **AUTH_HEADERS}
         req = urllib.request.Request(
             f"{BASE}/api/apps/export-batch",
             data=json.dumps({"ids": ids}).encode(),
             method="POST",
-            headers={"Content-Type": "application/json"},
+            headers=batch_headers,
         )
         with urllib.request.urlopen(req, timeout=60) as resp:
             data = resp.read()
@@ -212,11 +235,12 @@ def main() -> int:
 
     if exportable:
         app_id = exportable[0]["id"]
+        restart_headers = {"Content-Type": "application/json", **AUTH_HEADERS}
         req = urllib.request.Request(
             f"{BASE}/api/apps/restart-batch",
             data=json.dumps({"ids": [app_id]}).encode(),
             method="POST",
-            headers={"Content-Type": "application/json"},
+            headers=restart_headers,
         )
         with urllib.request.urlopen(req, timeout=30) as resp:
             restarted = json.loads(resp.read().decode())
@@ -224,7 +248,7 @@ def main() -> int:
         assert restarted.get("restarted", 0) >= 1, restarted
         print(f"restart-batch {app_id}: OK")
 
-        req = urllib.request.Request(f"{BASE}/api/apps/{app_id}/export")
+        req = urllib.request.Request(f"{BASE}/api/apps/{app_id}/export", headers=AUTH_HEADERS)
         with urllib.request.urlopen(req, timeout=30) as resp:
             data = resp.read()
             assert resp.status == 200
@@ -241,6 +265,12 @@ def main() -> int:
 if __name__ == "__main__":
     try:
         sys.exit(main())
+    except urllib.error.HTTPError as e:
+        if e.code == 401:
+            print(f"FAIL: 401 Unauthorized — token from {GATEWAY_PATH} may be missing/expired. Run Xplorer to refresh ~/.xplorer/gateway.json", file=sys.stderr)
+        else:
+            print(f"HTTP error {e.code}: {e}", file=sys.stderr)
+        sys.exit(1)
     except urllib.error.URLError as e:
         print(f"Companion not reachable at {BASE}: {e}", file=sys.stderr)
         sys.exit(1)

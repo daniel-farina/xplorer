@@ -77,7 +77,7 @@ input?.addEventListener('input', () => {
   syncUrl();
 });
 
-initSearchHomeToggle($('#home-toggle'), {
+mountGrokToolbar({
   pageHome: SEARCH_HOME_WEB,
   onSwitch: async (saved, updated) => {
     const params = new URLSearchParams();

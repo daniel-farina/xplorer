@@ -6,81 +6,61 @@
   <title>Welcome — Xplorer</title>
   <link rel="stylesheet" href="/theme.css">
   <script>document.documentElement.setAttribute('data-theme',matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');</script>
+  <link rel="stylesheet" href="/toolbar.css">
   <link rel="stylesheet" href="/welcome.css">
 </head>
-<body>
+<body data-grok-toolbar="auto">
+  <div id="grok-toolbar-mount"></div>
   <main class="welcome">
-    <header class="welcome-hero">
+    <section class="welcome-hero">
+      <div class="welcome-hero-glow" aria-hidden="true"></div>
       <div class="welcome-brand">
         <span class="welcome-mark" aria-hidden="true">✦</span>
         <h1>Xplorer</h1>
       </div>
+      <p class="welcome-tagline">The Grok-native browser</p>
       <p class="welcome-lead">
-        Internet Explorer energy, X product soul — the browser built around Grok.
-        Search, chat, build apps, and browse the web with an AI companion that
-        lives inside every page.
+        Search, chat, build apps, and control tabs — with Grok built into every
+        page. No extensions. No copy-paste. Just ask.
       </p>
-    </header>
+    </section>
 
     <section class="welcome-grid" aria-label="What Xplorer can do">
       <article class="welcome-card">
-        <h2>Grok-native search</h2>
-        <p>
-          Start every session from a Grok-powered search home. Ask questions,
-          get web results, images, and videos — then open answers on grok.com
-          with full context carried over.
-        </p>
+        <div class="welcome-card-icon" aria-hidden="true">⌕</div>
+        <h2>Grok search home</h2>
+        <p>New tabs open Grok Search. Results hand off to grok.com with full context.</p>
       </article>
       <article class="welcome-card">
-        <h2>AI on every site</h2>
-        <p>
-          A Grok toolbar on grok.com, x.com, and Grokipedia keeps Chat, Build,
-          Web, and Wiki one click away. The Grok It button on any page sends
-          what you are reading straight into Grok Web.
-        </p>
+        <div class="welcome-card-icon" aria-hidden="true">✦</div>
+        <h2>Build &amp; chat</h2>
+        <p>Conversations, app builder, and streaming Grok — served locally on :9334.</p>
       </article>
       <article class="welcome-card">
-        <h2>Build mini-apps</h2>
-        <p>
-          Describe an app in plain language and Xplorer hosts it on localhost
-          with its own runtime. Iterate in chat, open in a tab, and keep
-          building without leaving the browser.
-        </p>
+        <div class="welcome-card-icon" aria-hidden="true">⊞</div>
+        <h2>Browser control</h2>
+        <p>Organize tabs, group bookmarks, and drive the browser via native APIs and MCP.</p>
       </article>
       <article class="welcome-card">
-        <h2>Agent-ready by default</h2>
-        <p>
-          Remote debugging and an agent gateway run out of the box so coding
-          agents can drive tabs, capture screenshots, and automate workflows —
-          no flags or extensions required.
-        </p>
+        <div class="welcome-card-icon" aria-hidden="true">⚡</div>
+        <h2>Agent-ready</h2>
+        <p>CDP on :9333, gateway on :9334. Discovery at <code>~/.xplorer/gateway.json</code>.</p>
       </article>
-    </section>
-
-    <section class="welcome-compare" aria-label="How Xplorer is different">
-      <h2>Why not just use Chrome?</h2>
-      <ul>
-        <li><strong>AI-first home</strong> — new tabs open Grok search, not a blank page or ad feed.</li>
-        <li><strong>Native Grok UI</strong> — chat and apps are served inside the browser, not a slow extension popup.</li>
-        <li><strong>X + Grok together</strong> — jump between x.com, X Chat, grok.com, and Grokipedia from one toolbar.</li>
-        <li><strong>Built for agents</strong> — CDP on 9333 and a local gateway on 9334; discovery at <code>~/.xplorer/gateway.json</code>.</li>
-      </ul>
     </section>
 
     <section class="welcome-tour" aria-label="Quick start">
       <h2>Jump in</h2>
       <div class="welcome-tour-links">
-        <a class="welcome-tour-link" href="/search">Grok Search</a>
+        <a class="welcome-tour-link primary" href="/search">Grok Search</a>
+        <a class="welcome-tour-link" href="/">Conversations</a>
         <a class="welcome-tour-link" href="/apps">Build an app</a>
-        <a class="welcome-tour-link" href="https://grok.com/" target="_blank" rel="noopener noreferrer">Grok Web</a>
-        <a class="welcome-tour-link" href="https://x.com/i/chat" target="_blank" rel="noopener noreferrer">X Chat</a>
+        <a class="welcome-tour-link" href="/settings">Settings</a>
       </div>
     </section>
 
     <footer class="welcome-actions">
       <button type="button" id="get-started" class="welcome-cta">Get started</button>
-      <p class="welcome-note">Your settings and apps are stored in <code>~/.xplorer</code></p>
-      <p class="welcome-note welcome-dev">Developers: verify the companion with <code>python3 sdk/companion_smoke_test.py</code></p>
+      <p class="welcome-note">Configure defaults in <a href="/settings">Grok settings</a> · data in <code>~/.xplorer</code></p>
     </footer>
   </main>
   <script src="/common.js"></script>

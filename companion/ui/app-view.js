@@ -473,7 +473,7 @@ $('#delete-app')?.addEventListener('click', async () => {
   }
 });
 
-initSearchHomeToggle($('#home-toggle'));
+mountGrokToolbar({ pageHome: 'build' });
 initChatToggle();
 startThemeWatcher();
 loadApp().catch((e) => {

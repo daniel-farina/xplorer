@@ -462,7 +462,7 @@ filterBar?.querySelectorAll('[data-filter]').forEach((btn) => {
   });
 });
 
-initSearchHomeToggle($('#home-toggle'));
+mountGrokToolbar({ pageHome: 'build' });
 startThemeWatcher();
 refresh();
 setInterval(refresh, 2000);

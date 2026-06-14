@@ -1,0 +1,126 @@
+.settings-page {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 28px 20px 48px;
+}
+
+.settings-head h1 {
+  margin: 0 0 8px;
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.settings-head p {
+  margin: 0 0 24px;
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.settings-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 20px 22px;
+  margin-bottom: 16px;
+}
+
+.settings-card h2 {
+  margin: 0 0 14px;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.settings-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 14px;
+  font-size: 14px;
+}
+
+.settings-field:last-child {
+  margin-bottom: 0;
+}
+
+.settings-field span {
+  font-weight: 500;
+}
+
+.settings-field small {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.settings-field select {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--input-bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  padding: 10px 12px;
+}
+
+.settings-dl {
+  display: grid;
+  grid-template-columns: 120px 1fr;
+  gap: 8px 12px;
+  margin: 0;
+  font-size: 13px;
+}
+
+.settings-dl dt {
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.settings-dl dd {
+  margin: 0;
+  word-break: break-all;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+}
+
+.settings-hint {
+  margin: 14px 0 0;
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.settings-btn {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-elevated);
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  padding: 10px 16px;
+  cursor: pointer;
+}
+
+.settings-btn:hover {
+  border-color: var(--accent);
+}
+
+.settings-status {
+  min-height: 1.2em;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.settings-status.ok {
+  color: #0d9488;
+}
+
+.settings-status.err {
+  color: #dc2626;
+}
+
+.grok-settings-btn.active {
+  border-color: var(--toolbar-accent);
+  color: var(--toolbar-accent);
+  background: var(--toolbar-accent-soft);
+}

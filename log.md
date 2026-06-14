@@ -272,18 +272,38 @@ See above. Verified: search page serves mode pills + results section (curl).
 | FAB copybuilderlink | ✓ |
 | Build + reinstall | 42s, relaunch OK ✓ |
 
-## Loop stopped (2026-06-14)
+## Loop restarted (2026-06-14)
 
-User ran `/loop stop`. Removed all scheduled Xplorer improvement loops in this workspace:
+User ran `/loop 15m improve our browser…`. Background conductor task `task-BFB359D6` started for recurring 15m cycles.
 
-| Task ID | Session | Interval |
-|---------|---------|----------|
-| `019ec4ca0fa0` | `019ec4c9-f240-7a61-a249-1ec95d39fd16` | 15m |
-| `019ec4d34bc1` | `019ec4d1-e654-7bc3-9cfd-e0e5ea854756` | 15m |
+## Loop 14 (2026-06-14 ~11:30)
 
-No recurring scheduler tasks remain. Restart with `/loop 15m …` when ready.
+### Commit — feat(ui+native): uniform toolbar, settings page, welcome redesign
+- **Toolbar:** `mountGrokToolbar()` + `grokToolbarHTML()` in `common.js` — single source for all companion pages; Settings button on every page
+- **Pages migrated:** index, search, apps, app, welcome, new `/settings`
+- **Settings:** `/settings` UI — default home, chat model, search model, browser theme (POST `/api/theme`), gateway/CDP/grok_bin read-only
+- **API:** `search_model` in `grok_settings.json`; `EnrichSettingsResponse` adds companion/gateway/cdp URLs
+- **Welcome:** redesigned hero, cards, tour links; toolbar + link to settings
+- **FAB:** “Grok settings” menu item → `/settings`
+- **Test:** companion_smoke_test.py ALL OK ✓ | build ~80s ✓ | reinstall ✓
+
+**Loop 14 test summary**
+| Check | Result |
+|-------|--------|
+| companion_smoke_test.py | ALL OK |
+| /settings + settings.css/js | ✓ |
+| mountGrokToolbar on all pages | ✓ |
+| api/settings search_model + companion_url | ✓ |
+| welcome redesign + toolbar | ✓ |
+| Build + reinstall | OK ✓ |
 
 ## Next loop priorities
+- Settings: link to chrome://settings (native handler)
+- Search: use persisted search_model from settings in search.js init
+- Chat: Esc clears conv filter
+- Apps: idle/exportable filter tabs
+- xAI: expose grok.com tool handoffs in settings (Imagine, voice)
+- Native: grok.com toolbar Settings submenu
 - Apps: idle filter tab + exportable-only filter
 - Chat: Esc clears conv filter
 - Search: error fallback uses imagine URL in imagine mode

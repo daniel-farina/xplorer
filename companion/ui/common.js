@@ -173,7 +173,73 @@ function companionBuildSubRoute(path) {
   if (path === '/' || path === '') return 'conversations';
   if (path.startsWith('/apps')) return 'apps';
   if (path.startsWith('/app')) return 'app';
+  if (path.startsWith('/settings')) return 'settings';
+  if (path.startsWith('/welcome')) return 'welcome';
   return '';
+}
+
+/** Uniform Grok topbar — single source of truth for all companion pages. */
+function grokToolbarHTML() {
+  return `<header class="grok-toolbar">
+    <a class="grok-logo" href="/search" title="Grok home">✦ Grok</a>
+    <div class="grok-toolbar-spacer"></div>
+    <div class="grok-toolbar-actions">
+      <div class="grok-nav-pills" id="home-toggle" title="Grok navigation">
+        <div class="grok-pill-wrap">
+          <a class="grok-pill" href="https://x.com/i/chat" target="_blank" rel="noopener noreferrer">X Chat</a>
+          <div class="grok-pill-menu">
+            <a href="https://x.com/i/chat" target="_blank" rel="noopener noreferrer">Open X Chat</a>
+          </div>
+        </div>
+        <div class="grok-pill-wrap">
+          <button type="button" class="grok-pill" data-home="build">Grok Build</button>
+          <div class="grok-pill-menu">
+            <a href="/" data-route="conversations">Conversations</a>
+            <a href="/apps" data-route="apps">Apps</a>
+          </div>
+        </div>
+        <div class="grok-pill-wrap">
+          <button type="button" class="grok-pill" data-home="web">Grok Web</button>
+          <div class="grok-pill-menu">
+            <a href="/search" data-route="search">Search</a>
+            <a href="https://grok.com/imagine" target="_blank" rel="noopener noreferrer">Imagine</a>
+          </div>
+        </div>
+        <div class="grok-pill-wrap">
+          <button type="button" class="grok-pill" data-home="wiki">Wiki</button>
+          <div class="grok-pill-menu">
+            <a href="https://grokipedia.com/" target="_blank" rel="noopener noreferrer">Grokipedia</a>
+          </div>
+        </div>
+        <div class="grok-pill-wrap">
+          <a class="grok-pill" href="https://x.com/" target="_blank" rel="noopener noreferrer">x.com</a>
+          <div class="grok-pill-menu">
+            <a href="https://x.com/" target="_blank" rel="noopener noreferrer">Home</a>
+          </div>
+        </div>
+      </div>
+      <a href="/settings" class="grok-toolbar-btn grok-settings-btn" data-route="settings" title="Grok settings">Settings</a>
+    </div>
+  </header>`;
+}
+
+function mountGrokToolbar({ pageHome, onSwitch } = {}) {
+  const mount = document.getElementById('grok-toolbar-mount');
+  const legacy = document.querySelector('header.grok-toolbar');
+  if (mount) {
+    mount.outerHTML = grokToolbarHTML();
+  } else if (legacy) {
+    legacy.outerHTML = grokToolbarHTML();
+  } else {
+    document.body.insertAdjacentHTML('afterbegin', grokToolbarHTML());
+  }
+  syncCompanionToolbarPill();
+  const path = (location.pathname || '').toLowerCase();
+  const settingsBtn = document.querySelector('.grok-settings-btn');
+  if (settingsBtn) {
+    settingsBtn.classList.toggle('active', path.startsWith('/settings'));
+  }
+  initSearchHomeToggle(document.getElementById('home-toggle'), { pageHome, onSwitch });
 }
 
 /** Highlight companion toolbar pill from current route (127.0.0.1 pages). */
@@ -193,11 +259,23 @@ function syncCompanionToolbarPill() {
   toggle.querySelectorAll('.grok-pill-menu a[data-route="search"]').forEach((link) => {
     link.classList.toggle('active', path.startsWith('/search'));
   });
+  document.querySelectorAll('[data-route="settings"]').forEach((el) => {
+    el.classList.toggle('active', path.startsWith('/settings'));
+  });
+}
+
+if (typeof document !== 'undefined') {
+  document.addEventListener('DOMContentLoaded', () => {
+    if (document.body.dataset.grokToolbar === 'auto') {
+      mountGrokToolbar();
+    }
+  });
 }
 
 /** Wire Grok Build / Grok Web / Groki home toggle. */
 async function initSearchHomeToggle(container, { onSwitch, pageHome } = {}) {
-  if (!container) return;
+  if (!container || container.dataset.grokToggleWired) return;
+  container.dataset.grokToggleWired = '1';
   const buttons = container.querySelectorAll('[data-home]');
   let settings;
   try {

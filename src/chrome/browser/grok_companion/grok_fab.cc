@@ -182,6 +182,7 @@ std::string BuildFabInjectScript() {
     appendMenuItem(menu,'factcheck','\u2713','Is this true?');
     appendMenuItem(menu,'explain','\u2026','Explain this');
     appendMenuItem(menu,'buildapp','\u2699','Build app from page');
+    appendMenuItem(menu,'settings','\u2699','Grok settings');
     appendMenuItem(menu,'open','\u2726','Open in Grok');
   }
   function buildFabButton(fab){
@@ -482,6 +483,10 @@ std::string BuildFabInjectScript() {
         }).catch(function(e){
           alert('Export failed: '+(e.message||e));
         }).finally(function(){setBusy(false);});
+        return;
+      }
+      if(action==='settings'){
+        window.open(GW+'/settings','_blank');
         return;
       }
       if(action==='buildapp'){

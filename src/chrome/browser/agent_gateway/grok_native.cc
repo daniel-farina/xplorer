@@ -299,6 +299,21 @@ void SetConfiguredModel(const std::string& model) {
   SaveSettings(settings);
 }
 
+std::string GetConfiguredSearchModel() {
+  base::DictValue settings = LoadSettings();
+  if (const std::string* model = settings.FindString("search_model");
+      model && !model->empty()) {
+    return *model;
+  }
+  return kSearchModel;
+}
+
+void SetConfiguredSearchModel(const std::string& model) {
+  base::DictValue settings = LoadSettings();
+  settings.Set("search_model", model);
+  SaveSettings(settings);
+}
+
 std::string GetSearchHomeMode() {
   base::DictValue settings = LoadSettings();
   if (const std::string* mode = settings.FindString("search_home")) {
@@ -334,7 +349,9 @@ bool SearchModeNeedsWebTools(const std::string& mode) {
 // Composer has no web search; route web/video search through grok-build.
 std::string ResolveSearchModel(const std::string& mode,
                                const std::string* request_model) {
-  std::string model = ResolveModel(request_model);
+  std::string model =
+      request_model && !request_model->empty() ? *request_model
+                                               : GetConfiguredSearchModel();
   if (SearchModeNeedsWebTools(mode) && model == kComposerModel)
     return kSearchModel;
   if (SearchModeNeedsWebTools(mode) && model == kDefaultModel)
@@ -379,6 +396,27 @@ std::string ModelDisplayName(const std::string& model) {
   if (model == "grok-build")
     return "Grok Build";
   return model;
+}
+
+void EnrichSettingsResponse(base::DictValue* d, int gateway_port) {
+  if (!d)
+    return;
+  d->Set("companion_url",
+         "http://127.0.0.1:" + base::NumberToString(gateway_port));
+  d->Set("search_model", GetConfiguredSearchModel());
+  d->Set("search_model_label", ModelDisplayName(GetConfiguredSearchModel()));
+  d->Set("grok_bin", ResolveGrokBinary().value());
+  std::string gw_json;
+  if (base::ReadFileToString(xplorer_paths::Resolve("gateway.json"),
+                             &gw_json)) {
+    if (auto parsed =
+            base::JSONReader::ReadDict(gw_json, base::JSON_PARSE_RFC)) {
+      if (const std::string* url = parsed->FindString("url"))
+        d->Set("gateway_url", *url);
+      if (const std::string* cdp = parsed->FindString("cdp_url"))
+        d->Set("cdp_url", *cdp);
+    }
+  }
 }
 
 base::ListValue DefaultModelList() {
@@ -1696,6 +1734,10 @@ bool GrokNative::TryHandleRequest(
     return ServeUiFile(server, connection_id, "welcome.html");
   }
 
+  if (info.method == "GET" && (path == "/settings" || path == "/settings/")) {
+    return ServeUiFile(server, connection_id, "settings.html");
+  }
+
   if (info.method == "GET" && (path == "/apps" || path == "/apps/")) {
     return ServeUiFile(server, connection_id, "apps.html");
   }
@@ -1778,7 +1820,32 @@ bool GrokNative::TryHandleRequest(
   }
 
   // Browser theme for companion UI (no auth — same as other native UI routes).
-  if (info.method == "GET" && (path == "/theme" || path == "/api/theme")) {
+  if ((info.method == "GET" || info.method == "POST") &&
+      (path == "/theme" || path == "/api/theme")) {
+    if (info.method == "POST") {
+      auto body = base::JSONReader::ReadDict(info.data, base::JSON_PARSE_RFC);
+      const std::string* scheme =
+          body ? body->FindString("color_scheme") : nullptr;
+      content::GetUIThreadTaskRunner({})->PostTask(
+          FROM_HERE,
+          base::BindOnce(
+              [](net::HttpServer* srv,
+                 scoped_refptr<base::SingleThreadTaskRunner> io, int cid,
+                 std::string scheme) {
+                BrowserApi::SetTheme(
+                    scheme.empty() ? "system" : scheme,
+                    base::BindOnce(
+                        [](net::HttpServer* srv,
+                           scoped_refptr<base::SingleThreadTaskRunner> io,
+                           int cid, base::DictValue result) {
+                          ReplyJsonOnIO(srv, io, cid, std::move(result));
+                        },
+                        srv, io, cid));
+              },
+              server, io_task_runner, connection_id,
+              scheme ? *scheme : std::string()));
+      return true;
+    }
     content::GetUIThreadTaskRunner({})->PostTask(
         FROM_HERE,
         base::BindOnce(
@@ -1818,6 +1885,7 @@ bool GrokNative::TryHandleRequest(
     d.Set("grok_wiki_url", kGrokWikiHomeURL);
     d.Set("welcome_completed", grok_companion::HasCompletedWelcome());
     d.Set("product_name", grok_companion::kProductName);
+    EnrichSettingsResponse(&d, gateway_port);
     SendJson(server, connection_id, net::HTTP_OK, std::move(d));
     return true;
   }
@@ -1831,11 +1899,16 @@ bool GrokNative::TryHandleRequest(
       return true;
     }
     const std::string* model = body->FindString("model");
+    const std::string* search_model = body->FindString("search_model");
     const std::string* home = body->FindString("search_home");
     std::optional<bool> welcome = body->FindBool("welcome_completed");
     bool updated = false;
     if (model && !model->empty()) {
       SetConfiguredModel(*model);
+      updated = true;
+    }
+    if (search_model && !search_model->empty()) {
+      SetConfiguredSearchModel(*search_model);
       updated = true;
     }
     if (home && !home->empty()) {
@@ -1855,7 +1928,9 @@ bool GrokNative::TryHandleRequest(
     }
     if (!updated) {
       base::DictValue err;
-      err.Set("error", "provide model, search_home, and/or welcome_completed");
+      err.Set("error",
+              "provide model, search_model, search_home, and/or "
+              "welcome_completed");
       SendJson(server, connection_id, net::HTTP_BAD_REQUEST, std::move(err));
       return true;
     }
@@ -1870,6 +1945,8 @@ bool GrokNative::TryHandleRequest(
               "/search");
     d.Set("grok_wiki_url", kGrokWikiHomeURL);
     d.Set("welcome_completed", grok_companion::HasCompletedWelcome());
+    d.Set("product_name", grok_companion::kProductName);
+    EnrichSettingsResponse(&d, gateway_port);
     SendJson(server, connection_id, net::HTTP_OK, std::move(d));
     return true;
   }

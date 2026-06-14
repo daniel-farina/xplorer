@@ -10,46 +10,7 @@
   <link rel="stylesheet" href="/apps.css">
 </head>
 <body class="apps-page">
-  <header class="grok-toolbar">
-    <a class="grok-logo" href="/search">✦ Grok</a>
-    <div class="grok-toolbar-spacer"></div>
-    <div class="grok-toolbar-actions">
-      <div class="grok-nav-pills" id="home-toggle" title="Grok navigation">
-        <div class="grok-pill-wrap">
-          <a class="grok-pill" href="https://x.com/i/chat" target="_blank" rel="noopener noreferrer">X Chat</a>
-          <div class="grok-pill-menu">
-            <a href="https://x.com/i/chat" target="_blank" rel="noopener noreferrer">Open X Chat</a>
-          </div>
-        </div>
-        <div class="grok-pill-wrap">
-          <button type="button" class="grok-pill active" data-home="build">Grok Build</button>
-          <div class="grok-pill-menu">
-            <a href="/" data-route="conversations">Conversations</a>
-            <a href="/apps" data-route="apps">Apps</a>
-          </div>
-        </div>
-        <div class="grok-pill-wrap">
-          <button type="button" class="grok-pill" data-home="web">Grok Web</button>
-          <div class="grok-pill-menu">
-            <a href="/search" data-route="search">Search</a>
-            <a href="https://grok.com/imagine" target="_blank" rel="noopener noreferrer">Imagine</a>
-          </div>
-        </div>
-        <div class="grok-pill-wrap">
-          <button type="button" class="grok-pill" data-home="wiki">Wiki</button>
-          <div class="grok-pill-menu">
-            <a href="https://grokipedia.com/" target="_blank" rel="noopener noreferrer">Grokipedia</a>
-          </div>
-        </div>
-        <div class="grok-pill-wrap">
-          <a class="grok-pill" href="https://x.com/" target="_blank" rel="noopener noreferrer">x.com</a>
-          <div class="grok-pill-menu">
-            <a href="https://x.com/" target="_blank" rel="noopener noreferrer">Home</a>
-          </div>
-        </div>
-      </div>
-    </div>
-  </header>
+  <div id="grok-toolbar-mount"></div>
   <main class="apps-main">
     <section class="apps-hero">
       <h1>Apps</h1>

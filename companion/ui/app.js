@@ -370,7 +370,7 @@ document.addEventListener('keydown', (e) => {
   convFilterInput.select();
 });
 
-initSearchHomeToggle($('#home-toggle'));
+mountGrokToolbar({ pageHome: 'build' });
 
 startThemeWatcher();
 const urlParams = new URLSearchParams(location.search);
