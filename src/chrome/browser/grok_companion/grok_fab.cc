@@ -338,14 +338,19 @@ std::string BuildFabInjectScript() {
   function getGrokWebPendingId(){
     var id=new URLSearchParams(location.search).get('xplorer_grok');
     if(id)return id;
+    id=new URLSearchParams(location.search).get('xbrowser_grok');
+    if(id)return id;
     var m=(location.hash||'').match(/xplorer_grok=([^&]+)/);
+    if(m)return decodeURIComponent(m[1]);
+    m=(location.hash||'').match(/xbrowser_grok=([^&]+)/);
     return m?decodeURIComponent(m[1]):null;
   }
   function clearGrokWebPendingId(){
     try{
       var u=new URL(location.href);
       u.searchParams.delete('xplorer_grok');
-      u.hash=(u.hash||'').replace(/xplorer_grok=[^&]+&?/,'').replace(/&$/,'');
+      u.searchParams.delete('xbrowser_grok');
+      u.hash=(u.hash||'').replace(/xplorer_grok=[^&]+&?/,'').replace(/xbrowser_grok=[^&]+&?/,'').replace(/&$/,'');
       history.replaceState(null,'',u.pathname+u.search+u.hash);
     }catch(e){}
   }
@@ -536,7 +541,18 @@ std::string BuildFabInjectScript() {
   tryConsumeGrokWebPending();
   if((location.hostname||'').indexOf('grok.com')>=0&&!window.__xplorerGrokConsumeWatch){
     window.__xplorerGrokConsumeWatch=true;
-    setInterval(tryConsumeGrokWebPending,1000);
+    var consumeAttempts=0;
+    var consumeTimer=setInterval(function(){
+      if(window.__xplorerGrokWebSubmitDone||!getGrokWebPendingId()){
+        clearInterval(consumeTimer);
+        return;
+      }
+      if(++consumeAttempts>24){
+        clearInterval(consumeTimer);
+        return;
+      }
+      tryConsumeGrokWebPending();
+    },2500);
   }
   if(!window.__xplorerGrokFabWatch){
     window.__xplorerGrokFabWatch=true;

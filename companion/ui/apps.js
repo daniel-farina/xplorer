@@ -38,7 +38,10 @@ function renderApps(data) {
       </div>
       ${app.last_error ? '<p class="app-error">' + escapeHtml(app.last_error) + '</p>' : ''}
       <div class="app-actions">
-        <button type="button" class="apps-btn primary" data-open="${escapeHtml(app.id)}">Open</button>
+        <button type="button" class="apps-btn primary" data-open="${escapeHtml(app.id)}">Build</button>
+        ${app.status === 'ready' && app.open_url
+          ? `<button type="button" class="apps-btn" data-preview="${escapeHtml(app.open_url)}">Preview</button>`
+          : ''}
         <button type="button" class="apps-btn" data-modify="${escapeHtml(app.id)}">Modify</button>
         <button type="button" class="apps-btn danger" data-delete="${escapeHtml(app.id)}" data-name="${escapeHtml(app.name || 'App')}">Delete</button>
       </div>`;
@@ -47,6 +50,11 @@ function renderApps(data) {
   grid.querySelectorAll('[data-open]').forEach((btn) => {
     btn.onclick = () => {
       window.location.href = `/app?id=${encodeURIComponent(btn.dataset.open)}`;
+    };
+  });
+  grid.querySelectorAll('[data-preview]').forEach((btn) => {
+    btn.onclick = () => {
+      window.open(btn.dataset.preview, '_blank', 'noopener');
     };
   });
   grid.querySelectorAll('[data-modify]').forEach((btn) => {
@@ -89,6 +97,13 @@ function openAppBuild(appId, prompt) {
   sessionStorage.setItem('xplorer_app_build', JSON.stringify({ id: appId, prompt }));
   window.location.href = `/app?id=${encodeURIComponent(appId)}&autobuild=1`;
 }
+
+$('#create-prompt')?.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+    e.preventDefault();
+    createBtn.click();
+  }
+});
 
 createBtn.onclick = async () => {
   const prompt = $('#create-prompt').value.trim();
