@@ -48,6 +48,13 @@ bool IsFabHost(const GURL& url) {
       url.EffectiveIntPort() == GatewayPort()) {
     return false;
   }
+  const std::string_view host = url.host();
+  if (host == "grok.com" || host == "www.grok.com" ||
+      base::EndsWith(host, ".grok.com") || host == "grokipedia.com" ||
+      host == "www.grokipedia.com" ||
+      base::EndsWith(host, ".grokipedia.com")) {
+    return false;
+  }
   return true;
 }
 
@@ -108,60 +115,30 @@ std::string BuildFabInjectScript() {
       R"((function(){
   if(!document.documentElement)return;
   var GW=%s;
-  var FAB_ID='xbrowser-grok-fab',PANEL_ID='xbrowser-grok-panel',STYLE_ID='xbrowser-grok-fab-style';
-  var GROK_ICON='<svg viewBox="0 0 33 32" aria-hidden="true" class="xfab-grok-icon"><g><path d="M12.745 20.54l10.97-8.19c.539-.4 1.307-.244 1.564.38 1.349 3.288.746 7.241-1.938 9.955-2.683 2.714-6.417 3.31-9.83 1.954l-3.728 1.745c5.347 3.697 11.84 2.782 15.898-1.324 3.219-3.255 4.216-7.692 3.284-11.693l.008.009c-1.351-5.878.332-8.227 3.782-13.031L33 0l-4.54 4.59v-.014L12.743 20.544m-2.263 1.987c-3.837-3.707-3.175-9.446.1-12.755 2.42-2.449 6.388-3.448 9.852-1.979l3.72-1.737c-.67-.49-1.53-1.017-2.515-1.387-4.455-1.854-9.789-.931-13.41 2.728-3.483 3.523-4.579 8.94-2.697 13.561 1.405 3.454-.899 5.898-3.22 8.364C1.49 30.2.666 31.074 0 32l10.478-9.466"></path></g></svg>';
-  var css='#xbrowser-grok-fab{position:fixed;bottom:20px;right:20px;z-index:2147483646;display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:7px 12px 7px 10px;border:1px solid #dadce0;border-radius:999px;background:#fff;color:#202124;font:500 12px/1 -apple-system,BlinkMacSystemFont,sans-serif;cursor:pointer;box-shadow:0 2px 8px rgba(60,64,67,.15);white-space:nowrap;-webkit-font-smoothing:antialiased;transition:transform .15s,box-shadow .15s,background .15s}'
-    +'.xfab-grok-icon{width:14px;height:14px;flex-shrink:0;display:block;fill:currentColor}'
-    +'#xbrowser-grok-fab:hover{transform:translateY(-1px);box-shadow:0 4px 12px rgba(60,64,67,.2);background:#f8f9fa}'
-    +'#xbrowser-grok-fab:disabled{opacity:.55;cursor:not-allowed;transform:none}'
-    +'#xbrowser-grok-panel{position:fixed;bottom:62px;right:20px;z-index:2147483646;width:min(380px,calc(100vw - 40px));max-height:min(420px,60vh);display:none;flex-direction:column;background:#fff;color:#202124;border:1px solid #dadce0;border-radius:14px;box-shadow:0 8px 28px rgba(60,64,67,.18);font:13px/1.45 -apple-system,BlinkMacSystemFont,sans-serif;overflow:hidden;transition:width .2s,max-height .2s}'
-    +'#xbrowser-grok-panel.expanded{width:min(640px,calc(100vw - 24px));max-height:min(78vh,720px)}'
-    +'#xbrowser-grok-panel.open{display:flex}'
-    +'.xfab-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:12px 14px;border-bottom:1px solid #dadce0;font-weight:600;font-size:14px;color:#202124}'
-    +'.xfab-head-actions{display:inline-flex;align-items:center;gap:4px}'
-    +'.xfab-icon-btn,.xfab-close{border:none;background:transparent;color:#5f6368;font-size:16px;cursor:pointer;padding:2px 6px;line-height:1;border-radius:6px}'
-    +'.xfab-icon-btn:hover,.xfab-close:hover{background:#f1f3f4;color:#202124}'
-    +'.xfab-picker{padding:14px;display:flex;flex-direction:column;gap:10px}'
-    +'.xfab-picker-label{margin:0;font-size:13px;color:#5f6368}'
-    +'.xfab-choice{display:flex;flex-direction:column;align-items:flex-start;gap:2px;width:100%%;border:1px solid #dadce0;background:#f8f9fa;border-radius:12px;padding:10px 12px;cursor:pointer;text-align:left;font:inherit;transition:border-color .15s,background .15s}'
-    +'.xfab-choice:hover{border-color:#1a73e8;background:#fff}'
-    +'.xfab-choice-title{font-weight:600;font-size:13px;color:#202124}'
-    +'.xfab-choice-desc{font-size:12px;color:#5f6368}'
-    +'.xfab-body{padding:12px 14px;overflow-y:auto;flex:1;white-space:pre-wrap;word-break:break-word;color:#3c4043}'
-    +'.xfab-body.loading{color:#5f6368;font-style:italic}'
-    +'.xfab-body[hidden],.xfab-picker[hidden],.xfab-actions[hidden]{display:none!important}'
-    +'.xfab-actions{display:flex;gap:8px;padding:10px 14px 14px;border-top:1px solid #dadce0}'
-    +'.xfab-btn{flex:1;border:1px solid #dadce0;background:#f8f9fa;color:#202124;border-radius:10px;padding:8px 12px;font:inherit;font-size:12px;font-weight:500;cursor:pointer}'
-    +'.xfab-btn:hover{border-color:#1a73e8;color:#1a73e8;background:#fff}'
-    +'.xfab-btn.primary{background:#1a73e8;border-color:#1a73e8;color:#fff}'
-    +'.xfab-btn.primary:hover{background:#1557b0;border-color:#1557b0;color:#fff}'
-    +'.xfab-btn:disabled{opacity:.45;cursor:not-allowed}'
-    +'@media (prefers-color-scheme:dark){'
-    +'#xbrowser-grok-fab{background:#292a2d;color:#e8eaed;border-color:#3c4043;box-shadow:0 2px 10px rgba(0,0,0,.35)}'
-    +'#xbrowser-grok-fab:hover{background:#35363a;box-shadow:0 4px 14px rgba(0,0,0,.45)}'
-    +'#xbrowser-grok-panel{background:#292a2d;color:#e8eaed;border-color:#3c4043;box-shadow:0 8px 32px rgba(0,0,0,.45)}'
-    +'.xfab-head{border-bottom-color:#3c4043;color:#e8eaed}'
-    +'.xfab-icon-btn,.xfab-close{color:#9aa0a6}'
-    +'.xfab-icon-btn:hover,.xfab-close:hover{background:#35363a;color:#e8eaed}'
-    +'.xfab-picker-label{color:#9aa0a6}'
-    +'.xfab-choice{background:#35363a;border-color:#3c4043}'
-    +'.xfab-choice:hover{border-color:#8ab4f8;background:#292a2d}'
-    +'.xfab-choice-title{color:#e8eaed}'
-    +'.xfab-choice-desc{color:#9aa0a6}'
-    +'.xfab-body{color:#bdc1c6}'
-    +'.xfab-body.loading{color:#9aa0a6}'
-    +'.xfab-actions{border-top-color:#3c4043}'
-    +'.xfab-btn{background:#35363a;color:#e8eaed;border-color:#3c4043}'
-    +'.xfab-btn:hover{border-color:#8ab4f8;color:#8ab4f8;background:#292a2d}'
-    +'.xfab-btn.primary{background:#8ab4f8;border-color:#8ab4f8;color:#202124}'
-    +'.xfab-btn.primary:hover{background:#aecbfa;border-color:#aecbfa;color:#202124}'
-    +'}';
-  var state=window.__xbrowserGrokFabState||(window.__xbrowserGrokFabState={summary:'',busy:false,pageData:null});
+  var FAB_ID='xbrowser-grok-fab',STYLE_ID='xbrowser-grok-fab-style';
+  var DOC_ICON='<span class="xfab-doc" aria-hidden="true">'
+    +'<span class="xfab-doc-fold"></span>'
+    +'<span class="xfab-doc-art">'
+    +'<svg viewBox="0 0 36 24" class="xfab-landscape"><rect width="36" height="24" rx="4" fill="#b0b0b0"/>'
+    +'<circle cx="26" cy="7" r="3" fill="#9a9a9a"/>'
+    +'<path d="M3 20 L13 12 L19 16 L27 8 L36 20 Z" fill="#9a9a9a"/></svg>'
+    +'</span><span class="xfab-doc-label">Grok</span></span>';
+  var css='#xbrowser-grok-fab{position:fixed;bottom:22px;right:22px;z-index:2147483646;border:none;background:transparent;padding:0;cursor:pointer;-webkit-font-smoothing:antialiased;transition:transform .15s,filter .15s}'
+    +'#xbrowser-grok-fab:hover{transform:translateY(-2px);filter:brightness(1.03)}'
+    +'#xbrowser-grok-fab:disabled{opacity:.6;cursor:wait;transform:none}'
+    +'.xfab-doc{position:relative;display:flex;flex-direction:column;align-items:center;width:54px;padding:10px 8px 8px;background:#f8f8f8;border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.22),0 1px 3px rgba(0,0,0,.12)}'
+    +'.xfab-doc-fold{position:absolute;top:0;right:0;width:0;height:0;border-style:solid;border-width:0 18px 18px 0;border-color:transparent #e4e4e4 transparent transparent;border-top-right-radius:12px;filter:drop-shadow(-1px 1px 1px rgba(0,0,0,.08))}'
+    +'.xfab-doc-fold::after{content:"";position:absolute;top:0;right:-18px;width:0;height:0;border-style:solid;border-width:0 17px 17px 0;border-color:transparent #fff transparent transparent}'
+    +'.xfab-doc-art{display:flex;align-items:center;justify-content:center;width:38px;height:28px;margin-top:2px;border-radius:5px;overflow:hidden;background:#b8b8b8}'
+    +'.xfab-landscape{display:block;width:38px;height:28px}'
+    +'.xfab-doc-label{margin-top:6px;font:500 11px/1 -apple-system,BlinkMacSystemFont,sans-serif;letter-spacing:.14em;color:#a0a0a0;text-transform:uppercase}'
+    +'#xbrowser-grok-fab.busy .xfab-doc-label::after{content:"…"}';
+  var state=window.__xbrowserGrokFabState||(window.__xbrowserGrokFabState={busy:false,pageData:null});
   function xlog(){
     try{console.log.apply(console,['[xbrowser-fab]'].concat(Array.prototype.slice.call(arguments)));}catch(e){}
   }
   function extractPage(){
-    var kill='script,style,noscript,svg,nav,footer,aside,iframe,#xbrowser-grok-bar,#xbrowser-grok-fab,#xbrowser-grok-panel,[data-aether-hud]';
+    var kill='script,style,noscript,svg,nav,footer,aside,iframe,#xbrowser-grok-bar,#xbrowser-grok-fab,[data-aether-hud]';
     var selText=(window.getSelection&&window.getSelection().toString()||'').replace(/\s+/g,' ').trim();
     if(selText.length>80){
       xlog('extract: user selection',selText.length,'chars');
@@ -211,126 +188,27 @@ std::string BuildFabInjectScript() {
     }else if(fab.parentNode!==document.documentElement){
       document.documentElement.appendChild(fab);
     }
-    fab.title='Grok this page';
-    fab.setAttribute('aria-label','Grok this page');
-    fab.innerHTML=GROK_ICON+'<span>Grok it</span>';
-    var panel=document.getElementById(PANEL_ID);
-    if(!panel){
-      panel=document.createElement('div');
-      panel.id=PANEL_ID;
-      document.documentElement.appendChild(panel);
-    }else if(panel.parentNode!==document.documentElement){
-      document.documentElement.appendChild(panel);
-    }
-    if(panel.dataset.version!=='3'){
-      panel.dataset.version='3';
-      panel.innerHTML='<div class="xfab-head"><span class="xfab-title">Grok this page</span>'
-        +'<div class="xfab-head-actions">'
-        +'<button type="button" class="xfab-icon-btn" id="xfab-expand" aria-label="Expand panel" title="Expand">\u2922</button>'
-        +'<button type="button" class="xfab-close" aria-label="Close">\u00d7</button>'
-        +'</div></div>'
-        +'<div class="xfab-picker" id="xfab-picker">'
-        +'<p class="xfab-picker-label">How would you like to Grok it?</p>'
-        +'<button type="button" class="xfab-choice" id="xfab-build">'
-        +'<span class="xfab-choice-title">Grok Build</span>'
-        +'<span class="xfab-choice-desc">Summarize in this panel</span></button>'
-        +'<button type="button" class="xfab-choice" id="xfab-web">'
-        +'<span class="xfab-choice-title">Grok Web</span>'
-        +'<span class="xfab-choice-desc">Open grok.com with this page</span></button>'
-        +'</div>'
-        +'<div class="xfab-body loading" id="xfab-body" hidden></div>'
-        +'<div class="xfab-actions" id="xfab-actions" hidden>'
-        +'<button type="button" class="xfab-btn" id="xfab-copy" disabled>Copy</button>'
-        +'<button type="button" class="xfab-btn primary" id="xfab-chat" disabled>Chat in Build</button>'
-        +'</div>';
-      fab.dataset.wired='';
-    }
-    if(fab.dataset.wired==='1')return;
-    fab.dataset.wired='1';
-    var pickerEl=panel.querySelector('#xfab-picker');
-    var bodyEl=panel.querySelector('#xfab-body');
-    var actionsEl=panel.querySelector('#xfab-actions');
-    var copyBtn=panel.querySelector('#xfab-copy');
-    var chatBtn=panel.querySelector('#xfab-chat');
-    var closeBtn=panel.querySelector('.xfab-close');
-    var expandBtn=panel.querySelector('#xfab-expand');
-    var buildBtn=panel.querySelector('#xfab-build');
-    var webBtn=panel.querySelector('#xfab-web');
+    fab.title='Grok this page on Grok Web';
+    fab.setAttribute('aria-label','Grok this page on Grok Web');
+    fab.innerHTML=DOC_ICON;
+    var oldPanel=document.getElementById('xbrowser-grok-panel');
+    if(oldPanel)oldPanel.remove();
+    if(fab.dataset.wired==='4')return;
+    fab.dataset.wired='4';
     function setBusy(on){
       state.busy=on;
       fab.disabled=on;
-      if(copyBtn)copyBtn.disabled=on||!state.summary;
-      if(chatBtn)chatBtn.disabled=on||!state.summary;
-      if(buildBtn)buildBtn.disabled=on;
-      if(webBtn)webBtn.disabled=on;
+      fab.classList.toggle('busy',on);
     }
-    function togglePanel(open){
-      if(open===undefined)open=!panel.classList.contains('open');
-      panel.classList.toggle('open',open);
-    }
-    function showPicker(){
-      if(pickerEl)pickerEl.hidden=false;
-      if(bodyEl){bodyEl.hidden=true;bodyEl.classList.add('loading');}
-      if(actionsEl)actionsEl.hidden=true;
-    }
-    function showResults(){
-      if(pickerEl)pickerEl.hidden=true;
-      if(bodyEl)bodyEl.hidden=false;
-      if(actionsEl)actionsEl.hidden=false;
-    }
-    closeBtn.onclick=function(){togglePanel(false);};
-    expandBtn.onclick=function(){
-      var on=panel.classList.toggle('expanded');
-      expandBtn.setAttribute('aria-label',on?'Shrink panel':'Expand panel');
-      expandBtn.setAttribute('title',on?'Shrink':'Expand');
-      expandBtn.textContent=on?'\u2923':'\u2922';
-    };
-    fab.onclick=function(){
-      togglePanel(true);
-      if(state.summary){showResults();return;}
-      if(!state.busy)showPicker();
-    };
-    buildBtn.onclick=function(){runSummarize();};
-    webBtn.onclick=function(){runGrokWeb();};
-    copyBtn.onclick=function(){
-      if(!state.summary)return;
-      var done=function(){copyBtn.textContent='Copied!';setTimeout(function(){copyBtn.textContent='Copy';},1500);};
-      if(navigator.clipboard&&navigator.clipboard.writeText){
-        navigator.clipboard.writeText(state.summary).then(done).catch(function(){
-          prompt('Copy summary:',state.summary);
-        });
-      }else{prompt('Copy summary:',state.summary);done();}
-    };
-    chatBtn.onclick=function(){
-      if(!state.pageData||!state.summary||state.busy)return;
-      setBusy(true);
-      bodyEl.textContent='Opening chat…';
-      fetch(GW+'/api/page/start-chat',{
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({url:state.pageData.url,title:state.pageData.title,text:state.pageData.text,summary:state.summary})
-      }).then(function(r){return r.json();}).then(function(d){
-        if(d.error)throw new Error(d.error);
-        if(d.chat_url)window.open(d.chat_url,'_blank');
-        else if(d.id)window.open(GW+'/?conv='+encodeURIComponent(d.id),'_blank');
-        togglePanel(false);
-      }).catch(function(e){
-        bodyEl.textContent='Chat failed: '+(e.message||e);
-        bodyEl.classList.add('loading');
-      }).finally(function(){setBusy(false);});
-    };
     function runGrokWeb(){
+      if(state.busy)return;
       state.pageData=extractPage();
       if(!state.pageData.text){
-        showResults();
-        bodyEl.textContent='No readable text on this page.';
-        bodyEl.classList.remove('loading');
+        alert('No readable text on this page.');
         return;
       }
       setBusy(true);
-      showResults();
-      bodyEl.textContent='Opening Grok Web…';
-      bodyEl.classList.add('loading');
+      xlog('grok web',state.pageData.source,state.pageData.text.length);
       fetch(GW+'/api/page/grok-web',{
         method:'POST',
         headers:{'Content-Type':'application/json'},
@@ -339,76 +217,11 @@ std::string BuildFabInjectScript() {
         if(d.error)throw new Error(d.error);
         if(d.grok_url)window.open(d.grok_url,'_blank');
         else throw new Error('missing grok_url');
-        togglePanel(false);
       }).catch(function(e){
-        bodyEl.textContent='Grok Web failed: '+(e.message||e);
-        bodyEl.classList.remove('loading');
+        alert('Grok Web failed: '+(e.message||e));
       }).finally(function(){setBusy(false);});
     }
-    function runSummarize(){
-      state.pageData=extractPage();
-      if(!state.pageData.text){
-        showResults();
-        bodyEl.textContent='No readable text on this page.';
-        bodyEl.classList.remove('loading');
-        return;
-      }
-      state.summary='';
-      setBusy(true);
-      showResults();
-      bodyEl.textContent='Grok is summarizing…';
-      bodyEl.classList.add('loading');
-      copyBtn.disabled=true;
-      chatBtn.disabled=true;
-      fetch(GW+'/api/page/summarize/stream',{
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body:JSON.stringify(state.pageData)
-      }).then(function(res){
-        if(!res.ok)return res.json().then(function(e){throw new Error(e.error||res.statusText);});
-        var reader=res.body.getReader();
-        var decoder=new TextDecoder();
-        var buf='',text='';
-        function pump(){
-          return reader.read().then(function(chunk){
-            if(chunk.done){
-              state.summary=text.trim()||'No summary returned.';
-              bodyEl.textContent=state.summary;
-              bodyEl.classList.remove('loading');
-              setBusy(false);
-              copyBtn.disabled=false;
-              chatBtn.disabled=false;
-              return;
-            }
-            buf+=decoder.decode(chunk.value,{stream:true});
-            var idx;
-            while((idx=buf.indexOf('\n'))>=0){
-              var line=buf.slice(0,idx).trim();
-              buf=buf.slice(idx+1);
-              if(!line||line[0]!=='{')continue;
-              try{
-                var evt=JSON.parse(line);
-                if(evt.type==='text'&&evt.data){
-                  text+=evt.data;
-                  bodyEl.textContent=text;
-                  bodyEl.classList.remove('loading');
-                }else if(evt.type==='result'&&evt.text){
-                  text=evt.text;
-                }else if(evt.type==='error'){
-                  throw new Error(evt.error||'summarize failed');
-                }
-              }catch(parseErr){}
-            }
-            return pump();
-          });
-        }
-        return pump();
-      }).catch(function(e){
-        bodyEl.textContent='Error: '+(e.message||e);
-        bodyEl.classList.add('loading');
-        setBusy(false);
-      });
-    }
+    fab.onclick=runGrokWeb;
   }
   function getGrokWebPendingId(){
     var id=new URLSearchParams(location.search).get('xbrowser_grok');
