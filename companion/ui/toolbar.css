@@ -156,6 +156,17 @@ header.grok-toolbar {
   align-items: stretch;
 }
 
+/* Invisible bridge so the menu stays open while moving the pointer down. */
+.grok-pill-wrap::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 100%;
+  height: 10px;
+  z-index: 199;
+}
+
 .grok-pill-wrap + .grok-pill-wrap .grok-pill {
   border-left: 1px solid var(--toolbar-border);
 }
@@ -190,7 +201,8 @@ header.grok-toolbar {
 .grok-pill-menu {
   display: none;
   position: absolute;
-  top: calc(100% + 6px);
+  top: 100%;
+  margin-top: 6px;
   right: 0;
   min-width: 148px;
   padding: 4px;
