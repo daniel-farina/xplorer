@@ -137,6 +137,7 @@ def main() -> int:
     assert "runtime_url" in apps_js
     _, apps_html = get("/apps")
     assert "apps-filter-bar" in apps_html
+    assert 'data-filter="idle"' in apps_html or "idle" in apps_html
     exportable_count = sum(1 for a in apps["apps"] if a.get("exportable"))
     ready_count = sum(1 for a in apps["apps"] if a.get("status") == "ready")
     assert exportable_count >= 0 and ready_count >= 0
@@ -145,6 +146,7 @@ def main() -> int:
 
     assert "convFilterQuery" in app_js
     assert "convFilterInput.focus" in app_js
+    assert "Escape" in app_js
     req = urllib.request.Request(f"{BASE}/", headers={"Accept": "text/html"})
     with urllib.request.urlopen(req, timeout=10) as resp:
         app_html = resp.read().decode()
@@ -164,6 +166,7 @@ def main() -> int:
     assert "openGrokWebQuery" in search_js
     assert "/api/page/grok-web" in search_js
     assert "runNativeSearch" not in search_js
+    assert "initSearchModelFromSettings" in search_js
     print("search.js grok-web handoff: OK")
 
     _, welcome = get("/welcome")
@@ -172,6 +175,7 @@ def main() -> int:
     _, settings_html = get("/settings")
     assert "settings-page" in settings_html
     assert "grok-toolbar-mount" in settings_html
+    assert "chrome://settings" in settings_html
     print("welcome dev hint: OK")
 
     class NoRedirect(urllib.request.HTTPRedirectHandler):

@@ -114,6 +114,7 @@ const FILTER_LABELS = {
   all: 'All',
   ready: 'Ready',
   building: 'Building',
+  idle: 'Idle',
   error: 'Error',
 };
 

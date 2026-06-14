@@ -100,6 +100,19 @@ mountGrokToolbar({
 
 startThemeWatcher();
 
+async function initSearchModelFromSettings() {
+  try {
+    const settings = await fetchSettings();
+    if (settings && settings.search_model) {
+      persistSearchModel(settings.search_model);
+    }
+  } catch {
+    // fall back to localStorage / default
+  }
+}
+
+initSearchModelFromSettings().catch(() => {});
+
 const urlParams = new URLSearchParams(location.search);
 const modeParam = urlParams.get('mode');
 if (modeParam && ['web', 'imagine'].includes(modeParam)) {

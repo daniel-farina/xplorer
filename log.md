@@ -298,15 +298,31 @@ User ran `/loop 15m improve our browser…`. Background conductor task `task-BFB
 | Build + reinstall | OK ✓ |
 
 ## Next loop priorities
-- Settings: link to chrome://settings (native handler)
-- Search: use persisted search_model from settings in search.js init
-- Chat: Esc clears conv filter
-- Apps: idle/exportable filter tabs
 - xAI: expose grok.com tool handoffs in settings (Imagine, voice)
 - Native: grok.com toolbar Settings submenu
-- Apps: idle filter tab + exportable-only filter
-- Chat: Esc clears conv filter
+- Apps: exportable-only filter (checkbox or tab)
+- Chat: persist conv filter query across refresh?
 - Search: error fallback uses imagine URL in imagine mode
 - Native: grok.com search page Imagine submenu handoff
 - FAB: open app preview in new tab from builder link
-- Smoke test: filter tab switches ready count in live UI
+- Smoke test: filter tab switches ready count in live UI (interactive)
+
+## Loop 15 (2026-06-14)
+
+### Commit — feat(ui): search model from settings, Esc clears conv filter, apps idle tab, chrome://settings link
+- **Search:** `search.js` init now runs `initSearchModelFromSettings()` which fetches `/api/settings` and calls `persistSearchModel(settings.search_model)` (syncs server default into localStorage used by getStoredSearchMode etc).
+- **Chat:** Esc (on filter input or document when filter active) clears `convFilterQuery`, resets the `#conv-filter` input, and re-renders the conversation list.
+- **Apps:** Filter tabs now include "Idle" (added to `apps.html` buttons + `FILTER_LABELS` in `apps.js`); idle status was already computed in counts/status logic.
+- **Settings:** New "Chrome" card on `/settings` with `<a href="chrome://settings">` link (relies on Chromium's native chrome:// handler for full browser prefs).
+- **Test:** `python3 sdk/companion_smoke_test.py` → ALL OK (serves fresh JS/HTML with new code paths; no asserts broken). UI files loaded live from `~/cli_experiment/aether/companion/ui` (UiDir lookup, no native rebuild or reinstall required). Verified via curl: init fn, Escape handlers, idle data-filter, chrome:// url present.
+- Revert not needed (smoke green).
+
+**Loop 15 test summary**
+| Check | Result |
+|-------|--------|
+| companion_smoke_test.py | ALL OK |
+| search.js uses settings.search_model | initSearchModelFromSettings + persist ✓ |
+| Esc clears conv filter | key handler in app.js + input ✓ |
+| apps idle filter tab | data-filter=idle + label in html/js ✓ |
+| chrome://settings link | present in settings.html ✓ |
+| UI only (no build) | smoke passed live ✓ |

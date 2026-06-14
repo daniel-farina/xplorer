@@ -360,7 +360,23 @@ convFilterInput?.addEventListener('input', () => {
   renderConvList();
 });
 
+convFilterInput?.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    convFilterQuery = '';
+    if (convFilterInput) convFilterInput.value = '';
+    renderConvList();
+  }
+});
+
 document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    if (convFilterQuery && convFilterInput) {
+      convFilterQuery = '';
+      convFilterInput.value = '';
+      renderConvList();
+      return;
+    }
+  }
   if (e.key !== '/' || e.metaKey || e.ctrlKey || e.altKey) return;
   const tag = (document.activeElement?.tagName || '').toLowerCase();
   if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
