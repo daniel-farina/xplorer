@@ -42,6 +42,8 @@ function renderApps(data) {
         ${app.status === 'ready' && app.open_url
           ? `<button type="button" class="apps-btn" data-preview="${escapeHtml(app.open_url)}">Preview</button>`
           : ''}
+        <button type="button" class="apps-btn" data-rename="${escapeHtml(app.id)}" data-name="${escapeHtml(app.name || 'App')}">Rename</button>
+        <button type="button" class="apps-btn" data-duplicate="${escapeHtml(app.id)}">Duplicate</button>
         <button type="button" class="apps-btn" data-modify="${escapeHtml(app.id)}">Modify</button>
         <button type="button" class="apps-btn danger" data-delete="${escapeHtml(app.id)}" data-name="${escapeHtml(app.name || 'App')}">Delete</button>
       </div>`;
@@ -55,6 +57,44 @@ function renderApps(data) {
   grid.querySelectorAll('[data-preview]').forEach((btn) => {
     btn.onclick = () => {
       window.open(btn.dataset.preview, '_blank', 'noopener');
+    };
+  });
+  grid.querySelectorAll('[data-rename]').forEach((btn) => {
+    btn.onclick = async () => {
+      const next = window.prompt('Rename app', btn.dataset.name || '');
+      if (!next?.trim() || next.trim() === btn.dataset.name) return;
+      btn.disabled = true;
+      try {
+        const r = await fetch(`/api/apps/${encodeURIComponent(btn.dataset.rename)}/rename`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: next.trim() }),
+        });
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(data.error || r.statusText);
+        await refresh();
+      } catch (e) {
+        alert(e.message);
+        btn.disabled = false;
+      }
+    };
+  });
+  grid.querySelectorAll('[data-duplicate]').forEach((btn) => {
+    btn.onclick = async () => {
+      btn.disabled = true;
+      try {
+        const r = await fetch(`/api/apps/${encodeURIComponent(btn.dataset.duplicate)}/duplicate`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: '{}',
+        });
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(data.error || r.statusText);
+        await refresh();
+      } catch (e) {
+        alert(e.message);
+        btn.disabled = false;
+      }
     };
   });
   grid.querySelectorAll('[data-modify]').forEach((btn) => {

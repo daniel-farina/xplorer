@@ -169,6 +169,13 @@ input.addEventListener('keydown', (e) => {
 });
 
 async function initModels() {
+  try {
+    const settings = await fetchSettings();
+    if (settings.model) {
+      activeModel = settings.model;
+      persistModel(activeModel);
+    }
+  } catch { /* use localStorage fallback */ }
   models = await fetchModels();
   if (!models.some((m) => m.id === activeModel)) {
     activeModel = models[0]?.id || DEFAULT_MODEL;
