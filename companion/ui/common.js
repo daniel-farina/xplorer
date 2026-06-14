@@ -103,8 +103,13 @@ async function initSearchHomeToggle(container, { onSwitch, pageHome } = {}) {
         setActive(saved);
         if (onSwitch) onSwitch(saved, updated);
         else {
-          window.location.href =
-            `${window.location.origin}/switch-home?mode=${encodeURIComponent(saved)}`;
+          const params = new URLSearchParams(window.location.search);
+          let url = `${window.location.origin}/switch-home?mode=${encodeURIComponent(saved)}`;
+          const q = params.get('q');
+          const m = params.get('mode');
+          if (q) url += `&q=${encodeURIComponent(q)}`;
+          if (m) url += `&m=${encodeURIComponent(m)}`;
+          window.location.href = url;
         }
       } catch (e) {
         alert(`Could not save preference: ${e.message}`);

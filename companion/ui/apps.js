@@ -40,6 +40,7 @@ function renderApps(data) {
       <div class="app-actions">
         <button type="button" class="apps-btn primary" data-open="${escapeHtml(app.id)}">Open</button>
         <button type="button" class="apps-btn" data-modify="${escapeHtml(app.id)}">Modify</button>
+        <button type="button" class="apps-btn danger" data-delete="${escapeHtml(app.id)}" data-name="${escapeHtml(app.name || 'App')}">Delete</button>
       </div>`;
     grid.appendChild(card);
   }
@@ -51,13 +52,26 @@ function renderApps(data) {
   grid.querySelectorAll('[data-modify]').forEach((btn) => {
     btn.onclick = () => {
       const prompt = window.prompt('What should Grok change in this app?');
-      if (!prompt) return;
-      sessionStorage.setItem('xplorer_app_build', JSON.stringify({
-        id: btn.dataset.modify,
-        prompt,
-      }));
-      window.location.href =
-        `/app?id=${encodeURIComponent(btn.dataset.modify)}&autobuild=1`;
+      if (!prompt?.trim()) return;
+      openAppBuild(btn.dataset.modify, prompt.trim());
+    };
+  });
+  grid.querySelectorAll('[data-delete]').forEach((btn) => {
+    btn.onclick = async () => {
+      const name = btn.dataset.name || 'this app';
+      if (!confirm(`Delete "${name}"? This removes the app folder and cannot be undone.`)) return;
+      btn.disabled = true;
+      try {
+        const r = await fetch(`/api/apps/${encodeURIComponent(btn.dataset.delete)}`, {
+          method: 'DELETE',
+        });
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(data.error || r.statusText);
+        await refresh();
+      } catch (e) {
+        alert(e.message);
+        btn.disabled = false;
+      }
     };
   });
 }

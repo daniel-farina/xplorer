@@ -101,6 +101,17 @@ html.grok-build body.apps-page {
   color: var(--button-text);
 }
 
+.apps-btn.danger {
+  color: #c0392b;
+  border-color: rgba(192, 57, 43, 0.35);
+}
+
+.apps-btn.danger:hover:not(:disabled) {
+  background: rgba(192, 57, 43, 0.08);
+  border-color: #c0392b;
+  color: #c0392b;
+}
+
 .apps-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;

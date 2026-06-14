@@ -1577,6 +1577,16 @@ bool GrokNative::TryHandleRequest(
       dest = kGrokWikiHomeURL;
     else
       dest = base::StringPrintf("http://127.0.0.1:%d/search", gateway_port);
+    auto qit = params.find("q");
+    if (qit != params.end() && !qit->second.empty()) {
+      dest += (dest.find('?') == std::string::npos ? "?" : "&");
+      dest += "q=" + qit->second;
+    }
+    auto mit = params.find("m");
+    if (mit != params.end() && !mit->second.empty()) {
+      dest += (dest.find('?') == std::string::npos ? "?" : "&");
+      dest += "mode=" + mit->second;
+    }
     net::HttpServerResponseInfo resp(net::HTTP_FOUND);
     resp.AddHeader("Location", dest);
     resp.AddHeader("Cache-Control", "no-store");

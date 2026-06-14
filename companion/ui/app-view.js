@@ -397,6 +397,13 @@ $('#chat-form').onsubmit = async (e) => {
   await runAgentStream({ text, mode: 'message' });
 };
 
+$('#chat-input')?.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    $('#chat-form')?.requestSubmit();
+  }
+});
+
 initSearchHomeToggle($('#home-toggle'));
 initChatToggle();
 startThemeWatcher();

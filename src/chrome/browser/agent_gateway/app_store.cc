@@ -150,6 +150,32 @@ std::string AppStatus(const base::DictValue& app) {
   return status ? *status : kStatusIdle;
 }
 
+void ReconcileRegistryStates(base::DictValue& registry) {
+  bool changed = false;
+  base::ListValue* apps = AppsList(registry);
+  if (!apps)
+    return;
+  for (auto& v : *apps) {
+    if (!v.is_dict())
+      continue;
+    base::DictValue& app = v.GetDict();
+    const std::string* id = app.FindString("id");
+    if (!id || id->empty())
+      continue;
+    const std::string* status = app.FindString("status");
+    if (status && *status == kStatusBuilding &&
+        !g_active_app_builds->count(*id)) {
+      app.Set("status", kStatusIdle);
+      changed = true;
+    }
+    if (status && *status == kStatusError && app.FindString("last_error")) {
+      /* keep error state visible */
+    }
+  }
+  if (changed)
+    SaveRegistry(registry);
+}
+
 std::set<int> UsedRuntimePorts(const base::DictValue& registry) {
   std::set<int> used;
   if (const base::ListValue* apps = registry.FindList("apps")) {
@@ -534,6 +560,7 @@ bool TryHandleAppsRequest(
 
   if (info.method == "GET" && path == "/api/apps") {
     base::DictValue registry = LoadRegistry();
+    ReconcileRegistryStates(registry);
     base::ListValue* apps = registry.FindList("apps");
     base::ListValue out_apps;
     if (apps) {
