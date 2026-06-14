@@ -155,6 +155,7 @@ std::string BuildFabInjectScript() {
     appendMenuItem(menu,'summarize','\u21b3','Summarize this','\u203a');
     appendMenuItem(menu,'factcheck','\u2713','Is this true?');
     appendMenuItem(menu,'explain','\u2026','Explain this');
+    appendMenuItem(menu,'buildapp','\u2699','Build app from page');
     appendMenuItem(menu,'open','\u2726','Open in Grok');
   }
   function buildFabButton(fab){
@@ -264,8 +265,8 @@ std::string BuildFabInjectScript() {
     }else if(fab.parentNode!==wrap){
       wrap.appendChild(fab);
     }
-    if(menu.dataset.version!=='6'){
-      menu.dataset.version='6';
+    if(menu.dataset.version!=='7'){
+      menu.dataset.version='7';
       buildMenu(menu);
       fab.dataset.wired='';
     }
@@ -274,8 +275,8 @@ std::string BuildFabInjectScript() {
     buildFabButton(fab);
     var oldPanel=document.getElementById('xplorer-grok-panel');
     if(oldPanel)oldPanel.remove();
-    if(fab.dataset.wired==='6')return;
-    fab.dataset.wired='6';
+    if(fab.dataset.wired==='7')return;
+    fab.dataset.wired='7';
     function setBusy(on){
       state.busy=on;
       fab.disabled=on;
@@ -295,6 +296,32 @@ std::string BuildFabInjectScript() {
         return;
       }
       state.pageData=extractPage();
+      if(action==='buildapp'){
+        if(!state.pageData.text){
+          alert('No readable text on this page.');
+          return;
+        }
+        setBusy(true);
+        var title=(state.pageData.title||'Page app').slice(0,40);
+        var prompt='Build a small interactive web app inspired by this page. Page: '+
+          state.pageData.title+'\nURL: '+state.pageData.url+'\n\nContent:\n'+
+          state.pageData.text.slice(0,12000);
+        fetch(GW+'/api/apps',{
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({prompt:prompt,name:title})
+        }).then(function(r){return r.json();}).then(function(d){
+          if(d.error)throw new Error(d.error);
+          if(!d.app||!d.app.id)throw new Error('missing app id');
+          sessionStorage.setItem('xplorer_app_build',JSON.stringify({
+            id:d.app.id,prompt:prompt
+          }));
+          window.open(GW+'/app?id='+encodeURIComponent(d.app.id)+'&autobuild=1','_blank');
+        }).catch(function(e){
+          alert('Build app failed: '+(e.message||e));
+        }).finally(function(){setBusy(false);});
+        return;
+      }
       if(!state.pageData.text){
         alert('No readable text on this page.');
         return;

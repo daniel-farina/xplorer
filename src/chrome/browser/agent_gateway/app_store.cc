@@ -786,6 +786,71 @@ bool TryHandleAppsRequest(
     return true;
   }
 
+  if (info.method == "POST" && sub == "rename") {
+    auto body = base::JSONReader::ReadDict(info.data, base::JSON_PARSE_RFC);
+    const std::string* name = body ? body->FindString("name") : nullptr;
+    if (!name || name->empty()) {
+      base::DictValue err;
+      err.Set("error", "name required");
+      SendJson(server, connection_id, net::HTTP_BAD_REQUEST, std::move(err));
+      return true;
+    }
+    app->Set("name", *name);
+    app->Set("updated_at", NowIso());
+    SaveRegistry(registry);
+    base::DictValue result;
+    result.Set("ok", true);
+    result.Set("app", AppToJson(*app, gateway_port));
+    SendJson(server, connection_id, net::HTTP_OK, std::move(result));
+    return true;
+  }
+
+  if (info.method == "POST" && sub == "duplicate") {
+    base::FilePath src = ResolveAppPath(*app);
+    if (src.empty() || !base::DirectoryExists(src)) {
+      base::DictValue err;
+      err.Set("error", "app folder missing");
+      SendJson(server, connection_id, net::HTTP_BAD_REQUEST, std::move(err));
+      return true;
+    }
+    const std::string new_id = NewId();
+    base::FilePath dst = AppsRootDir().AppendASCII(new_id);
+    if (!base::CopyDirectory(src, dst, true)) {
+      base::DictValue err;
+      err.Set("error", "could not copy app folder");
+      SendJson(server, connection_id, net::HTTP_INTERNAL_SERVER_ERROR,
+               std::move(err));
+      return true;
+    }
+    const std::string* old_name = app->FindString("name");
+    std::string name =
+        old_name && !old_name->empty() ? *old_name + " (copy)" : "App copy";
+    const std::string conv_id = CreateAppConversation(new_id, name);
+    base::DictValue dup;
+    dup.Set("id", new_id);
+    dup.Set("name", name);
+    dup.Set("path", dst.value());
+    dup.Set("conversation_id", conv_id);
+    dup.Set("session_id", "");
+    dup.Set("status", kStatusReady);
+    dup.Set("imported", false);
+    dup.Set("created_at", NowIso());
+    dup.Set("updated_at", NowIso());
+    dup.Set("last_error", "");
+    AppsList(registry)->Append(dup.Clone());
+    if (base::DictValue* stored = FindAppDict(registry, new_id))
+      GetOrAssignRuntimePort(registry, stored);
+    SaveRegistry(registry);
+    base::DictValue result;
+    result.Set("ok", true);
+    if (base::DictValue* stored = FindAppDict(registry, new_id))
+      result.Set("app", AppToJson(*stored, gateway_port));
+    else
+      result.Set("app", AppToJson(dup, gateway_port));
+    SendJson(server, connection_id, net::HTTP_OK, std::move(result));
+    return true;
+  }
+
   if (info.method == "DELETE" && sub.empty()) {
     StopAppRuntimeServer(app_id);
     g_active_app_builds->erase(app_id);

@@ -1588,6 +1588,7 @@ bool GrokNative::TryHandleRequest(
       dest += "mode=" + mit->second;
     }
     net::HttpServerResponseInfo resp(net::HTTP_FOUND);
+    resp.SetBody("", "text/plain");
     resp.AddHeader("Location", dest);
     resp.AddHeader("Cache-Control", "no-store");
     resp.AddHeader("Connection", "close");
