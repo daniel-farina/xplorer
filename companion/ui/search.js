@@ -159,23 +159,85 @@ function renderSearchResults(query, data) {
   resultsEl.appendChild(grokBtn);
 }
 
+function createSearchStreamUi() {
+  if (!resultsEl) return null;
+  resultsEl.innerHTML = '';
+  const wrap = document.createElement('div');
+  wrap.className = 'stream-block streaming';
+  wrap.innerHTML = `
+    <details class="thinking-panel" open>
+      <summary>✦ Grok is searching</summary>
+      <div class="thinking-text"></div>
+    </details>
+    <div class="answer-panel hidden">
+      <div class="answer result-body markdown"></div>
+    </div>`;
+  resultsEl.appendChild(wrap);
+  return {
+    wrap,
+    thinkingPanel: wrap.querySelector('.thinking-panel'),
+    thinkingText: wrap.querySelector('.thinking-text'),
+    answerPanel: wrap.querySelector('.answer-panel'),
+    answerEl: wrap.querySelector('.answer'),
+  };
+}
+
 async function runNativeSearch(query) {
   showResultsLoading();
   if (submitBtn) submitBtn.disabled = true;
-  const body = { query, mode: attachedImage ? 'images' : mode };
+  const body = { query, mode: attachedImage ? 'images' : mode, stream: true };
   if (attachedImage) {
     body.image = attachedImage.data;
     body.image_mime = attachedImage.mime || 'image/jpeg';
   }
+  const ui = createSearchStreamUi();
+  let thinkingText = '';
+  let answerText = '';
+  let resultData = null;
   try {
-    const res = await fetch('/api/search', {
+    const res = await fetch('/api/search/stream', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || res.statusText);
-    renderSearchResults(query, data);
+    if (!res.ok || !res.body) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || res.statusText);
+    }
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      let idx;
+      while ((idx = buffer.indexOf('\n')) >= 0) {
+        const line = buffer.slice(0, idx).trim();
+        buffer = buffer.slice(idx + 1);
+        const evt = parseStreamLine(line);
+        if (!evt) continue;
+        if (evt.type === 'thought') {
+          thinkingText += evt.data || '';
+          if (ui) ui.thinkingText.textContent = thinkingText;
+        } else if (evt.type === 'text') {
+          if (ui) ui.answerPanel.classList.remove('hidden');
+          answerText += evt.data || '';
+          if (ui) ui.answerEl.innerHTML = renderMarkdown(answerText);
+        } else if (evt.type === 'result') {
+          resultData = evt;
+        } else if (evt.type === 'error') {
+          throw new Error(evt.error || 'search failed');
+        }
+      }
+    }
+    if (resultData) {
+      renderSearchResults(query, resultData);
+    } else if (answerText) {
+      renderSearchResults(query, { answer: answerText, mode: body.mode, text: answerText });
+    } else {
+      throw new Error('Search returned no results');
+    }
   } catch (err) {
     if (resultsEl) {
       resultsEl.innerHTML = `<div class="result-card error"><p>${escapeHtml(err.message)}</p></div>`;

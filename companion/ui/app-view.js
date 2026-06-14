@@ -404,6 +404,23 @@ $('#chat-input')?.addEventListener('keydown', (e) => {
   }
 });
 
+$('#delete-app')?.addEventListener('click', async () => {
+  if (!app || busy) return;
+  const name = app.name || 'this app';
+  if (!confirm(`Delete "${name}"? This removes the app folder and cannot be undone.`)) return;
+  const btn = $('#delete-app');
+  if (btn) btn.disabled = true;
+  try {
+    const r = await fetch(`/api/apps/${encodeURIComponent(appId)}`, { method: 'DELETE' });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(data.error || r.statusText);
+    location.href = '/apps';
+  } catch (err) {
+    alert(err.message);
+    if (btn) btn.disabled = false;
+  }
+});
+
 initSearchHomeToggle($('#home-toggle'));
 initChatToggle();
 startThemeWatcher();

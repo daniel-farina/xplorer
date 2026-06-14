@@ -117,6 +117,43 @@ html.grok-build body {
   border-radius: 4px;
 }
 
+.welcome-tour {
+  text-align: center;
+  margin-bottom: 32px;
+}
+
+.welcome-tour h2 {
+  margin: 0 0 14px;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.welcome-tour-links {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+}
+
+.welcome-tour-link {
+  display: inline-flex;
+  align-items: center;
+  padding: 10px 18px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text);
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 500;
+  background: var(--surface);
+}
+
+.welcome-tour-link:hover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
 .welcome-actions {
   text-align: center;
 }

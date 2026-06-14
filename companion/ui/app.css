@@ -36,6 +36,16 @@ html.grok-build body.app-view-page {
 
 .app-subtoolbar .spacer { flex: 1; }
 
+.app-subtoolbar .apps-btn.danger {
+  color: #c0392b;
+  border-color: rgba(192, 57, 43, 0.35);
+}
+
+.app-subtoolbar .apps-btn.danger:hover:not(:disabled) {
+  background: rgba(192, 57, 43, 0.08);
+  border-color: #c0392b;
+}
+
 .app-subtoolbar .apps-btn {
   border: 1px solid var(--border);
   background: var(--surface-elevated);
