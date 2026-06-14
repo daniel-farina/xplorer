@@ -8,6 +8,7 @@ const SEARCH_MODEL_STORAGE_KEY = 'grok_search_model';
 const SEARCH_HOME_STORAGE_KEY = 'grok_search_home';
 const SEARCH_HOME_BUILD = 'build';
 const SEARCH_HOME_WEB = 'web';
+const SEARCH_HOME_WIKI = 'wiki';
 
 function getStoredModel() {
   try {
@@ -70,7 +71,7 @@ async function saveSettings(partial) {
   return res.json();
 }
 
-/** Wire Grok Web / Grok Build segmented toggle. */
+/** Wire Grok Build / Grok Web / Groki home toggle. */
 async function initSearchHomeToggle(container, { onSwitch } = {}) {
   if (!container) return;
   const buttons = container.querySelectorAll('[data-home]');
@@ -101,10 +102,9 @@ async function initSearchHomeToggle(container, { onSwitch } = {}) {
         persistSearchHome(saved);
         setActive(saved);
         if (onSwitch) onSwitch(saved, updated);
-        else if (saved === SEARCH_HOME_WEB) {
-          window.location.href = `${window.location.origin}/switch-home?mode=web`;
-        } else {
-          window.location.href = `${window.location.origin}/switch-home?mode=build`;
+        else {
+          window.location.href =
+            `${window.location.origin}/switch-home?mode=${encodeURIComponent(saved)}`;
         }
       } catch (e) {
         alert(`Could not save preference: ${e.message}`);

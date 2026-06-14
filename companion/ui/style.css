@@ -33,13 +33,41 @@ body {
   padding: 12px 0;
 }
 
+.sidebar-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 10px 8px 14px;
+}
+
 .sidebar-label {
   font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--text-secondary);
-  padding: 0 14px 8px;
+}
+
+.sidebar-new {
+  border: 1px solid var(--border);
+  background: var(--surface-elevated);
+  color: var(--text-secondary);
+  border-radius: 8px;
+  padding: 2px 8px;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.sidebar-new:hover {
+  color: var(--text);
+  border-color: var(--accent);
+}
+
+.grok-modes .grok-mode[aria-current="page"] {
+  cursor: default;
 }
 
 #conv-list {
@@ -125,6 +153,25 @@ body {
   border-top: 1px solid var(--border);
   background: var(--surface);
   align-items: flex-end;
+}
+
+.composer-model-select {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-elevated);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.3;
+  padding: 10px 8px;
+  cursor: pointer;
+  max-width: 148px;
+  flex-shrink: 0;
+}
+
+.composer-model-select:focus {
+  outline: none;
+  border-color: var(--accent);
 }
 
 #input {

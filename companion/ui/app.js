@@ -3,9 +3,7 @@ const messagesEl = $('#messages');
 const convList = $('#conv-list');
 const input = $('#input');
 const sendBtn = $('#send');
-const statusEl = $('#status');
 const modelSelect = $('#model-select');
-const modelBadge = $('#model-badge');
 
 let conversations = [];
 let activeId = null;
@@ -116,7 +114,6 @@ async function sendMessage(text) {
         if (!evt) continue;
         if (evt.type === 'meta') {
           if (evt.model_label) streamModelLabel = evt.model_label;
-          updateModelBadge(modelBadge, evt.model || activeModel, streamModelLabel);
         } else if (evt.type === 'thought') {
           thinking.textContent = evt.data || 'Grok is thinking…';
         } else if (evt.type === 'text') {
@@ -146,7 +143,6 @@ async function sendMessage(text) {
     messagesEl.querySelector('.msg.assistant.streaming')?.remove();
     conv.messages.push({ role: 'assistant', content: reply });
     renderMessages(conv);
-    updateModelBadge(modelBadge, activeModel, streamModelLabel);
     await refresh();
   } catch (e) {
     thinking.textContent = `Error: ${e.message}`;
@@ -172,32 +168,17 @@ input.addEventListener('keydown', (e) => {
   }
 });
 
-async function pollStatus() {
-  try {
-    const s = await api('/api/status');
-    const gw = s.gateway?.running ? `${s.gateway.tabs} tabs` : 'browser online';
-    statusEl.textContent = gw;
-    statusEl.className = 'grok-model-badge' + (s.gateway?.running ? ' ok' : ' ok');
-    if (s.model_label) updateModelBadge(modelBadge, s.model || activeModel, s.model_label);
-  } catch {
-    statusEl.textContent = 'offline';
-    statusEl.className = 'grok-model-badge';
-  }
-}
-
 async function initModels() {
   models = await fetchModels();
   if (!models.some((m) => m.id === activeModel)) {
     activeModel = models[0]?.id || DEFAULT_MODEL;
   }
   populateModelSelect(modelSelect, models, activeModel);
-  updateModelBadge(modelBadge, activeModel, modelLabel(activeModel, models));
 }
 
 modelSelect?.addEventListener('change', async () => {
   activeModel = modelSelect.value;
   persistModel(activeModel);
-  updateModelBadge(modelBadge, activeModel, modelLabel(activeModel, models));
   try {
     await saveSettings({ model: activeModel });
   } catch { /* local preference still applies */ }
@@ -206,8 +187,14 @@ modelSelect?.addEventListener('change', async () => {
 initSearchHomeToggle($('#home-toggle'));
 
 startThemeWatcher();
+const urlParams = new URLSearchParams(location.search);
+
 initModels().then(() => refresh().then(() => {
-  if (!conversations.length) newChat();
+  const convParam = urlParams.get('conv');
+  if (convParam && conversations.some((c) => c.id === convParam)) {
+    selectConv(convParam);
+    input.focus();
+  } else if (!conversations.length) {
+    newChat();
+  }
 }));
-pollStatus();
-setInterval(pollStatus, 5000);

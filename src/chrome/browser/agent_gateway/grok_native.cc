@@ -32,6 +32,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/task/thread_pool.h"
+#include "base/time/time.h"
 #include "chrome/browser/agent_gateway/browser_api.h"
 #include "chrome/browser/agent_gateway/tab_screenshot.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
@@ -105,9 +106,14 @@ base::FilePath UiDir() {
   if (env && *env)
     return base::FilePath(env);
   base::FilePath home;
-  if (base::PathService::Get(base::DIR_HOME, &home)) {
-    base::FilePath candidate =
-        home.AppendASCII("cli_experiment/aether/companion/ui");
+  if (!base::PathService::Get(base::DIR_HOME, &home))
+    return base::FilePath();
+  static constexpr const char* kCandidates[] = {
+      "cli_experiment/aether/companion/ui",
+      ".aether/companion/ui",
+  };
+  for (const char* rel : kCandidates) {
+    base::FilePath candidate = home.AppendASCII(rel);
     if (base::DirectoryExists(candidate))
       return candidate;
   }
@@ -224,6 +230,8 @@ constexpr char kSearchModel[] = "grok-build";
 constexpr char kComposerModel[] = "grok-composer-2.5-fast";
 constexpr char kSearchHomeBuild[] = "build";
 constexpr char kSearchHomeWeb[] = "web";
+constexpr char kSearchHomeWiki[] = "wiki";
+constexpr char kGrokWikiHomeURL[] = "https://grokipedia.com/";
 
 base::FilePath SettingsFile() {
   base::FilePath home;
@@ -270,17 +278,23 @@ void SetConfiguredModel(const std::string& model) {
 
 std::string GetSearchHomeMode() {
   base::DictValue settings = LoadSettings();
-  if (const std::string* mode = settings.FindString("search_home");
-      mode && *mode == kSearchHomeWeb) {
-    return kSearchHomeWeb;
+  if (const std::string* mode = settings.FindString("search_home")) {
+    if (*mode == kSearchHomeWeb)
+      return kSearchHomeWeb;
+    if (*mode == kSearchHomeWiki)
+      return kSearchHomeWiki;
   }
   return kSearchHomeBuild;
 }
 
 void SetSearchHomeMode(const std::string& mode) {
   base::DictValue settings = LoadSettings();
-  settings.Set("search_home",
-                 mode == kSearchHomeWeb ? kSearchHomeWeb : kSearchHomeBuild);
+  std::string saved = kSearchHomeBuild;
+  if (mode == kSearchHomeWeb)
+    saved = kSearchHomeWeb;
+  else if (mode == kSearchHomeWiki)
+    saved = kSearchHomeWiki;
+  settings.Set("search_home", saved);
   SaveSettings(settings);
 }
 
@@ -1101,6 +1115,118 @@ void CaptureScreenshot(
           std::move(callback), wc));
 }
 
+}  // namespace
+
+struct GrokWebPendingEntry {
+  std::string prompt;
+  base::Time created;
+};
+
+base::NoDestructor<std::map<std::string, GrokWebPendingEntry>> g_grok_web_pending;
+
+void PruneGrokWebPending() {
+  const base::Time cutoff = base::Time::Now() - base::Minutes(10);
+  for (auto it = g_grok_web_pending->begin();
+       it != g_grok_web_pending->end();) {
+    if (it->second.created < cutoff)
+      it = g_grok_web_pending->erase(it);
+    else
+      ++it;
+  }
+}
+
+std::string StoreGrokWebPending(const std::string& prompt) {
+  PruneGrokWebPending();
+  const std::string id = base::HexEncode(base::RandBytesAsVector(8));
+  (*g_grok_web_pending)[id] = {prompt, base::Time::Now()};
+  return id;
+}
+
+std::string TruncateForPrompt(const std::string& text, size_t max_len) {
+  if (text.size() <= max_len)
+    return text;
+  return text.substr(0, max_len) + "\n\n[page content truncated]";
+}
+
+std::string BuildPageGrokWebPrompt(const std::string& text) {
+  return "Summarize the following text I selected from a web page. "
+         "Be clear and concise. Use short paragraphs or bullet points.\n\n" +
+         TruncateForPrompt(text, 12000);
+}
+
+std::string GetGrokWebPendingPrompt(const std::string& id) {
+  PruneGrokWebPending();
+  auto it = g_grok_web_pending->find(id);
+  if (it == g_grok_web_pending->end())
+    return {};
+  return it->second.prompt;
+}
+
+void ConsumeGrokWebPendingPrompt(const std::string& id) {
+  PruneGrokWebPending();
+  g_grok_web_pending->erase(id);
+}
+
+std::string BuildPageSummarizePrompt(const std::string& url,
+                                     const std::string& title,
+                                     const std::string& text) {
+  return base::StringPrintf(
+      "Summarize this web page clearly and concisely for the user. "
+      "Use short paragraphs or bullet points. Focus on the main ideas, "
+      "facts, and takeaways. Do not invent content not present in the page.\n\n"
+      "Title: %s\nURL: %s\n\nPage content:\n%s",
+      title.c_str(), url.c_str(),
+      TruncateForPrompt(text, 14000).c_str());
+}
+
+base::DictValue CreatePageChatConversation(const std::string& url,
+                                           const std::string& title,
+                                           const std::string& text,
+                                           const std::string& summary,
+                                           int gateway_port) {
+  std::string message =
+      base::StringPrintf("I'm reading this page:\n\n**%s**\n%s\n\n",
+                         title.c_str(), url.c_str());
+  if (!summary.empty()) {
+    message += "Summary:\n" + summary + "\n\n";
+  } else {
+    const std::string excerpt = TruncateForPrompt(text, 4000);
+    if (!excerpt.empty())
+      message += "Excerpt:\n" + excerpt + "\n\n";
+  }
+  message +=
+      "Help me understand this page. What are the key takeaways, and what "
+      "questions should I be asking?";
+
+  base::DictValue data = LoadSessions();
+  base::ListValue* convs = data.FindList("conversations");
+  if (!convs) {
+    data.Set("conversations", base::ListValue());
+    convs = data.FindList("conversations");
+  }
+  const std::string id = base::HexEncode(base::RandBytesAsVector(8));
+  base::DictValue conv;
+  conv.Set("id", id);
+  conv.Set("title", title.empty() ? "Page chat" : title.substr(0, 48));
+  conv.Set("session_id", base::Value());
+  base::ListValue msgs;
+  base::DictValue user_msg;
+  user_msg.Set("role", "user");
+  user_msg.Set("content", message);
+  msgs.Append(user_msg.Clone());
+  conv.Set("messages", std::move(msgs));
+  convs->Append(conv.Clone());
+  SaveSessions(data);
+
+  base::DictValue result;
+  result.Set("ok", true);
+  result.Set("id", id);
+  result.Set("chat_url",
+              base::StringPrintf("http://127.0.0.1:%d/?conv=%s", gateway_port,
+                                 id.c_str()));
+  return result;
+}
+
 base::CommandLine BuildGrokChatCommand(const std::string& message,
                                        const std::string& session_id,
                                        const std::string& model,
@@ -1125,6 +1251,15 @@ base::CommandLine BuildGrokChatCommand(const std::string& message,
     cmd.AppendArg(session_id);
   }
   return cmd;
+}
+
+base::CommandLine BuildPageSummarizeCommand(const std::string& url,
+                                            const std::string& title,
+                                            const std::string& text,
+                                            const std::string& model,
+                                            bool streaming) {
+  return BuildGrokChatCommand(
+      BuildPageSummarizePrompt(url, title, text), "", model, streaming);
 }
 
 void RunGrokChatStream(
@@ -1261,8 +1396,6 @@ void RunAsync(net::HttpServer* server,
               server, connection_id));
 }
 
-}  // namespace
-
 bool GrokNative::TryHandleRequest(
     int connection_id,
     const net::HttpServerRequestInfo& info,
@@ -1300,14 +1433,21 @@ bool GrokNative::TryHandleRequest(
       (path == "/switch-home" || base::StartsWith(path, "/switch-home?"))) {
     const std::map<std::string, std::string> params = QueryParams(info.path);
     auto it = params.find("mode");
-    const std::string mode =
-        (it != params.end() && it->second == kSearchHomeWeb) ? kSearchHomeWeb
-                                                             : kSearchHomeBuild;
+    std::string mode = kSearchHomeBuild;
+    if (it != params.end()) {
+      if (it->second == kSearchHomeWeb)
+        mode = kSearchHomeWeb;
+      else if (it->second == kSearchHomeWiki)
+        mode = kSearchHomeWiki;
+    }
     SetSearchHomeMode(mode);
-    std::string dest =
-        mode == kSearchHomeWeb
-            ? "https://grok.com/"
-            : base::StringPrintf("http://127.0.0.1:%d/search", gateway_port);
+    std::string dest;
+    if (mode == kSearchHomeWeb)
+      dest = "https://grok.com/";
+    else if (mode == kSearchHomeWiki)
+      dest = kGrokWikiHomeURL;
+    else
+      dest = base::StringPrintf("http://127.0.0.1:%d/search", gateway_port);
     net::HttpServerResponseInfo resp(net::HTTP_FOUND);
     resp.AddHeader("Location", dest);
     resp.AddHeader("Cache-Control", "no-store");
@@ -1367,6 +1507,7 @@ bool GrokNative::TryHandleRequest(
     d.Set("grok_build_url",
           "http://127.0.0.1:" + base::NumberToString(gateway_port) +
               "/search");
+    d.Set("grok_wiki_url", kGrokWikiHomeURL);
     SendJson(server, connection_id, net::HTTP_OK, std::move(d));
     return true;
   }
@@ -1387,9 +1528,10 @@ bool GrokNative::TryHandleRequest(
       updated = true;
     }
     if (home && !home->empty()) {
-      if (*home != kSearchHomeBuild && *home != kSearchHomeWeb) {
+      if (*home != kSearchHomeBuild && *home != kSearchHomeWeb &&
+          *home != kSearchHomeWiki) {
         base::DictValue err;
-        err.Set("error", "search_home must be 'build' or 'web'");
+        err.Set("error", "search_home must be 'build', 'web', or 'wiki'");
         SendJson(server, connection_id, net::HTTP_BAD_REQUEST, std::move(err));
         return true;
       }
@@ -1411,6 +1553,7 @@ bool GrokNative::TryHandleRequest(
     d.Set("grok_build_url",
           "http://127.0.0.1:" + base::NumberToString(gateway_port) +
               "/search");
+    d.Set("grok_wiki_url", kGrokWikiHomeURL);
     SendJson(server, connection_id, net::HTTP_OK, std::move(d));
     return true;
   }
@@ -1471,6 +1614,124 @@ bool GrokNative::TryHandleRequest(
     base::DictValue err;
     err.Set("error", "not found");
     SendJson(server, connection_id, net::HTTP_NOT_FOUND, std::move(err));
+    return true;
+  }
+
+  if (info.method == "POST" && path == "/api/page/summarize/stream") {
+    auto body = base::JSONReader::ReadDict(info.data, base::JSON_PARSE_RFC);
+    const std::string* url = body ? body->FindString("url") : nullptr;
+    const std::string* title = body ? body->FindString("title") : nullptr;
+    const std::string* text = body ? body->FindString("text") : nullptr;
+    if (!text || text->empty()) {
+      base::DictValue err;
+      err.Set("error", "page text required");
+      SendJson(server, connection_id, net::HTTP_BAD_REQUEST, std::move(err));
+      return true;
+    }
+    const std::string* model_body = body ? body->FindString("model") : nullptr;
+    const std::string model = ResolveModel(model_body);
+    const std::string page_url = url ? *url : "";
+    const std::string page_title = title ? *title : "Web page";
+    base::ThreadPool::CreateSequencedTaskRunner(
+        {base::MayBlock(), base::TaskPriority::USER_VISIBLE})
+        ->PostTask(
+            FROM_HERE,
+            base::BindOnce(
+                &PumpGrokStream, server, io_task_runner, connection_id,
+                BuildPageSummarizeCommand(page_url, page_title, *text, model,
+                                          true),
+                model, "summarize", GrokStreamKind::kChat, ""));
+    return true;
+  }
+
+  if (info.method == "POST" && path == "/api/page/grok-web") {
+    auto body = base::JSONReader::ReadDict(info.data, base::JSON_PARSE_RFC);
+    const std::string* url = body ? body->FindString("url") : nullptr;
+    const std::string* title = body ? body->FindString("title") : nullptr;
+    const std::string* text = body ? body->FindString("text") : nullptr;
+    if (!text || text->empty()) {
+      base::DictValue err;
+      err.Set("error", "page text required");
+      SendJson(server, connection_id, net::HTTP_BAD_REQUEST, std::move(err));
+      return true;
+    }
+    const std::string page_url = url ? *url : "";
+    const std::string page_title = title ? *title : "Web page";
+    const std::string prompt = BuildPageGrokWebPrompt(*text);
+    const std::string id = StoreGrokWebPending(prompt);
+    LOG(INFO) << "[grok-web] stored pending id=" << id
+              << " text_chars=" << text->size()
+              << " prompt_chars=" << prompt.size();
+    base::DictValue result;
+    result.Set("ok", true);
+    result.Set("id", id);
+    result.Set("grok_url", "https://grok.com/#xbrowser_grok=" + id);
+    SendJson(server, connection_id, net::HTTP_OK, std::move(result));
+    return true;
+  }
+
+  if (info.method == "GET" && path == "/api/page/grok-web/pending") {
+    std::string id;
+    const auto params = QueryParams(info.path);
+    auto it = params.find("id");
+    if (it != params.end())
+      id = it->second;
+    if (id.empty()) {
+      base::DictValue err;
+      err.Set("error", "id required");
+      SendJson(server, connection_id, net::HTTP_BAD_REQUEST, std::move(err));
+      return true;
+    }
+    const std::string prompt = GetGrokWebPendingPrompt(id);
+    if (prompt.empty()) {
+      base::DictValue err;
+      err.Set("error", "not found");
+      SendJson(server, connection_id, net::HTTP_NOT_FOUND, std::move(err));
+      return true;
+    }
+    base::DictValue result;
+    result.Set("ok", true);
+    result.Set("prompt", prompt);
+    SendJson(server, connection_id, net::HTTP_OK, std::move(result));
+    return true;
+  }
+
+  if (info.method == "POST" && path == "/api/page/grok-web/consumed") {
+    std::string id;
+    const auto params = QueryParams(info.path);
+    auto it = params.find("id");
+    if (it != params.end())
+      id = it->second;
+    if (id.empty()) {
+      base::DictValue err;
+      err.Set("error", "id required");
+      SendJson(server, connection_id, net::HTTP_BAD_REQUEST, std::move(err));
+      return true;
+    }
+    ConsumeGrokWebPendingPrompt(id);
+    base::DictValue result;
+    result.Set("ok", true);
+    SendJson(server, connection_id, net::HTTP_OK, std::move(result));
+    return true;
+  }
+
+  if (info.method == "POST" && path == "/api/page/start-chat") {
+    auto body = base::JSONReader::ReadDict(info.data, base::JSON_PARSE_RFC);
+    const std::string* url = body ? body->FindString("url") : nullptr;
+    const std::string* title = body ? body->FindString("title") : nullptr;
+    const std::string* text = body ? body->FindString("text") : nullptr;
+    const std::string* summary = body ? body->FindString("summary") : nullptr;
+    if (!url || !title) {
+      base::DictValue err;
+      err.Set("error", "url and title required");
+      SendJson(server, connection_id, net::HTTP_BAD_REQUEST, std::move(err));
+      return true;
+    }
+    const std::string page_text = text ? *text : "";
+    const std::string page_summary = summary ? *summary : "";
+    SendJson(server, connection_id, net::HTTP_OK,
+             CreatePageChatConversation(*url, *title, page_text, page_summary,
+                                        gateway_port));
     return true;
   }
 

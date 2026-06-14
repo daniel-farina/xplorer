@@ -8,6 +8,10 @@
 
 class BrowserWindowInterface;
 
+namespace content {
+class WebContents;
+}  // namespace content
+
 namespace grok_companion {
 
 inline constexpr char kCompanionHost[] = "127.0.0.1";
@@ -16,8 +20,10 @@ inline constexpr int kCompanionPort = 9334;
 inline constexpr char kCompanionPath[] = "/";
 inline constexpr char kSearchPath[] = "/search";
 inline constexpr char kGrokWebHomeURL[] = "https://grok.com/";
+inline constexpr char kGrokWikiHomeURL[] = "https://grokipedia.com/";
 inline constexpr char kSearchHomeBuild[] = "build";
 inline constexpr char kSearchHomeWeb[] = "web";
+inline constexpr char kSearchHomeWiki[] = "wiki";
 
 GURL GetCompanionURL();
 GURL GetSearchURL();
@@ -28,6 +34,12 @@ void SetSearchHomeMode(const std::string& mode);
 
 // NTP / omnibox Grok chip destination based on search_home preference.
 GURL GetDefaultSearchHomeURL();
+
+// True for chrome://newtab and other internal NTP URLs that block injectors.
+bool IsLegacyChromeNewTab(const GURL& url);
+
+// Redirect restored / stale NTP tabs to the real Grok home URL.
+void RedirectLegacyNewTabIfNeeded(content::WebContents* contents);
 
 // Open Grok Search home (build or web) in the active tab.
 void OpenGrokSearchPage(BrowserWindowInterface* browser);

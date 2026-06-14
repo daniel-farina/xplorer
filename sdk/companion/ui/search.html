@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Grok Search — XBrowser</title>
+  <link rel="stylesheet" href="search.css">
+</head>
+<body>
+  <header class="header">
+    <a class="logo" href="/search">✦ Grok</a>
+    <nav class="modes" id="modes">
+      <button class="mode active" data-mode="web">All</button>
+      <button class="mode" data-mode="images">Images</button>
+      <button class="mode" data-mode="videos">Videos</button>
+      <button class="mode" data-mode="imagine">Imagine</button>
+    </nav>
+    <button class="sidebar-btn" id="open-sidebar" title="Open Grok chat">Chat</button>
+  </header>
+  <main class="main">
+    <form id="search-form" class="search-box">
+      <span class="spark">✦</span>
+      <input id="q" type="search" placeholder="Search with Grok…" autocomplete="off" autofocus>
+      <button type="submit">Search</button>
+    </form>
+    <section id="results" class="results hidden"></section>
+    <section id="hero" class="hero">
+      <h1>Search the web with Grok</h1>
+      <p>Web results, images, videos, and AI image generation — powered by your native AI companion.</p>
+    </section>
+  </main>
+  <script src="search.js"></script>
+</body>
+</html>

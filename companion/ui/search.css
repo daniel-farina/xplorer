@@ -36,6 +36,26 @@ html.grok-build body {
 .spark {
   color: var(--accent);
   font-size: 18px;
+  flex-shrink: 0;
+}
+
+.search-model-select {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface-elevated);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.3;
+  padding: 7px 10px;
+  cursor: pointer;
+  max-width: 148px;
+  flex-shrink: 0;
+}
+
+.search-model-select:focus {
+  outline: none;
+  border-color: var(--accent);
 }
 
 .search-box input {

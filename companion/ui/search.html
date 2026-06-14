@@ -11,26 +11,46 @@
 <body>
   <header class="grok-toolbar">
     <a class="grok-logo" href="/search">✦ Grok</a>
-    <nav class="grok-modes" id="modes">
-      <button type="button" class="grok-mode active" data-mode="web">All</button>
-      <button type="button" class="grok-mode" data-mode="images">Images</button>
-      <button type="button" class="grok-mode" data-mode="videos">Videos</button>
-      <button type="button" class="grok-mode" data-mode="imagine">Imagine</button>
-    </nav>
     <div class="grok-toolbar-spacer"></div>
     <div class="grok-toolbar-actions">
-      <div class="grok-toggle" id="home-toggle" title="Grok home">
-        <button type="button" class="grok-toggle-opt active" data-home="build">Grok Build</button>
-        <button type="button" class="grok-toggle-opt" data-home="web">Grok Web</button>
+      <div class="grok-nav-pills" id="home-toggle" title="Grok navigation">
+        <div class="grok-pill-wrap">
+          <a class="grok-pill" href="https://x.com/i/chat" target="_blank" rel="noopener noreferrer">X Chat</a>
+          <div class="grok-pill-menu">
+            <a href="https://x.com/i/chat" target="_blank" rel="noopener noreferrer">Open X Chat</a>
+          </div>
+        </div>
+        <div class="grok-pill-wrap">
+          <button type="button" class="grok-pill active" data-home="build">Grok Build</button>
+          <div class="grok-pill-menu">
+            <a href="/">Conversations</a>
+          </div>
+        </div>
+        <div class="grok-pill-wrap">
+          <button type="button" class="grok-pill" data-home="web">Grok Web</button>
+          <div class="grok-pill-menu">
+            <a href="https://grok.com/imagine" target="_blank" rel="noopener noreferrer">Imagine</a>
+          </div>
+        </div>
+        <div class="grok-pill-wrap">
+          <button type="button" class="grok-pill" data-home="wiki">Wiki</button>
+          <div class="grok-pill-menu">
+            <a href="https://grokipedia.com/" target="_blank" rel="noopener noreferrer">Grokipedia</a>
+          </div>
+        </div>
+        <div class="grok-pill-wrap">
+          <a class="grok-pill" href="https://x.com/" target="_blank" rel="noopener noreferrer">x.com</a>
+          <div class="grok-pill-menu">
+            <a href="https://x.com/" target="_blank" rel="noopener noreferrer">Home</a>
+          </div>
+        </div>
       </div>
-      <span class="grok-model-badge" id="model-badge" title="Active model">…</span>
-      <select id="model-select" class="grok-model-select" title="Model"></select>
-      <button type="button" class="grok-toolbar-btn" id="open-sidebar" title="Open Grok chat">Chat</button>
     </div>
   </header>
   <main class="main">
     <form id="search-form" class="search-box">
       <span class="spark">✦</span>
+      <select id="model-select" class="search-model-select" title="Model" aria-label="Model"></select>
       <input id="q" type="search" placeholder="Search with Grok…" autocomplete="off" autofocus>
       <div id="image-tools" class="image-tools hidden">
         <input id="image-file" type="file" accept="image/*" class="hidden" aria-hidden="true">

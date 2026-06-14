@@ -3,9 +3,7 @@ const form = $('#search-form');
 const input = $('#q');
 const results = $('#results');
 const hero = $('#hero');
-const modes = $('#modes');
 const modelSelect = $('#model-select');
-const modelBadge = $('#model-badge');
 const submitBtn = form?.querySelector('button[type="submit"]');
 const imageTools = $('#image-tools');
 const imageFile = $('#image-file');
@@ -32,21 +30,8 @@ function applyModeModel() {
   if (next !== activeModel) {
     activeModel = next;
     populateModelSelect(modelSelect, models, activeModel);
-    updateModelBadge(modelBadge, activeModel, modelLabel(activeModel, models));
   }
 }
-
-modes?.querySelectorAll('.grok-mode').forEach((btn) => {
-  btn.onclick = () => {
-    modes.querySelectorAll('.grok-mode').forEach((b) => b.classList.remove('active'));
-    btn.classList.add('active');
-    mode = btn.dataset.mode;
-    updateModeUi();
-    applyModeModel();
-  };
-});
-
-$('#open-sidebar')?.addEventListener('click', () => { window.location.href = '/'; });
 
 async function setAttachedImage(img, source) {
   attachedImage = img ? { ...img, source } : null;
@@ -138,13 +123,11 @@ async function initModels() {
       || models[0]?.id || SEARCH_DEFAULT_MODEL;
   }
   populateModelSelect(modelSelect, models, activeModel);
-  updateModelBadge(modelBadge, activeModel, modelLabel(activeModel, models));
 }
 
 modelSelect?.addEventListener('change', async () => {
   activeModel = modelSelect.value;
   persistSearchModel(activeModel);
-  updateModelBadge(modelBadge, activeModel, modelLabel(activeModel, models));
   try {
     await saveSettings({ model: activeModel });
   } catch { /* local preference still applies */ }
@@ -295,7 +278,6 @@ async function streamSearch(query, searchMode) {
         if (evt.type === 'meta') {
           if (evt.model) streamModel = evt.model;
           if (evt.model_label) streamModelLabel = evt.model_label;
-          updateModelBadge(modelBadge, streamModel, streamModelLabel);
         } else if (evt.type === 'thought') {
           sawThought = true;
           thinkingText += evt.data || '';
@@ -422,9 +404,6 @@ initModels().then(() => {
   const modeParam = urlParams.get('mode');
   if (modeParam && ['web', 'images', 'videos', 'imagine'].includes(modeParam)) {
     mode = modeParam;
-    modes?.querySelectorAll('.grok-mode').forEach((b) => {
-      b.classList.toggle('active', b.dataset.mode === mode);
-    });
     updateModeUi();
     applyModeModel();
   }

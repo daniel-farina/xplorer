@@ -137,6 +137,93 @@ header.grok-toolbar {
   flex-shrink: 0;
 }
 
+.grok-xchat {
+  font-weight: 500;
+}
+
+.grok-nav-pills {
+  display: inline-flex;
+  align-items: stretch;
+  border: 1px solid var(--toolbar-border);
+  border-radius: 999px;
+  background: var(--toolbar-elevated);
+  overflow: visible;
+}
+
+.grok-pill-wrap {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+}
+
+.grok-pill-wrap + .grok-pill-wrap .grok-pill {
+  border-left: 1px solid var(--toolbar-border);
+}
+
+.grok-pill {
+  border: none;
+  background: transparent;
+  color: var(--toolbar-muted);
+  padding: 5px 12px;
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.4;
+  cursor: pointer;
+  text-decoration: none;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+}
+
+.grok-pill:hover,
+.grok-pill-wrap:hover > .grok-pill {
+  color: var(--toolbar-text);
+  background: var(--toolbar-bg);
+}
+
+.grok-pill.active {
+  background: var(--toolbar-accent-soft);
+  color: var(--toolbar-accent);
+  font-weight: 500;
+}
+
+.grok-pill-menu {
+  display: none;
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 148px;
+  padding: 4px;
+  border: 1px solid var(--toolbar-border);
+  border-radius: 10px;
+  background: var(--toolbar-bg);
+  box-shadow: 0 6px 20px var(--toolbar-shadow);
+  flex-direction: column;
+  z-index: 200;
+}
+
+.grok-pill-wrap:hover .grok-pill-menu,
+.grok-pill-wrap:focus-within .grok-pill-menu {
+  display: flex;
+}
+
+.grok-pill-menu a {
+  display: block;
+  padding: 7px 10px;
+  border-radius: 7px;
+  color: var(--toolbar-text);
+  text-decoration: none;
+  font-size: 12px;
+  line-height: 1.35;
+  white-space: nowrap;
+}
+
+.grok-pill-menu a:hover {
+  background: var(--toolbar-elevated);
+  color: var(--toolbar-accent);
+}
+
+/* Legacy toggle (unused) */
 .grok-toggle {
   display: inline-flex;
   align-items: center;
@@ -150,7 +237,7 @@ header.grok-toolbar {
   border: none;
   background: transparent;
   color: var(--toolbar-muted);
-  padding: 5px 12px;
+  padding: 5px 10px;
   font: inherit;
   font-size: 12px;
   line-height: 1.4;

@@ -11,31 +11,53 @@
 <body>
   <header class="grok-toolbar">
     <a class="grok-logo" href="/search">✦ Grok</a>
-    <nav class="grok-modes">
-      <a class="grok-mode" href="/search?mode=web">All</a>
-      <a class="grok-mode" href="/search?mode=images">Images</a>
-      <a class="grok-mode" href="/search?mode=videos">Videos</a>
-      <a class="grok-mode" href="/search?mode=imagine">Imagine</a>
-    </nav>
     <div class="grok-toolbar-spacer"></div>
     <div class="grok-toolbar-actions">
-      <span class="grok-model-badge" id="status">connecting…</span>
-      <div class="grok-toggle" id="home-toggle" title="Grok home">
-        <button type="button" class="grok-toggle-opt active" data-home="build">Grok Build</button>
-        <button type="button" class="grok-toggle-opt" data-home="web">Grok Web</button>
+      <div class="grok-nav-pills" id="home-toggle" title="Grok navigation">
+        <div class="grok-pill-wrap">
+          <a class="grok-pill" href="https://x.com/i/chat" target="_blank" rel="noopener noreferrer">X Chat</a>
+          <div class="grok-pill-menu">
+            <a href="https://x.com/i/chat" target="_blank" rel="noopener noreferrer">Open X Chat</a>
+          </div>
+        </div>
+        <div class="grok-pill-wrap">
+          <button type="button" class="grok-pill active" data-home="build">Grok Build</button>
+          <div class="grok-pill-menu">
+            <a href="/">Conversations</a>
+          </div>
+        </div>
+        <div class="grok-pill-wrap">
+          <button type="button" class="grok-pill" data-home="web">Grok Web</button>
+          <div class="grok-pill-menu">
+            <a href="https://grok.com/imagine" target="_blank" rel="noopener noreferrer">Imagine</a>
+          </div>
+        </div>
+        <div class="grok-pill-wrap">
+          <button type="button" class="grok-pill" data-home="wiki">Wiki</button>
+          <div class="grok-pill-menu">
+            <a href="https://grokipedia.com/" target="_blank" rel="noopener noreferrer">Grokipedia</a>
+          </div>
+        </div>
+        <div class="grok-pill-wrap">
+          <a class="grok-pill" href="https://x.com/" target="_blank" rel="noopener noreferrer">x.com</a>
+          <div class="grok-pill-menu">
+            <a href="https://x.com/" target="_blank" rel="noopener noreferrer">Home</a>
+          </div>
+        </div>
       </div>
-      <span id="model-badge" class="grok-model-badge"></span>
-      <select id="model-select" class="grok-model-select" title="Model"></select>
-      <button type="button" class="grok-toolbar-btn" id="new-chat" title="New conversation">+ Chat</button>
     </div>
   </header>
   <aside class="sidebar">
-    <div class="sidebar-label">Conversations</div>
+    <div class="sidebar-head">
+      <div class="sidebar-label">Conversations</div>
+      <button type="button" id="new-chat" class="sidebar-new" title="New conversation">+ New</button>
+    </div>
     <ul id="conv-list"></ul>
   </aside>
   <main class="chat">
     <div id="messages" class="messages"></div>
     <form id="composer" class="composer">
+      <select id="model-select" class="composer-model-select" title="Model" aria-label="Model"></select>
       <textarea id="input" rows="1" placeholder="Ask Grok to browse, organize tabs, manage bookmarks…"></textarea>
       <button type="submit" id="send">Send</button>
     </form>

@@ -217,6 +217,27 @@ def main(src: Path):
         '  }',
     )
 
+    # Register grok.com toolbar overlay early (before side panel / NTP race).
+    browser_features = (
+        src / "chrome/browser/ui/browser_window/internal/browser_window_features.cc")
+    edit(
+        browser_features,
+        '#include "chrome/browser/ui/views/side_panel/side_panel_coordinator.h"\n',
+        '#include "chrome/browser/grok_companion/grok_fab.h"  // AETHER\n'
+        '#include "chrome/browser/grok_companion/grok_web_bar.h"  // AETHER\n',
+        before=True,
+    )
+    edit(
+        browser_features,
+        '  // TODO(crbug.com/346148093): Move SidePanelCoordinator construction to\n'
+        '  // Init.',
+        '  // AETHER: grok.com/grokipedia toolbar before side panel init (NTP race).\n'
+        '  grok_companion::RegisterGrokWebBar(browser);\n'
+        '  grok_companion::RegisterGrokFab(browser);\n\n'
+        '  // TODO(crbug.com/346148093): Move SidePanelCoordinator construction to\n'
+        '  // Init.',
+    )
+
     # Register Grok side panel in global entries.
     side_panel_helper = (
         src / "chrome/browser/ui/views/side_panel/side_panel_helper.cc")
@@ -224,6 +245,7 @@ def main(src: Path):
         side_panel_helper,
         '#include "chrome/browser/ui/views/side_panel/reading_list/reading_list_side_panel_coordinator.h"',
         '\n#include "chrome/browser/grok_companion/grok_companion_util.h"  // AETHER\n'
+        '#include "chrome/browser/grok_companion/grok_fab.h"  // AETHER\n'
         '#include "chrome/browser/grok_companion/grok_web_bar.h"  // AETHER\n',
     )
     edit(
@@ -236,6 +258,7 @@ def main(src: Path):
         '      window_registry);\n\n'
         '  // AETHER: Grok AI companion side panel + grok.com toolbar overlay.\n'
         '  grok_companion::RegisterGrokWebBar(browser);\n'
+        '  grok_companion::RegisterGrokFab(browser);\n'
         '  grok_companion::RegisterGrokSidePanel(browser);',
     )
 
@@ -257,6 +280,47 @@ def main(src: Path):
         search_cc,
         '#include "chrome/browser/search/search.h"',
         '\n#include "chrome/browser/grok_companion/grok_companion_util.h"  // AETHER\n',
+    )
+
+    # New tabs must navigate to the Grok home URL directly — not chrome://newtab
+    # (injectors only run on http/https pages).
+    browser_cc = src / "chrome/browser/ui/browser.cc"
+    edit(
+        browser_cc,
+        '#include "chrome/browser/ui/browser.h"',
+        '\n#include "chrome/browser/grok_companion/grok_companion_util.h"  // AETHER\n',
+    )
+    edit(
+        browser_cc,
+        'GURL Browser::GetNewTabURL() const {\n'
+        '  if (auto* const app_browser_controller =\n'
+        '          web_app::AppBrowserController::From(this)) {\n'
+        '    return app_browser_controller->GetAppNewTabUrl();\n'
+        '  }\n'
+        '  return chrome::ChromeUINewTabURLAsGURL();\n}',
+        'GURL Browser::GetNewTabURL() const {\n'
+        '  if (auto* const app_browser_controller =\n'
+        '          web_app::AppBrowserController::From(this)) {\n'
+        '    return app_browser_controller->GetAppNewTabUrl();\n'
+        '  }\n'
+        '  // AETHER: open Grok home directly so page injectors can attach.\n'
+        '  return grok_companion::GetDefaultSearchHomeURL();\n}',
+    )
+
+    tab_restore_client = (
+        src / "chrome/browser/sessions/chrome_tab_restore_service_client.cc")
+    edit(
+        tab_restore_client,
+        '#include "chrome/browser/sessions/chrome_tab_restore_service_client.h"',
+        '\n#include "chrome/browser/grok_companion/grok_companion_util.h"  // AETHER\n',
+    )
+    edit(
+        tab_restore_client,
+        'GURL ChromeTabRestoreServiceClient::GetNewTabURL() {\n'
+        '  return chrome::ChromeUINewTabURLAsGURL();\n}',
+        'GURL ChromeTabRestoreServiceClient::GetNewTabURL() {\n'
+        '  // AETHER: match Browser::GetNewTabURL().\n'
+        '  return grok_companion::GetDefaultSearchHomeURL();\n}',
     )
 
     # Enable AI Mode omnibox entrypoint feature flag.
@@ -288,6 +352,25 @@ def main(src: Path):
         )
         grd.write_text(g)
         print(f"  edited: {grd}")
+
+    # Attach Grok page injectors to every tab at creation time.
+    tab_helpers = src / "chrome/browser/ui/tab_helpers.cc"
+    edit(
+        tab_helpers,
+        '#include "chrome/browser/ui/tab_helpers.h"',
+        '\n#include "chrome/browser/grok_companion/grok_fab.h"  // AETHER\n'
+        '#include "chrome/browser/grok_companion/grok_web_bar.h"  // AETHER\n',
+    )
+    edit(
+        tab_helpers,
+        '  // --- Section 1: Common tab helpers ---',
+        '  // AETHER: Grok toolbar + floating page button on every regular tab.\n'
+        '  if (profile && profile->IsRegularProfile()) {\n'
+        '    grok_companion::AttachGrokWebBarInjector(web_contents);\n'
+        '    grok_companion::AttachGrokFabInjector(web_contents);\n'
+        '  }\n\n'
+        '  // --- Section 1: Common tab helpers ---',
+    )
 
     # Toolbar Grok button (opens same side panel as AI Mode chip).
     toolbar = src / "chrome/browser/ui/views/toolbar/toolbar_view.cc"

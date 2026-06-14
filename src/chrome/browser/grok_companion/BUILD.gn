@@ -4,6 +4,8 @@ source_set("grok_companion") {
   sources = [
     "grok_companion_util.cc",
     "grok_companion_util.h",
+    "grok_fab.cc",
+    "grok_fab.h",
     "grok_web_bar.cc",
     "grok_web_bar.h",
   ]

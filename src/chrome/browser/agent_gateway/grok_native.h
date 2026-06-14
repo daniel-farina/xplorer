@@ -19,6 +19,11 @@ base::FilePath ResolveGrokBinary();
 
 // Native Grok companion: serves chat/search UI and proxies to the `grok` CLI.
 // Handled on the AgentGateway port (no separate Python process).
+// Grok Web handoff: pending prompts for grok.com auto-submit (browser-side).
+std::string BuildPageGrokWebPrompt(const std::string& text);
+std::string GetGrokWebPendingPrompt(const std::string& id);
+void ConsumeGrokWebPendingPrompt(const std::string& id);
+
 class GrokNative {
  public:
   // Returns true if |info| was handled (response sent or async work started).

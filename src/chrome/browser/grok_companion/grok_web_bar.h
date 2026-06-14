@@ -6,10 +6,18 @@
 
 class BrowserWindowInterface;
 
+namespace content {
+class WebContents;
+}  // namespace content
+
 namespace grok_companion {
 
-// Injects the Grok Build / Grok Web toggle bar on grok.com tabs.
+// Injects the Grok Build / Grok Web / Groki toggle bar on grok.com and
+// grokipedia.com tabs.
 void RegisterGrokWebBar(BrowserWindowInterface* browser);
+
+// Attaches the per-tab injector (idempotent). Called from TabHelpers.
+void AttachGrokWebBarInjector(content::WebContents* contents);
 
 }  // namespace grok_companion
 

@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license.
 
 #include "chrome/browser/grok_companion/grok_companion_util.h"
+#include "chrome/browser/grok_companion/grok_fab.h"
 #include "chrome/browser/grok_companion/grok_web_bar.h"
 
 #include <memory>
@@ -25,8 +26,10 @@
 #include "chrome/browser/ui/side_panel/side_panel_registry.h"
 #include "chrome/browser/ui/side_panel/side_panel_ui.h"
 #include "chrome/browser/ui/views/side_panel/side_panel_web_ui_view.h"
+#include "chrome/common/webui_url_constants.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/web_contents.h"
+#include "ui/base/page_transition_types.h"
 #include "ui/base/page_transition_types.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/views/controls/webview/webview.h"
@@ -115,30 +118,62 @@ GURL GetSearchURL() {
 
 std::string GetSearchHomeMode() {
   base::DictValue settings = LoadGrokSettings();
-  if (const std::string* mode = settings.FindString("search_home");
-      mode && *mode == kSearchHomeWeb) {
-    return kSearchHomeWeb;
+  if (const std::string* mode = settings.FindString("search_home")) {
+    if (*mode == kSearchHomeWeb)
+      return kSearchHomeWeb;
+    if (*mode == kSearchHomeWiki)
+      return kSearchHomeWiki;
   }
   return kSearchHomeBuild;
 }
 
 void SetSearchHomeMode(const std::string& mode) {
   base::DictValue settings = LoadGrokSettings();
-  settings.Set("search_home",
-               mode == kSearchHomeWeb ? kSearchHomeWeb : kSearchHomeBuild);
+  std::string saved = kSearchHomeBuild;
+  if (mode == kSearchHomeWeb)
+    saved = kSearchHomeWeb;
+  else if (mode == kSearchHomeWiki)
+    saved = kSearchHomeWiki;
+  settings.Set("search_home", saved);
   SaveGrokSettings(settings);
 }
 
 GURL GetDefaultSearchHomeURL() {
-  if (GetSearchHomeMode() == kSearchHomeWeb)
+  const std::string home = GetSearchHomeMode();
+  if (home == kSearchHomeWeb)
     return GURL(kGrokWebHomeURL);
+  if (home == kSearchHomeWiki)
+    return GURL(kGrokWikiHomeURL);
   return GetSearchURL();
+}
+
+bool IsLegacyChromeNewTab(const GURL& url) {
+  if (!url.is_valid() || !url.SchemeIs("chrome"))
+    return false;
+  const std::string_view host = url.host();
+  return host == chrome::kChromeUINewTabHost ||
+         host == chrome::kChromeUINewTabPageHost ||
+         host == chrome::kChromeUINewTabPageThirdPartyHost;
+}
+
+void RedirectLegacyNewTabIfNeeded(content::WebContents* contents) {
+  if (!contents)
+    return;
+  GURL url = contents->GetLastCommittedURL();
+  if (url.is_empty() || url.IsAboutBlank())
+    url = contents->GetVisibleURL();
+  if (!IsLegacyChromeNewTab(url))
+    return;
+  content::NavigationController::LoadURLParams params(GetDefaultSearchHomeURL());
+  params.transition_type = ui::PAGE_TRANSITION_AUTO_BOOKMARK;
+  contents->GetController().LoadURLWithParams(params);
 }
 
 void RegisterGrokSidePanel(BrowserWindowInterface* browser) {
   if (!browser)
     return;
   RegisterGrokWebBar(browser);
+  RegisterGrokFab(browser);
   SidePanelRegistry* registry = SidePanelRegistry::From(browser);
   if (!registry)
     return;
@@ -169,6 +204,7 @@ void OpenGrokSearchPage(BrowserWindowInterface* browser) {
   if (!browser)
     return;
   RegisterGrokWebBar(browser);
+  RegisterGrokFab(browser);
   tabs::TabInterface* tab = browser->GetActiveTabInterface();
   if (!tab)
     return;
