@@ -1186,7 +1186,7 @@ std::string BuildPageGrokWebPromptForAction(const std::string& action,
   return base::StringPrintf("%sTitle: %s\nURL: %s\n\nPage content:\n%s",
                               instruction.c_str(), page_title.c_str(),
                               page_url.c_str(),
-                              TruncateForPrompt(text, 12000).c_str());
+                              TruncateForPrompt(text, 24000).c_str());
 }
 
 std::string BuildPageGrokWebPrompt(const std::string& text) {

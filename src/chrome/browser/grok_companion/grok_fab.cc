@@ -121,7 +121,56 @@ std::string BuildFabInjectScript() {
   if(!document.documentElement)return;
   var GW=%s;
   var WRAP_ID='xbrowser-grok-wrap',FAB_ID='xbrowser-grok-fab',MENU_ID='xbrowser-grok-menu',STYLE_ID='xbrowser-grok-fab-style';
-  var GROK_ICON='<svg viewBox="0 0 33 32" aria-hidden="true" class="xfab-grok-icon"><path d="M12.745 20.54l10.97-8.19c.539-.4 1.307-.244 1.564.38 1.349 3.288.746 7.241-1.938 9.955-2.683 2.714-6.417 3.31-9.83 1.954l-3.728 1.745c5.347 3.697 11.84 2.782 15.898-1.324 3.219-3.255 4.216-7.692 3.284-11.693l.008.009c-1.351-5.878.332-8.227 3.782-13.031L33 0l-4.54 4.59v-.014L12.743 20.544m-2.263 1.987c-3.837-3.707-3.175-9.446.1-12.755 2.42-2.449 6.388-3.448 9.852-1.979l3.72-1.737c-.67-.49-1.53-1.017-2.515-1.387-4.455-1.854-9.789-.931-13.41 2.728-3.483 3.523-4.579 8.94-2.697 13.561 1.405 3.454-.899 5.898-3.22 8.364C1.49 30.2.666 31.074 0 32l10.478-9.466"></path></svg>';
+  var GROK_PATH='M12.745 20.54l10.97-8.19c.539-.4 1.307-.244 1.564.38 1.349 3.288.746 7.241-1.938 9.955-2.683 2.714-6.417 3.31-9.83 1.954l-3.728 1.745c5.347 3.697 11.84 2.782 15.898-1.324 3.219-3.255 4.216-7.692 3.284-11.693l.008.009c-1.351-5.878.332-8.227 3.782-13.031L33 0l-4.54 4.59v-.014L12.743 20.544m-2.263 1.987c-3.837-3.707-3.175-9.446.1-12.755 2.42-2.449 6.388-3.448 9.852-1.979l3.72-1.737c-.67-.49-1.53-1.017-2.515-1.387-4.455-1.854-9.789-.931-13.41 2.728-3.483 3.523-4.579 8.94-2.697 13.561 1.405 3.454-.899 5.898-3.22 8.364C1.49 30.2.666 31.074 0 32l10.478-9.466';
+  function clearNode(node){while(node&&node.firstChild)node.removeChild(node.firstChild);}
+  function createGrokIcon(){
+    var svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
+    svg.setAttribute('viewBox','0 0 33 32');
+    svg.setAttribute('aria-hidden','true');
+    svg.setAttribute('class','xfab-grok-icon');
+    var path=document.createElementNS('http://www.w3.org/2000/svg','path');
+    path.setAttribute('d',GROK_PATH);
+    svg.appendChild(path);
+    return svg;
+  }
+  function appendMenuItem(menu,action,icon,label,chevron){
+    var btn=document.createElement('button');
+    btn.type='button';
+    btn.className='xfab-menu-item';
+    btn.setAttribute('data-action',action);
+    var ic=document.createElement('span');
+    ic.className='xfab-menu-icon'+(action==='open'?' xfab-menu-grok-mark':'');
+    ic.textContent=icon;
+    btn.appendChild(ic);
+    var lb=document.createElement('span');
+    lb.className='xfab-menu-label';
+    lb.textContent=label;
+    btn.appendChild(lb);
+    if(chevron){
+      var ch=document.createElement('span');
+      ch.className='xfab-menu-chevron';
+      ch.textContent=chevron;
+      btn.appendChild(ch);
+    }
+    menu.appendChild(btn);
+    return btn;
+  }
+  function buildMenu(menu){
+    clearNode(menu);
+    appendMenuItem(menu,'analyze','\u2726','Analyze with Grok');
+    appendMenuItem(menu,'summarize','\u21b3','Summarize this','\u203a');
+    appendMenuItem(menu,'factcheck','\u2713','Is this true?');
+    appendMenuItem(menu,'explain','\u2026','Explain this');
+    appendMenuItem(menu,'open','\u2726','Open in Grok');
+  }
+  function buildFabButton(fab){
+    if(fab.querySelector('.xfab-grok-icon'))return;
+    clearNode(fab);
+    fab.appendChild(createGrokIcon());
+    var label=document.createElement('span');
+    label.textContent='Grok';
+    fab.appendChild(label);
+  }
   var css='#xbrowser-grok-wrap{position:fixed;bottom:20px;right:20px;z-index:2147483646;display:flex;flex-direction:column;align-items:flex-end;gap:0;font:13px/1.4 -apple-system,BlinkMacSystemFont,sans-serif}'
     +'#xbrowser-grok-wrap::before{content:"";position:absolute;left:0;right:0;bottom:100%%;height:12px}'
     +'#xbrowser-grok-menu{display:none;flex-direction:column;min-width:240px;margin-bottom:8px;padding:6px;background:#fff;border:1px solid #eff3f4;border-radius:16px;box-shadow:0 8px 28px rgba(15,20,25,.18);overflow:hidden}'
@@ -219,29 +268,18 @@ std::string BuildFabInjectScript() {
     }else if(fab.parentNode!==wrap){
       wrap.appendChild(fab);
     }
-    if(menu.dataset.version!=='5'){
-      menu.dataset.version='5';
-      menu.innerHTML='<button type="button" class="xfab-menu-item" data-action="analyze">'
-        +'<span class="xfab-menu-icon">\u2726</span><span class="xfab-menu-label">Analyze with Grok</span></button>'
-        +'<button type="button" class="xfab-menu-item" data-action="summarize">'
-        +'<span class="xfab-menu-icon">\u21b3</span><span class="xfab-menu-label">Summarize this</span>'
-        +'<span class="xfab-menu-chevron">\u203a</span></button>'
-        +'<button type="button" class="xfab-menu-item" data-action="factcheck">'
-        +'<span class="xfab-menu-icon">\u2713</span><span class="xfab-menu-label">Is this true?</span></button>'
-        +'<button type="button" class="xfab-menu-item" data-action="explain">'
-        +'<span class="xfab-menu-icon">\u2026</span><span class="xfab-menu-label">Explain this</span></button>'
-        +'<button type="button" class="xfab-menu-item" data-action="open">'
-        +'<span class="xfab-menu-icon xfab-menu-grok-mark">\u2726</span>'
-        +'<span class="xfab-menu-label">Open in Grok</span></button>';
+    if(menu.dataset.version!=='6'){
+      menu.dataset.version='6';
+      buildMenu(menu);
       fab.dataset.wired='';
     }
     fab.title='Grok this page';
     fab.setAttribute('aria-label','Grok this page');
-    fab.innerHTML=GROK_ICON+'<span>Grok</span>';
+    buildFabButton(fab);
     var oldPanel=document.getElementById('xbrowser-grok-panel');
     if(oldPanel)oldPanel.remove();
-    if(fab.dataset.wired==='5')return;
-    fab.dataset.wired='5';
+    if(fab.dataset.wired==='6')return;
+    fab.dataset.wired='6';
     function setBusy(on){
       state.busy=on;
       fab.disabled=on;
