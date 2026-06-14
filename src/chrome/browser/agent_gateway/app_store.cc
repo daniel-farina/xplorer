@@ -2,11 +2,13 @@
 // Use of this source code is governed by a BSD-style license.
 
 #include "chrome/browser/agent_gateway/app_store.h"
+#include "chrome/browser/agent_gateway/xplorer_paths.h"
 
 #include <map>
 #include <set>
 #include <utility>
 
+#include "base/command_line.h"
 #include "base/files/file_enumerator.h"
 #include "base/files/file_util.h"
 #include "base/json/json_reader.h"
@@ -14,6 +16,8 @@
 #include "base/logging.h"
 #include "base/no_destructor.h"
 #include "base/path_service.h"
+#include "base/process/launch.h"
+#include "base/process/process.h"
 #include "base/rand_util.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
@@ -32,8 +36,16 @@ constexpr char kStatusIdle[] = "idle";
 constexpr char kStatusBuilding[] = "building";
 constexpr char kStatusReady[] = "ready";
 constexpr char kStatusError[] = "error";
+constexpr int kAppRuntimePortBase = 9340;
+constexpr int kAppRuntimePortSpan = 600;
+
+struct AppRuntimeServer {
+  base::Process process;
+  int port = 0;
+};
 
 base::NoDestructor<std::set<std::string>> g_active_app_builds;
+base::NoDestructor<std::map<std::string, AppRuntimeServer>> g_app_runtime_servers;
 
 std::string PathOnly(const std::string& path) {
   return base::SplitString(path, "?", base::TRIM_WHITESPACE,
@@ -61,10 +73,10 @@ void SendJson(net::HttpServer* server,
 }
 
 base::FilePath AppsRootDir() {
-  base::FilePath home;
-  if (!base::PathService::Get(base::DIR_HOME, &home))
+  base::FilePath dir = xplorer_paths::DataDir();
+  if (dir.empty())
     return base::FilePath();
-  return home.AppendASCII(".aether/apps");
+  return dir.AppendASCII("apps");
 }
 
 base::FilePath RegistryFile() {
@@ -126,6 +138,10 @@ base::DictValue* FindAppDict(base::DictValue& registry, const std::string& id) {
   return nullptr;
 }
 
+base::FilePath ResolveAppPath(const base::DictValue& app);
+bool IsPathInside(const base::FilePath& root, const base::FilePath& child);
+std::string GuessContentType(const base::FilePath& path);
+
 std::string AppStatus(const base::DictValue& app) {
   if (const std::string* id = app.FindString("id");
       id && g_active_app_builds->count(*id))
@@ -134,9 +150,138 @@ std::string AppStatus(const base::DictValue& app) {
   return status ? *status : kStatusIdle;
 }
 
-base::DictValue AppToJson(const base::DictValue& app) {
+std::set<int> UsedRuntimePorts(const base::DictValue& registry) {
+  std::set<int> used;
+  if (const base::ListValue* apps = registry.FindList("apps")) {
+    for (const auto& v : *apps) {
+      if (!v.is_dict())
+        continue;
+      if (std::optional<int> p = v.GetDict().FindInt("runtime_port"))
+        used.insert(*p);
+    }
+  }
+  return used;
+}
+
+int DefaultRuntimePort(const std::string& app_id) {
+  uint32_t hash = 0;
+  for (unsigned char c : app_id)
+    hash = hash * 31u + c;
+  return kAppRuntimePortBase + static_cast<int>(hash % kAppRuntimePortSpan);
+}
+
+int AllocateRuntimePort(const std::string& app_id, const base::DictValue& registry) {
+  std::set<int> used = UsedRuntimePorts(registry);
+  int port = DefaultRuntimePort(app_id);
+  for (int i = 0; i < kAppRuntimePortSpan; ++i) {
+    int candidate = kAppRuntimePortBase + ((port - kAppRuntimePortBase + i) %
+                                           kAppRuntimePortSpan);
+    if (!used.count(candidate))
+      return candidate;
+  }
+  return port;
+}
+
+int GetOrAssignRuntimePort(base::DictValue& registry, base::DictValue* app) {
+  if (!app)
+    return 0;
+  const std::string* app_id = app->FindString("id");
+  if (!app_id || app_id->empty())
+    return 0;
+  if (std::optional<int> existing = app->FindInt("runtime_port"))
+    return *existing;
+  const int port = AllocateRuntimePort(*app_id, registry);
+  app->Set("runtime_port", port);
+  app->Set("updated_at", NowIso());
+  SaveRegistry(registry);
+  return port;
+}
+
+void StopAppRuntimeServer(const std::string& app_id) {
+  auto it = g_app_runtime_servers->find(app_id);
+  if (it == g_app_runtime_servers->end())
+    return;
+  if (it->second.process.IsValid()) {
+    it->second.process.Terminate(0, true);
+  }
+  g_app_runtime_servers->erase(it);
+}
+
+bool LaunchAppRuntimeServer(const std::string& app_id,
+                            const base::FilePath& app_path,
+                            int port) {
+  if (app_path.empty() || port <= 0)
+    return false;
+  auto it = g_app_runtime_servers->find(app_id);
+  if (it != g_app_runtime_servers->end() && it->second.process.IsValid() &&
+      it->second.port == port) {
+    return true;
+  }
+  StopAppRuntimeServer(app_id);
+
+  base::FilePath python = base::FilePath("/usr/bin/python3");
+  if (!base::PathExists(python))
+    python = base::FilePath("/usr/local/bin/python3");
+  if (!base::PathExists(python))
+    return false;
+
+  base::CommandLine cmd(python);
+  cmd.AppendArg("-m");
+  cmd.AppendArg("http.server");
+  cmd.AppendArg(base::NumberToString(port));
+  cmd.AppendArg("--bind");
+  cmd.AppendArg("127.0.0.1");
+  cmd.AppendArg("--directory");
+  cmd.AppendArgPath(app_path);
+
+  base::LaunchOptions options;
+  options.current_directory = app_path;
+  base::Process process = base::LaunchProcess(cmd, options);
+  if (!process.IsValid())
+    return false;
+  (*g_app_runtime_servers)[app_id] = {std::move(process), port};
+  LOG(INFO) << "[apps] runtime server app=" << app_id << " port=" << port
+            << " path=" << app_path.value();
+  return true;
+}
+
+void EnsureAppRuntime(base::DictValue& registry, base::DictValue* app) {
+  if (!app)
+    return;
+  const std::string* app_id = app->FindString("id");
+  if (!app_id || app_id->empty())
+    return;
+  const int port = GetOrAssignRuntimePort(registry, app);
+  base::FilePath app_path = ResolveAppPath(*app);
+  if (!app_path.empty())
+    LaunchAppRuntimeServer(*app_id, app_path, port);
+}
+
+void SetAppRuntimeUrls(base::DictValue& out,
+                       const base::DictValue& app,
+                       int gateway_port) {
+  const std::string* app_id = app.FindString("id");
+  if (!app_id || app_id->empty())
+    return;
+  const int runtime_port = app.FindInt("runtime_port").value_or(0);
+  out.Set("runtime_port", runtime_port);
+  out.Set("runtime_url",
+          base::StringPrintf("http://127.0.0.1:%d/run/%s/", gateway_port,
+                             app_id->c_str()));
+  if (runtime_port > 0) {
+    out.Set("open_url",
+            base::StringPrintf("http://127.0.0.1:%d/", runtime_port));
+  } else {
+    out.Set("open_url",
+            base::StringPrintf("http://127.0.0.1:%d/run/%s/", gateway_port,
+                               app_id->c_str()));
+  }
+}
+
+base::DictValue AppToJson(const base::DictValue& app, int gateway_port) {
   base::DictValue out = app.Clone();
   out.Set("status", AppStatus(app));
+  SetAppRuntimeUrls(out, app, gateway_port);
   if (const std::string* sid = app.FindString("session_id")) {
     const std::string* path = app.FindString("path");
     if (path && !path->empty()) {
@@ -150,6 +295,25 @@ base::DictValue AppToJson(const base::DictValue& app) {
     }
   }
   return out;
+}
+
+bool ServeAppStaticFile(net::HttpServer* server,
+                        int connection_id,
+                        const base::FilePath& app_path,
+                        const std::string& rel_path) {
+  std::string rel = rel_path.empty() ? "index.html" : rel_path;
+  base::FilePath target = app_path.AppendASCII(rel);
+  if (!IsPathInside(app_path, target) || !base::PathExists(target)) {
+    base::DictValue err;
+    err.Set("error", "file not found");
+    SendJson(server, connection_id, net::HTTP_NOT_FOUND, std::move(err));
+    return true;
+  }
+  std::string bytes;
+  base::ReadFileToString(target, &bytes);
+  SendBytes(server, connection_id, net::HTTP_OK, std::move(bytes),
+            GuessContentType(target).c_str());
+  return true;
 }
 
 std::string CreateAppConversation(const std::string& app_id,
@@ -260,6 +424,64 @@ std::string DefaultAppName(const std::string& prompt) {
 
 }  // namespace
 
+bool TryHandleAppRunRequest(
+    int connection_id,
+    const net::HttpServerRequestInfo& info,
+    net::HttpServer* server,
+    int gateway_port) {
+  if (info.method != "GET")
+    return false;
+  const std::string path = PathOnly(info.path);
+  const std::string prefix = "/run/";
+  if (!base::StartsWith(path, prefix))
+    return false;
+
+  std::string rest = path.substr(prefix.size());
+  if (rest.empty()) {
+    net::HttpServerResponseInfo resp(net::HTTP_BAD_REQUEST);
+    resp.SetBody("{\"error\":\"app id required\"}", "application/json");
+    server->SendResponse(connection_id, resp, TRAFFIC_ANNOTATION_FOR_TESTS);
+    return true;
+  }
+
+  const size_t slash = rest.find('/');
+  const std::string app_id =
+      slash == std::string::npos ? rest : rest.substr(0, slash);
+  std::string rel =
+      slash == std::string::npos ? "" : rest.substr(slash + 1);
+
+  if (app_id.empty()) {
+    base::DictValue err;
+    err.Set("error", "app id required");
+    SendJson(server, connection_id, net::HTTP_BAD_REQUEST, std::move(err));
+    return true;
+  }
+
+  if (slash == std::string::npos) {
+    net::HttpServerResponseInfo resp(net::HTTP_FOUND);
+    resp.AddHeader(
+        "Location",
+        base::StringPrintf("http://127.0.0.1:%d/run/%s/", gateway_port,
+                           app_id.c_str()));
+    resp.AddHeader("Cache-Control", "no-store");
+    server->SendResponse(connection_id, resp, TRAFFIC_ANNOTATION_FOR_TESTS);
+    return true;
+  }
+
+  base::DictValue registry = LoadRegistry();
+  base::DictValue* app = FindAppDict(registry, app_id);
+  if (!app) {
+    base::DictValue err;
+    err.Set("error", "app not found");
+    SendJson(server, connection_id, net::HTTP_NOT_FOUND, std::move(err));
+    return true;
+  }
+
+  EnsureAppRuntime(registry, app);
+  base::FilePath app_path = ResolveAppPath(*app);
+  return ServeAppStaticFile(server, connection_id, app_path, rel);
+}
+
 void OnAppBuildStreamFinished(const std::string& app_id,
                               const std::string& conv_id,
                               int exit_code,
@@ -275,7 +497,8 @@ void OnAppBuildStreamFinished(const std::string& app_id,
     app->Set("last_error", "");
   } else {
     SetAppField(*app, "status", kStatusError);
-    app->Set("last_error", "grok build failed");
+    app->Set("last_error",
+             "grok build failed (exit " + base::NumberToString(exit_code) + ")");
   }
   if (!session_id.empty())
     app->Set("session_id", session_id);
@@ -317,7 +540,7 @@ bool TryHandleAppsRequest(
       for (const auto& v : *apps) {
         if (!v.is_dict())
           continue;
-        out_apps.Append(AppToJson(v.GetDict()));
+        out_apps.Append(AppToJson(v.GetDict(), gateway_port));
       }
     }
     base::DictValue result;
@@ -362,10 +585,15 @@ bool TryHandleAppsRequest(
     app.Set("last_error", "");
     base::DictValue registry = LoadRegistry();
     AppsList(registry)->Append(app.Clone());
+    if (base::DictValue* stored = FindAppDict(registry, id))
+      GetOrAssignRuntimePort(registry, stored);
     SaveRegistry(registry);
     base::DictValue result;
     result.Set("ok", true);
-    result.Set("app", AppToJson(app));
+    if (base::DictValue* stored = FindAppDict(registry, id))
+      result.Set("app", AppToJson(*stored, gateway_port));
+    else
+      result.Set("app", AppToJson(app, gateway_port));
     SendJson(server, connection_id, net::HTTP_OK, std::move(result));
     return true;
   }
@@ -394,7 +622,7 @@ bool TryHandleAppsRequest(
     base::FilePath app_dir = AppsRootDir().AppendASCII(id);
     base::CreateDirectory(app_dir);
     const std::string readme =
-        "# " + name + "\n\nBuilt with Grok Build in XBrowser.\n";
+        "# " + name + "\n\nBuilt with Grok Build in Xplorer.\n";
     base::WriteFile(app_dir.AppendASCII("README.md"), readme);
     const std::string conv_id = CreateAppConversation(id, name);
     base::DictValue app;
@@ -403,19 +631,22 @@ bool TryHandleAppsRequest(
     app.Set("path", app_dir.value());
     app.Set("conversation_id", conv_id);
     app.Set("session_id", "");
-    app.Set("status", kStatusBuilding);
+    app.Set("status", kStatusIdle);
     app.Set("imported", false);
     app.Set("created_at", NowIso());
     app.Set("updated_at", NowIso());
     app.Set("last_error", "");
     base::DictValue registry = LoadRegistry();
     AppsList(registry)->Append(app.Clone());
+    if (base::DictValue* stored = FindAppDict(registry, id))
+      GetOrAssignRuntimePort(registry, stored);
     SaveRegistry(registry);
-    MarkAppBuilding(id);
-    AppendUserMessage(conv_id, *prompt);
     base::DictValue result;
     result.Set("ok", true);
-    result.Set("app", AppToJson(app));
+    if (base::DictValue* stored = FindAppDict(registry, id))
+      result.Set("app", AppToJson(*stored, gateway_port));
+    else
+      result.Set("app", AppToJson(app, gateway_port));
     result.Set("build_stream_path",
                 "/api/apps/" + id + "/build/stream");
     SendJson(server, connection_id, net::HTTP_OK, std::move(result));
@@ -447,9 +678,10 @@ bool TryHandleAppsRequest(
   }
 
   if (info.method == "GET" && sub.empty()) {
+    EnsureAppRuntime(registry, app);
     base::DictValue result;
     result.Set("ok", true);
-    result.Set("app", AppToJson(*app));
+    result.Set("app", AppToJson(*app, gateway_port));
     SendJson(server, connection_id, net::HTTP_OK, std::move(result));
     return true;
   }
@@ -514,7 +746,7 @@ bool TryHandleAppsRequest(
     std::string session_id;
     if (const std::string* sid = app->FindString("session_id"))
       session_id = *sid;
-    std::string model = ResolveConfiguredModel(model_body);
+    std::string model = ResolveAppBuildModel(model_body);
     base::FilePath cwd = ResolveAppPath(*app);
     MarkAppBuilding(app_id);
     AppendUserMessage(conv_id, text);
@@ -524,6 +756,7 @@ bool TryHandleAppsRequest(
   }
 
   if (info.method == "DELETE" && sub.empty()) {
+    StopAppRuntimeServer(app_id);
     g_active_app_builds->erase(app_id);
     base::ListValue* apps = AppsList(registry);
     base::ListValue filtered;

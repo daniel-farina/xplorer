@@ -13,8 +13,8 @@ Register it (example, Claude Code / Cursor mcp config):
       }
     }
 
-It auto-discovers the running browser via ~/.aether/gateway.json, so there is
-nothing to configure — start Aether, add this server, done.
+It auto-discovers the running browser via ~/.xplorer/gateway.json, so there is
+nothing to configure — start Xplorer, add this server, done.
 """
 import base64
 import json
@@ -28,12 +28,14 @@ PROTO = "2024-11-05"
 
 def gateway():
     """Read the fixed discovery file the browser writes at startup."""
-    p = pathlib.Path.home() / ".aether" / "gateway.json"
-    if not p.exists():
-        raise RuntimeError(
-            "Aether is not running (no ~/.aether/gateway.json). Launch Aether "
-            "first.")
-    return json.loads(p.read_text())
+    home = pathlib.Path.home()
+    for name in (".xplorer", ".xbrowser", ".aether"):
+        p = home / name / "gateway.json"
+        if p.exists():
+            return json.loads(p.read_text())
+    raise RuntimeError(
+        "Xplorer is not running (no ~/.xplorer/gateway.json). Launch "
+        "Xplorer first.")
 
 
 def api(method, path, body=None):

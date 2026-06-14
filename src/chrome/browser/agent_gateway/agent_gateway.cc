@@ -5,6 +5,7 @@
 
 #include "chrome/browser/agent_gateway/browser_api.h"
 #include "chrome/browser/agent_gateway/grok_companion_launcher.h"
+#include "chrome/browser/agent_gateway/xplorer_paths.h"
 #include "chrome/browser/agent_gateway/grok_native.h"
 
 #include <utility>
@@ -98,12 +99,10 @@ void AgentGateway::StartServerOnIOThread(int port) {
 
   // Write a FIXED discovery file so any agent finds the gateway without
   // knowing the profile path or branding. This is the canonical way to
-  // connect: read ~/.aether/gateway.json -> {port, token}. Solves the
+  // connect: read ~/.xplorer/gateway.json -> {port, token}. Solves the
   // "where is the token?" problem that trips agents up.
-  base::FilePath home;
-  if (base::PathService::Get(base::DIR_HOME, &home)) {
-    base::FilePath dir = home.AppendASCII(".aether");
-    base::CreateDirectory(dir);
+  base::FilePath dir = xplorer_paths::DataDir();
+  if (!dir.empty()) {
     base::DictValue d;
     d.Set("port", port_);
     d.Set("token", token_);
@@ -137,8 +136,8 @@ void AgentGateway::OnHttpRequest(int connection_id,
   if (info.path == "/" || info.path == "/whoami") {
     net::HttpServerResponseInfo resp(net::HTTP_OK);
     resp.SetBody(
-        "{\"service\":\"aether-agent-gateway\",\"auth\":\"Bearer token from "
-        "~/.aether/gateway.json\",\"docs\":\"https://github.com/daniel-farina/"
+        "{\"service\":\"xplorer-agent-gateway\",\"auth\":\"Bearer token from "
+        "~/.xplorer/gateway.json\",\"docs\":\"https://github.com/daniel-farina/"
         "aether/blob/master/AGENTS.md\"}",
         "application/json");
     server_->SendResponse(connection_id, resp, TRAFFIC_ANNOTATION_FOR_TESTS);
@@ -150,7 +149,7 @@ void AgentGateway::OnHttpRequest(int connection_id,
     net::HttpServerResponseInfo resp(net::HTTP_UNAUTHORIZED);
     resp.SetBody(
         "{\"error\":\"missing or invalid bearer token\",\"fix\":\"read token "
-        "from ~/.aether/gateway.json and send 'Authorization: Bearer "
+        "from ~/.xplorer/gateway.json and send 'Authorization: Bearer "
         "<token>'\"}",
         "application/json");
     server_->SendResponse(connection_id, resp, TRAFFIC_ANNOTATION_FOR_TESTS);

@@ -4,6 +4,7 @@
 #include "chrome/browser/agent_gateway/grok_companion_launcher.h"
 
 #include "chrome/browser/agent_gateway/grok_native.h"
+#include "chrome/browser/agent_gateway/xplorer_paths.h"
 
 #include "base/base_paths.h"
 #include "base/files/file_path.h"
@@ -16,11 +17,9 @@
 namespace agent_gateway {
 
 void WriteCompanionDiscovery(int gateway_port) {
-  base::FilePath home;
-  if (!base::PathService::Get(base::DIR_HOME, &home))
+  base::FilePath dir = xplorer_paths::DataDir();
+  if (dir.empty())
     return;
-  base::FilePath dir = home.AppendASCII(".aether");
-  base::CreateDirectory(dir);
 
   base::DictValue companion;
   companion.Set("url",

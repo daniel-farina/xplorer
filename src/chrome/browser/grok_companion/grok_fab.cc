@@ -42,13 +42,7 @@ int GatewayPort() {
 }
 
 bool IsGrokWebHost(const GURL& url) {
-  if (!url.is_valid() || !url.SchemeIsHTTPOrHTTPS())
-    return false;
-  const std::string_view host = url.host();
-  return host == "grok.com" || host == "www.grok.com" ||
-         base::EndsWith(host, ".grok.com") || host == "grokipedia.com" ||
-         host == "www.grokipedia.com" ||
-         base::EndsWith(host, ".grokipedia.com");
+  return IsGrokToolbarOverlayHost(url);
 }
 
 bool IsFabHost(const GURL& url) {
@@ -72,7 +66,7 @@ std::string JsonStringLiteral(const std::string& value) {
 std::string ExtractGrokWebPendingId(const GURL& url) {
   if (!url.is_valid())
     return {};
-  constexpr char kKey[] = "xbrowser_grok=";
+  constexpr char kKey[] = "xplorer_grok=";
   const std::string query(url.query());
   size_t pos = query.find(kKey);
   if (pos != std::string::npos) {
@@ -99,13 +93,13 @@ std::string BuildGrokWebNativeSubmitScript(const std::string& prompt,
       R"((function(){
   var p=%s;
   var id=%s;
-  console.log('[xbrowser] native inject grok-web id='+id+' prompt_len='+p.length);
-  if(window.__xbrowserNativeGrokSubmit){
-    window.__xbrowserNativeGrokSubmit(p,id);
+  console.log('[xplorer] native inject grok-web id='+id+' prompt_len='+p.length);
+  if(window.__xplorerNativeGrokSubmit){
+    window.__xplorerNativeGrokSubmit(p,id);
   }else{
-    window.__xbrowserGrokWebNativeQueue=window.__xbrowserGrokWebNativeQueue||[];
-    window.__xbrowserGrokWebNativeQueue.push({prompt:p,id:id});
-    console.log('[xbrowser] queued native grok-web (fab script not ready)');
+    window.__xplorerGrokWebNativeQueue=window.__xplorerGrokWebNativeQueue||[];
+    window.__xplorerGrokWebNativeQueue.push({prompt:p,id:id});
+    console.log('[xplorer] queued native grok-web (fab script not ready)');
   }
 })();)",
       JsonStringLiteral(prompt).c_str(), JsonStringLiteral(id).c_str());
@@ -120,7 +114,7 @@ std::string BuildFabInjectScript() {
       R"((function(){
   if(!document.documentElement)return;
   var GW=%s;
-  var WRAP_ID='xbrowser-grok-wrap',FAB_ID='xbrowser-grok-fab',MENU_ID='xbrowser-grok-menu',STYLE_ID='xbrowser-grok-fab-style';
+  var WRAP_ID='xplorer-grok-wrap',FAB_ID='xplorer-grok-fab',MENU_ID='xplorer-grok-menu',STYLE_ID='xplorer-grok-fab-style';
   var GROK_PATH='M12.745 20.54l10.97-8.19c.539-.4 1.307-.244 1.564.38 1.349 3.288.746 7.241-1.938 9.955-2.683 2.714-6.417 3.31-9.83 1.954l-3.728 1.745c5.347 3.697 11.84 2.782 15.898-1.324 3.219-3.255 4.216-7.692 3.284-11.693l.008.009c-1.351-5.878.332-8.227 3.782-13.031L33 0l-4.54 4.59v-.014L12.743 20.544m-2.263 1.987c-3.837-3.707-3.175-9.446.1-12.755 2.42-2.449 6.388-3.448 9.852-1.979l3.72-1.737c-.67-.49-1.53-1.017-2.515-1.387-4.455-1.854-9.789-.931-13.41 2.728-3.483 3.523-4.579 8.94-2.697 13.561 1.405 3.454-.899 5.898-3.22 8.364C1.49 30.2.666 31.074 0 32l10.478-9.466';
   function clearNode(node){while(node&&node.firstChild)node.removeChild(node.firstChild);}
   function createGrokIcon(){
@@ -171,10 +165,10 @@ std::string BuildFabInjectScript() {
     label.textContent='Grok';
     fab.appendChild(label);
   }
-  var css='#xbrowser-grok-wrap{position:fixed;bottom:20px;right:20px;z-index:2147483646;display:flex;flex-direction:column;align-items:flex-end;gap:0;font:13px/1.4 -apple-system,BlinkMacSystemFont,sans-serif}'
-    +'#xbrowser-grok-wrap::before{content:"";position:absolute;left:0;right:0;bottom:100%%;height:12px}'
-    +'#xbrowser-grok-menu{display:none;flex-direction:column;min-width:240px;margin-bottom:8px;padding:6px;background:#fff;border:1px solid #eff3f4;border-radius:16px;box-shadow:0 8px 28px rgba(15,20,25,.18);overflow:hidden}'
-    +'#xbrowser-grok-menu.open{display:flex}'
+  var css='#xplorer-grok-wrap{position:fixed;bottom:20px;right:20px;z-index:2147483646;display:flex;flex-direction:column;align-items:flex-end;gap:0;font:13px/1.4 -apple-system,BlinkMacSystemFont,sans-serif}'
+    +'#xplorer-grok-wrap::before{content:"";position:absolute;left:0;right:0;bottom:100%%;height:12px}'
+    +'#xplorer-grok-menu{display:none;flex-direction:column;min-width:240px;margin-bottom:8px;padding:6px;background:#fff;border:1px solid #eff3f4;border-radius:16px;box-shadow:0 8px 28px rgba(15,20,25,.18);overflow:hidden}'
+    +'#xplorer-grok-menu.open{display:flex}'
     +'.xfab-menu-item{display:flex;align-items:center;gap:12px;width:100%%;border:none;background:transparent;padding:12px 14px;text-align:left;font:inherit;font-size:15px;color:#0f1419;cursor:pointer;border-radius:10px}'
     +'.xfab-menu-item:hover{background:#f7f9f9}'
     +'.xfab-menu-item:disabled{opacity:.5;cursor:wait}'
@@ -182,24 +176,24 @@ std::string BuildFabInjectScript() {
     +'.xfab-menu-grok-mark{color:#0f1419}'
     +'.xfab-menu-label{flex:1}'
     +'.xfab-menu-chevron{color:#536471;font-size:14px}'
-    +'#xbrowser-grok-fab{display:inline-flex;align-items:center;gap:6px;border:1px solid #cfd9de;border-radius:999px;background:#fff;color:#0f1419;padding:6px 12px 6px 10px;font:600 13px/1 -apple-system,BlinkMacSystemFont,sans-serif;cursor:pointer;box-shadow:0 2px 10px rgba(15,20,25,.12);transition:transform .15s,box-shadow .15s,background .15s,border-color .15s}'
-    +'#xbrowser-grok-fab:hover{background:#f7f9f9;border-color:#aab8c2;transform:translateY(-1px);box-shadow:0 4px 14px rgba(15,20,25,.16)}'
-    +'#xbrowser-grok-fab:disabled{opacity:.65;cursor:wait;transform:none}'
+    +'#xplorer-grok-fab{display:inline-flex;align-items:center;gap:6px;border:1px solid #cfd9de;border-radius:999px;background:#fff;color:#0f1419;padding:6px 12px 6px 10px;font:600 13px/1 -apple-system,BlinkMacSystemFont,sans-serif;cursor:pointer;box-shadow:0 2px 10px rgba(15,20,25,.12);transition:transform .15s,box-shadow .15s,background .15s,border-color .15s}'
+    +'#xplorer-grok-fab:hover{background:#f7f9f9;border-color:#aab8c2;transform:translateY(-1px);box-shadow:0 4px 14px rgba(15,20,25,.16)}'
+    +'#xplorer-grok-fab:disabled{opacity:.65;cursor:wait;transform:none}'
     +'.xfab-grok-icon{width:15px;height:15px;fill:currentColor;display:block;flex-shrink:0}'
     +'@media (prefers-color-scheme:dark){'
-    +'#xbrowser-grok-fab{background:#000;color:#fff;border-color:#2f3336;box-shadow:0 2px 12px rgba(0,0,0,.45)}'
-    +'#xbrowser-grok-fab:hover{background:#16181c;border-color:#536471}'
-    +'#xbrowser-grok-menu{background:#000;border-color:#2f3336;box-shadow:0 8px 28px rgba(0,0,0,.55)}'
+    +'#xplorer-grok-fab{background:#000;color:#fff;border-color:#2f3336;box-shadow:0 2px 12px rgba(0,0,0,.45)}'
+    +'#xplorer-grok-fab:hover{background:#16181c;border-color:#536471}'
+    +'#xplorer-grok-menu{background:#000;border-color:#2f3336;box-shadow:0 8px 28px rgba(0,0,0,.55)}'
     +'.xfab-menu-item{color:#e7e9ea}'
     +'.xfab-menu-item:hover{background:#16181c}'
     +'.xfab-menu-icon,.xfab-menu-chevron,.xfab-menu-grok-mark{color:#e7e9ea}'
     +'}';
-  var state=window.__xbrowserGrokFabState||(window.__xbrowserGrokFabState={busy:false,pageData:null});
+  var state=window.__xplorerGrokFabState||(window.__xplorerGrokFabState={busy:false,pageData:null});
   function xlog(){
-    try{console.log.apply(console,['[xbrowser-fab]'].concat(Array.prototype.slice.call(arguments)));}catch(e){}
+    try{console.log.apply(console,['[xplorer-fab]'].concat(Array.prototype.slice.call(arguments)));}catch(e){}
   }
   function extractPage(){
-    var kill='script,style,noscript,svg,nav,footer,aside,iframe,#xbrowser-grok-bar,#xbrowser-grok-wrap,#xbrowser-grok-fab,#xbrowser-grok-menu,[data-aether-hud]';
+    var kill='script,style,noscript,svg,nav,footer,aside,iframe,#xplorer-grok-bar,#xplorer-grok-wrap,#xplorer-grok-fab,#xplorer-grok-menu,[data-aether-hud]';
     var selText=(window.getSelection&&window.getSelection().toString()||'').replace(/\s+/g,' ').trim();
     if(selText.length>80){
       xlog('extract: user selection',selText.length,'chars');
@@ -232,8 +226,10 @@ std::string BuildFabInjectScript() {
     return {title:document.title||'',url:location.href,text:text,source:text?'select-all':'empty'};
   }
   function isGrokWebPage(){
-    var host=location.hostname||'';
-    return host.indexOf('grok.com')>=0||host.indexOf('grokipedia.com')>=0;
+    var host=(location.hostname||'').toLowerCase();
+    return host.indexOf('grok.com')>=0||host.indexOf('grokipedia.com')>=0||
+      host==='x.com'||host.endsWith('.x.com')||
+      host==='twitter.com'||host.endsWith('.twitter.com');
   }
   function ensureFab(){
     if(!document.documentElement)return;
@@ -276,7 +272,7 @@ std::string BuildFabInjectScript() {
     fab.title='Grok this page';
     fab.setAttribute('aria-label','Grok this page');
     buildFabButton(fab);
-    var oldPanel=document.getElementById('xbrowser-grok-panel');
+    var oldPanel=document.getElementById('xplorer-grok-panel');
     if(oldPanel)oldPanel.remove();
     if(fab.dataset.wired==='6')return;
     fab.dataset.wired='6';
@@ -333,23 +329,23 @@ std::string BuildFabInjectScript() {
         runGrokWeb(btn.getAttribute('data-action'));
       };
     });
-    if(!window.__xbrowserGrokMenuClose){
-      window.__xbrowserGrokMenuClose=true;
+    if(!window.__xplorerGrokMenuClose){
+      window.__xplorerGrokMenuClose=true;
       document.addEventListener('click',function(){toggleMenu(false);});
       wrap.addEventListener('click',function(e){e.stopPropagation();});
     }
   }
   function getGrokWebPendingId(){
-    var id=new URLSearchParams(location.search).get('xbrowser_grok');
+    var id=new URLSearchParams(location.search).get('xplorer_grok');
     if(id)return id;
-    var m=(location.hash||'').match(/xbrowser_grok=([^&]+)/);
+    var m=(location.hash||'').match(/xplorer_grok=([^&]+)/);
     return m?decodeURIComponent(m[1]):null;
   }
   function clearGrokWebPendingId(){
     try{
       var u=new URL(location.href);
-      u.searchParams.delete('xbrowser_grok');
-      u.hash=(u.hash||'').replace(/xbrowser_grok=[^&]+&?/,'').replace(/&$/,'');
+      u.searchParams.delete('xplorer_grok');
+      u.hash=(u.hash||'').replace(/xplorer_grok=[^&]+&?/,'').replace(/&$/,'');
       history.replaceState(null,'',u.pathname+u.search+u.hash);
     }catch(e){}
   }
@@ -478,57 +474,57 @@ std::string BuildFabInjectScript() {
       setTimeout(tick,400);
     }
     tick();
-    if(!window.__xbrowserGrokSubmitWatch){
-      window.__xbrowserGrokSubmitWatch=true;
+    if(!window.__xplorerGrokSubmitWatch){
+      window.__xplorerGrokSubmitWatch=true;
       new MutationObserver(function(){if(!submitted)tryOnce();})
         .observe(document.documentElement,{childList:true,subtree:true});
     }
   }
-  window.__xbrowserNativeGrokSubmit=function(prompt,id){
+  window.__xplorerNativeGrokSubmit=function(prompt,id){
     xlog('nativeGrokSubmit id='+id+' len='+prompt.length);
-    if(window.__xbrowserGrokConsuming===id||window.__xbrowserGrokWebSubmitDone===id)return;
-    window.__xbrowserGrokConsuming=id;
+    if(window.__xplorerGrokConsuming===id||window.__xplorerGrokWebSubmitDone===id)return;
+    window.__xplorerGrokConsuming=id;
     submitGrokWebPrompt(prompt,function(){
       xlog('grok-web submit done id='+id);
-      window.__xbrowserGrokWebSubmitDone=id;
+      window.__xplorerGrokWebSubmitDone=id;
       fetch(GW+'/api/page/grok-web/consumed?id='+encodeURIComponent(id),{method:'POST'})
         .then(function(){xlog('consumed ok');})
         .catch(function(e){xlog('consumed fetch failed',e);});
       clearGrokWebPendingId();
-      window.__xbrowserGrokConsuming='';
+      window.__xplorerGrokConsuming='';
     });
   };
-  if(window.__xbrowserGrokWebNativeQueue){
-    window.__xbrowserGrokWebNativeQueue.forEach(function(q){
-      window.__xbrowserNativeGrokSubmit(q.prompt,q.id);
+  if(window.__xplorerGrokWebNativeQueue){
+    window.__xplorerGrokWebNativeQueue.forEach(function(q){
+      window.__xplorerNativeGrokSubmit(q.prompt,q.id);
     });
-    window.__xbrowserGrokWebNativeQueue=[];
+    window.__xplorerGrokWebNativeQueue=[];
   }
   function tryConsumeGrokWebPending(){
     var host=location.hostname||'';
     if(host.indexOf('grok.com')<0&&host.indexOf('.grok.com')<0)return;
     var id=getGrokWebPendingId();
     if(!id)return;
-    if(window.__xbrowserGrokConsuming===id||window.__xbrowserGrokWebSubmitDone===id)return;
+    if(window.__xplorerGrokConsuming===id||window.__xplorerGrokWebSubmitDone===id)return;
     xlog('fetch fallback pending id='+id);
-    window.__xbrowserGrokConsuming=id;
+    window.__xplorerGrokConsuming=id;
     fetch(GW+'/api/page/grok-web/pending?id='+encodeURIComponent(id))
       .then(function(r){return r.json();})
       .then(function(d){
         if(!d.prompt){
           xlog('fetch fallback: no prompt',d);
-          window.__xbrowserGrokConsuming='';
+          window.__xplorerGrokConsuming='';
           return;
         }
         submitGrokWebPrompt(d.prompt,function(){
-          window.__xbrowserGrokWebSubmitDone=id;
+          window.__xplorerGrokWebSubmitDone=id;
           fetch(GW+'/api/page/grok-web/consumed?id='+encodeURIComponent(id),{method:'POST'});
           clearGrokWebPendingId();
-          window.__xbrowserGrokConsuming='';
+          window.__xplorerGrokConsuming='';
         });
       }).catch(function(e){
         xlog('fetch fallback failed',e);
-        window.__xbrowserGrokConsuming='';
+        window.__xplorerGrokConsuming='';
       });
   }
   function fabNeedsMount(){
@@ -538,12 +534,12 @@ std::string BuildFabInjectScript() {
   }
   ensureFab();
   tryConsumeGrokWebPending();
-  if((location.hostname||'').indexOf('grok.com')>=0&&!window.__xbrowserGrokConsumeWatch){
-    window.__xbrowserGrokConsumeWatch=true;
+  if((location.hostname||'').indexOf('grok.com')>=0&&!window.__xplorerGrokConsumeWatch){
+    window.__xplorerGrokConsumeWatch=true;
     setInterval(tryConsumeGrokWebPending,1000);
   }
-  if(!window.__xbrowserGrokFabWatch){
-    window.__xbrowserGrokFabWatch=true;
+  if(!window.__xplorerGrokFabWatch){
+    window.__xplorerGrokFabWatch=true;
     new MutationObserver(function(){
       if(fabNeedsMount()) ensureFab();
     }).observe(document.documentElement,{childList:true,subtree:true});
@@ -656,8 +652,8 @@ class GrokFabInjector : public content::WebContentsObserver,
     const GURL url = contents->GetLastCommittedURL();
     if (url.host().find("grok.com") == std::string::npos)
       return;
-    if (url.query().find("xbrowser_grok") == std::string::npos &&
-        url.ref().find("xbrowser_grok") == std::string::npos) {
+    if (url.query().find("xplorer_grok") == std::string::npos &&
+        url.ref().find("xplorer_grok") == std::string::npos) {
       return;
     }
     ScheduleGrokWebSubmitBurst();
@@ -766,7 +762,7 @@ class GrokFabInjector : public content::WebContentsObserver,
       return;
     }
     const std::string script = base::StringPrintf(
-        "(function(){return window.__xbrowserGrokWebSubmitDone||'';})()");
+        "(function(){return window.__xplorerGrokWebSubmitDone||'';})()");
     frame->ExecuteJavaScriptInIsolatedWorld(
         base::UTF8ToUTF16(script),
         base::BindOnce(&GrokFabInjector::OnGrokWebSubmitCheckResult,

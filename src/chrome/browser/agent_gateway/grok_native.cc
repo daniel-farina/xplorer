@@ -35,6 +35,8 @@
 #include "base/time/time.h"
 #include "chrome/browser/agent_gateway/app_store.h"
 #include "chrome/browser/agent_gateway/browser_api.h"
+#include "chrome/browser/agent_gateway/xplorer_paths.h"
+#include "chrome/browser/grok_companion/grok_companion_util.h"
 #include "chrome/browser/agent_gateway/tab_screenshot.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface_iterator.h"
@@ -71,8 +73,9 @@ base::FilePath ResolveGrokBinary() {
     }
     if (!home.empty()) {
       std::string companion_json;
-      if (base::ReadFileToString(home.AppendASCII(".aether/companion.json"),
-                                 &companion_json)) {
+      if (base::ReadFileToString(
+              xplorer_paths::Resolve("companion.json"),
+              &companion_json)) {
         if (auto parsed =
                 base::JSONReader::ReadDict(companion_json, base::JSON_PARSE_RFC)) {
           if (const std::string* bin = parsed->FindString("grok_bin");
@@ -103,7 +106,9 @@ base::FilePath ResolveGrokBinary() {
 namespace {
 
 base::FilePath UiDir() {
-  const char* env = getenv("XBROWSER_COMPANION_UI");
+  const char* env = getenv("XPLORER_COMPANION_UI");
+  if (!env || !*env)
+    env = getenv("XBROWSER_COMPANION_UI");
   if (env && *env)
     return base::FilePath(env);
   base::FilePath home;
@@ -111,6 +116,8 @@ base::FilePath UiDir() {
     return base::FilePath();
   static constexpr const char* kCandidates[] = {
       "cli_experiment/aether/companion/ui",
+      ".xplorer/companion/ui",
+      ".xbrowser/companion/ui",
       ".aether/companion/ui",
   };
   for (const char* rel : kCandidates) {
@@ -122,10 +129,7 @@ base::FilePath UiDir() {
 }
 
 base::FilePath SessionsFile() {
-  base::FilePath home;
-  if (!base::PathService::Get(base::DIR_HOME, &home))
-    return base::FilePath();
-  return home.AppendASCII(".aether/companion_sessions.json");
+  return xplorer_paths::Resolve("companion_sessions.json");
 }
 
 std::string PathOnly(const std::string& path) {
@@ -235,10 +239,7 @@ constexpr char kSearchHomeWiki[] = "wiki";
 constexpr char kGrokWikiHomeURL[] = "https://grokipedia.com/";
 
 base::FilePath SettingsFile() {
-  base::FilePath home;
-  if (!base::PathService::Get(base::DIR_HOME, &home))
-    return base::FilePath();
-  return home.AppendASCII(".aether/grok_settings.json");
+  return xplorer_paths::Resolve("grok_settings.json");
 }
 
 base::DictValue LoadSettings() {
@@ -581,7 +582,7 @@ void AppendParsedItems(const base::ListValue* src,
 
 const char* SearchPromptForMode(const std::string& mode, bool has_image) {
   if (mode == "images" && has_image) {
-    return "You are Grok Vision Search for XBrowser. Analyze the attached "
+    return "You are Grok Vision Search for Xplorer. Analyze the attached "
            "image; use web search for similar images. Give a short answer, "
            "then end with ONLY a ```json code block:\n"
            "{\"answer\":\"...\",\"images\":[{\"title\":\"...\",\"url\":"
@@ -591,7 +592,7 @@ const char* SearchPromptForMode(const std::string& mode, bool has_image) {
            "Include up to 20 image results.";
   }
   if (mode == "images") {
-    return "You are Grok Image Search for XBrowser. Use web search for image "
+    return "You are Grok Image Search for Xplorer. Use web search for image "
            "results across multiple sites. Short summary, then ONLY ```json:\n"
            "{\"answer\":\"...\",\"images\":[{\"title\":\"...\",\"url\":"
            "\"https://...\",\"thumbnail\":\"https://...\",\"source\":"
@@ -600,7 +601,7 @@ const char* SearchPromptForMode(const std::string& mode, bool has_image) {
            "Include up to 20 images.";
   }
   if (mode == "videos") {
-    return "You are Grok Video Search for XBrowser. Use web search. Find videos "
+    return "You are Grok Video Search for Xplorer. Use web search. Find videos "
            "on YouTube, Vimeo, and Dailymotion. Brief summary, then ONLY "
            "```json:\n"
            "{\"videos\":[{\"title\":\"...\",\"url\":\"https://...\","
@@ -612,7 +613,7 @@ const char* SearchPromptForMode(const std::string& mode, bool has_image) {
     return "Generate an image for this prompt. Return a brief caption then "
            "any image URLs produced.";
   }
-  return "You are Grok Search for XBrowser. Use web search. Give a concise "
+  return "You are Grok Search for Xplorer. Use web search. Give a concise "
          "formatted answer with citations, then ONLY ```json:\n"
          "{\"links\":[{\"title\":\"...\",\"url\":\"https://...\","
          "\"snippet\":\"...\"}]}\n"
@@ -905,7 +906,7 @@ void PumpGrokStream(net::HttpServer* server,
         base::BindOnce(
             &SendStreamError, server, connection_id,
             "failed to launch grok at " + cmd.GetProgram().MaybeAsASCII() +
-                " — run `grok login` or set GROK_BIN in ~/.aether/companion.json"));
+                " — run `grok login` or set GROK_BIN in ~/.xplorer/companion.json"));
     return;
   }
 
@@ -1266,10 +1267,15 @@ base::DictValue CreatePageChatConversation(const std::string& url,
   return result;
 }
 
+constexpr char kChatRules[] =
+    "You are Grok, the native AI companion built into Xplorer. You can "
+    "control the browser through MCP tools.";
+
 base::CommandLine BuildGrokChatCommand(const std::string& message,
                                        const std::string& session_id,
                                        const std::string& model,
-                                       bool streaming) {
+                                       bool streaming,
+                                       const std::string& rules) {
   base::CommandLine cmd(base::CommandLine::NO_PROGRAM);
   cmd.SetProgram(ResolveGrokBinary());
   cmd.AppendArg("-p");
@@ -1281,10 +1287,10 @@ base::CommandLine BuildGrokChatCommand(const std::string& message,
   cmd.AppendArg(model);
   cmd.AppendArg("--max-turns");
   cmd.AppendArg("25");
-  cmd.AppendArg("--rules");
-  cmd.AppendArg(
-      "You are Grok, the native AI companion built into XBrowser. You can "
-      "control the browser through MCP tools.");
+  if (!rules.empty()) {
+    cmd.AppendArg("--rules");
+    cmd.AppendArg(rules);
+  }
   if (!session_id.empty()) {
     cmd.AppendArg("-r");
     cmd.AppendArg(session_id);
@@ -1298,24 +1304,23 @@ base::CommandLine BuildGrokAgentCommand(const std::string& message,
                                         bool streaming,
                                         const base::FilePath& cwd,
                                         const std::string& rules) {
-  base::CommandLine cmd = BuildGrokChatCommand(message, session_id, model,
-                                             streaming);
+  base::CommandLine cmd =
+      BuildGrokChatCommand(message, session_id, model, streaming, rules);
   if (!cwd.empty()) {
     cmd.AppendArg("--cwd");
     cmd.AppendArgPath(cwd);
-  }
-  if (!rules.empty()) {
-    cmd.AppendArg("--rules");
-    cmd.AppendArg(rules);
   }
   return cmd;
 }
 
 constexpr char kAppBuildRules[] =
-    "You are Grok Build, an app builder inside XBrowser. Work only inside the "
+    "You are Grok Build, an app builder inside Xplorer. Work only inside the "
     "app directory (--cwd). Create and modify files to build working apps. "
-    "Prefer simple HTML/CSS/JS or a small local server. Write a README with "
-    "how to run the app. Be concise in chat; put code in files.";
+    "Prefer simple HTML/CSS/JS static apps with index.html as the entry point. "
+    "Do NOT start web servers or tell the user to run npm/python servers — "
+    "Xplorer auto-hosts each app on its own localhost port. Use relative paths "
+    "for assets (./style.css, ./app.js). Write a short README. Be concise in "
+    "chat; put code in files.";
 
 void RunGrokAgentStream(
     net::HttpServer* server,
@@ -1343,8 +1348,8 @@ base::CommandLine BuildPageSummarizeCommand(const std::string& url,
                                             const std::string& text,
                                             const std::string& model,
                                             bool streaming) {
-  return BuildGrokChatCommand(
-      BuildPageSummarizePrompt(url, title, text), "", model, streaming);
+  return BuildGrokChatCommand(BuildPageSummarizePrompt(url, title, text), "",
+                              model, streaming, kChatRules);
 }
 
 void RunGrokChatStream(
@@ -1361,7 +1366,7 @@ void RunGrokChatStream(
                  base::BindOnce(&PumpGrokStream, server, io_task_runner,
                                 connection_id,
                                 BuildGrokChatCommand(message, session_id, model,
-                                                     true),
+                                                     true, kChatRules),
                                 model, "chat", GrokStreamKind::kChat, conv_id,
                                 ""));
 }
@@ -1397,7 +1402,7 @@ base::DictValue RunGrokChat(const std::string& message,
                             const std::string& session_id,
                             const std::string& model) {
   base::CommandLine cmd =
-      BuildGrokChatCommand(message, session_id, model, false);
+      BuildGrokChatCommand(message, session_id, model, false, kChatRules);
   int exit_code = 0;
   std::string output;
   if (!base::GetAppOutputWithExitCode(cmd, &output, &exit_code) ||
@@ -1494,6 +1499,12 @@ std::string ResolveConfiguredModel(const std::string* model_override) {
   return ResolveModel(model_override);
 }
 
+std::string ResolveAppBuildModel(const std::string* model_override) {
+  if (model_override && !model_override->empty())
+    return *model_override;
+  return kSearchModel;
+}
+
 bool GrokNative::TryHandleRequest(
     int connection_id,
     const net::HttpServerRequestInfo& info,
@@ -1501,6 +1512,9 @@ bool GrokNative::TryHandleRequest(
     int gateway_port,
     scoped_refptr<base::SingleThreadTaskRunner> io_task_runner) {
   const std::string path = PathOnly(info.path);
+
+  if (TryHandleAppRunRequest(connection_id, info, server, gateway_port))
+    return true;
 
   if (TryHandleAppsRequest(connection_id, info, server, gateway_port,
                            io_task_runner)) {
@@ -1516,8 +1530,8 @@ bool GrokNative::TryHandleRequest(
     return true;
   }
 
-  // Static assets before /search page route.
-  if (info.method == "GET" &&
+  // Static assets before /search page route (not app runtime files).
+  if (info.method == "GET" && !base::StartsWith(path, "/run/") &&
       (base::EndsWith(path, ".css") || base::EndsWith(path, ".js"))) {
     return ServeUiFile(server, connection_id, path.substr(path.rfind('/') + 1));
   }
@@ -1530,6 +1544,10 @@ bool GrokNative::TryHandleRequest(
 
   if (info.method == "GET" && (path == "/search" || path == "/search/")) {
     return ServeUiFile(server, connection_id, "search.html");
+  }
+
+  if (info.method == "GET" && (path == "/welcome" || path == "/welcome/")) {
+    return ServeUiFile(server, connection_id, "welcome.html");
   }
 
   if (info.method == "GET" && (path == "/apps" || path == "/apps/")) {
@@ -1619,6 +1637,8 @@ bool GrokNative::TryHandleRequest(
           "http://127.0.0.1:" + base::NumberToString(gateway_port) +
               "/search");
     d.Set("grok_wiki_url", kGrokWikiHomeURL);
+    d.Set("welcome_completed", grok_companion::HasCompletedWelcome());
+    d.Set("product_name", grok_companion::kProductName);
     SendJson(server, connection_id, net::HTTP_OK, std::move(d));
     return true;
   }
@@ -1633,6 +1653,7 @@ bool GrokNative::TryHandleRequest(
     }
     const std::string* model = body->FindString("model");
     const std::string* home = body->FindString("search_home");
+    std::optional<bool> welcome = body->FindBool("welcome_completed");
     bool updated = false;
     if (model && !model->empty()) {
       SetConfiguredModel(*model);
@@ -1649,9 +1670,13 @@ bool GrokNative::TryHandleRequest(
       SetSearchHomeMode(*home);
       updated = true;
     }
+    if (welcome.has_value() && *welcome) {
+      grok_companion::MarkWelcomeCompleted();
+      updated = true;
+    }
     if (!updated) {
       base::DictValue err;
-      err.Set("error", "provide model and/or search_home");
+      err.Set("error", "provide model, search_home, and/or welcome_completed");
       SendJson(server, connection_id, net::HTTP_BAD_REQUEST, std::move(err));
       return true;
     }
@@ -1665,6 +1690,7 @@ bool GrokNative::TryHandleRequest(
           "http://127.0.0.1:" + base::NumberToString(gateway_port) +
               "/search");
     d.Set("grok_wiki_url", kGrokWikiHomeURL);
+    d.Set("welcome_completed", grok_companion::HasCompletedWelcome());
     SendJson(server, connection_id, net::HTTP_OK, std::move(d));
     return true;
   }
@@ -1769,9 +1795,21 @@ bool GrokNative::TryHandleRequest(
       SendJson(server, connection_id, net::HTTP_OK, std::move(result));
       return true;
     }
+    const std::string* query = body ? body->FindString("query") : nullptr;
+    if (query && !query->empty()) {
+      const std::string id = StoreGrokWebPending(*query);
+      LOG(INFO) << "[grok-web] stored search query id=" << id
+                << " chars=" << query->size();
+      base::DictValue result;
+      result.Set("ok", true);
+      result.Set("id", id);
+      result.Set("grok_url", "https://grok.com/#xplorer_grok=" + id);
+      SendJson(server, connection_id, net::HTTP_OK, std::move(result));
+      return true;
+    }
     if (!text || text->empty()) {
       base::DictValue err;
-      err.Set("error", "page text required");
+      err.Set("error", "query or page text required");
       SendJson(server, connection_id, net::HTTP_BAD_REQUEST, std::move(err));
       return true;
     }
@@ -1786,7 +1824,7 @@ bool GrokNative::TryHandleRequest(
     base::DictValue result;
     result.Set("ok", true);
     result.Set("id", id);
-    result.Set("grok_url", "https://grok.com/#xbrowser_grok=" + id);
+    result.Set("grok_url", "https://grok.com/#xplorer_grok=" + id);
     SendJson(server, connection_id, net::HTTP_OK, std::move(result));
     return true;
   }

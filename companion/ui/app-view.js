@@ -2,8 +2,138 @@ const $ = (s) => document.querySelector(s);
 const params = new URLSearchParams(location.search);
 const appId = params.get('id');
 
+const CHAT_OPEN_KEY = 'grok_app_chat_open';
+
 let app = null;
 let busy = false;
+
+function appPreviewUrl() {
+  if (!app) return '';
+  return app.open_url || app.runtime_url ||
+    `/api/apps/${encodeURIComponent(appId)}/preview/index.html`;
+}
+
+function updateOpenTabLink() {
+  const link = $('#open-app-tab');
+  const url = appPreviewUrl();
+  if (!link) return;
+  if (!url) {
+    link.classList.add('disabled');
+    link.href = '#';
+    link.title = 'App not ready yet';
+    return;
+  }
+  link.classList.remove('disabled');
+  link.href = url;
+  const port = app?.runtime_port;
+  link.title = port
+    ? `Open on localhost:${port}`
+    : 'Open app on localhost';
+}
+
+function setChatOpen(open) {
+  const workspace = $('#app-workspace');
+  const toggle = $('#chat-toggle');
+  if (!workspace || !toggle) return;
+  workspace.classList.toggle('chat-collapsed', !open);
+  toggle.textContent = open ? '‹' : '›';
+  toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+  try {
+    localStorage.setItem(CHAT_OPEN_KEY, open ? '1' : '0');
+  } catch { /* ignore */ }
+}
+
+function initChatToggle() {
+  const toggle = $('#chat-toggle');
+  if (!toggle) return;
+  let open = true;
+  try {
+    open = localStorage.getItem(CHAT_OPEN_KEY) !== '0';
+  } catch { /* ignore */ }
+  setChatOpen(open);
+  toggle.onclick = () => {
+    setChatOpen($('#app-workspace').classList.contains('chat-collapsed'));
+  };
+}
+
+function renderMessageContent(el, role, content) {
+  const text = stripAnsi(content || '');
+  if (role === 'assistant' && text) {
+    el.classList.add('markdown');
+    el.innerHTML = renderMarkdown(text);
+  } else {
+    el.classList.remove('markdown');
+    el.textContent = text;
+  }
+}
+
+function dedupeMessages(messages) {
+  const out = [];
+  for (const m of messages || []) {
+    const prev = out[out.length - 1];
+    if (prev && prev.role === m.role && prev.content === m.content) continue;
+    out.push(m);
+  }
+  return out;
+}
+
+function appendUserBubbleIfNew(box, text) {
+  const trimmed = text.trim();
+  const lastUser = [...box.querySelectorAll('.msg.user')].pop();
+  if (lastUser && lastUser.textContent.trim() === trimmed) return;
+  const userDiv = document.createElement('div');
+  userDiv.className = 'msg user';
+  userDiv.textContent = text;
+  box.appendChild(userDiv);
+}
+
+function renderMessages(messages) {
+  const box = $('#chat-messages');
+  box.innerHTML = '';
+  for (const m of dedupeMessages(messages)) {
+    const div = document.createElement('div');
+    div.className = `msg ${m.role}`;
+    renderMessageContent(div, m.role, m.content);
+    box.appendChild(div);
+  }
+  box.scrollTop = box.scrollHeight;
+}
+
+function createStreamBubble(box) {
+  const wrap = document.createElement('div');
+  wrap.className = 'stream-block streaming';
+  wrap.innerHTML = `
+    <details class="thinking-panel" open>
+      <summary>✦ Thinking</summary>
+      <div class="thinking-text">Grok is working…</div>
+    </details>
+    <div class="answer-panel hidden">
+      <div class="answer msg assistant markdown"></div>
+    </div>`;
+  box.appendChild(wrap);
+  box.scrollTop = box.scrollHeight;
+  return {
+    wrap,
+    thinkingPanel: wrap.querySelector('.thinking-panel'),
+    thinkingText: wrap.querySelector('.thinking-text'),
+    answerPanel: wrap.querySelector('.answer-panel'),
+    answerEl: wrap.querySelector('.answer'),
+  };
+}
+
+function scrollChat(box) {
+  box.scrollTop = box.scrollHeight;
+}
+
+async function loadConversation() {
+  const convId = app?.conversation_id;
+  if (!convId) return [];
+  const r = await fetch('/api/conversations');
+  const data = await r.json();
+  const conv = (data.conversations || []).find((c) => c.id === convId);
+  renderMessages(conv?.messages || []);
+  return conv?.messages || [];
+}
 
 async function loadApp() {
   if (!appId) {
@@ -21,6 +151,11 @@ async function loadApp() {
   pathEl.title = app.path || '';
   $('#app-icon').src = `/api/apps/${encodeURIComponent(appId)}/icon`;
   updateStatus(app.status);
+  if (app.runtime_port) {
+    pathEl.textContent = `localhost:${app.runtime_port}`;
+    pathEl.title = app.open_url || app.runtime_url || app.path || '';
+  }
+  updateOpenTabLink();
   $('#copy-cli').onclick = () => {
     const cmd = app.cli_command || `grok --cwd ${app.path || '.'}`;
     navigator.clipboard.writeText(cmd).then(() => {
@@ -30,46 +165,226 @@ async function loadApp() {
   };
   await loadConversation();
   await loadPreview();
+
+  if (params.get('autobuild') === '1') {
+    const raw = sessionStorage.getItem('xplorer_app_build');
+    sessionStorage.removeItem('xplorer_app_build');
+    if (raw) {
+      try {
+        const pending = JSON.parse(raw);
+        if (pending.id === appId && pending.prompt) {
+          history.replaceState(null, '', `/app?id=${encodeURIComponent(appId)}`);
+          await runAgentStream({
+            text: pending.prompt,
+            mode: 'build',
+          });
+          return;
+        }
+      } catch { /* ignore */ }
+    }
+  }
+
+  if (app.status === 'building' && !busy) {
+    pollWhileBuilding();
+  }
 }
 
 function updateStatus(status) {
   const el = $('#app-status');
   el.className = `app-status ${status || 'idle'}`;
-  el.textContent = status === 'building' ? 'Building…' : (status || 'idle');
+  const labels = {
+    building: 'Building…',
+    ready: 'Ready',
+    error: 'Error',
+    idle: 'Idle',
+  };
+  el.textContent = labels[status] || status || 'Idle';
 }
 
-async function loadConversation() {
-  const convId = app.conversation_id;
-  if (!convId) return;
-  const r = await fetch('/api/conversations');
-  const data = await r.json();
-  const conv = (data.conversations || []).find((c) => c.id === convId);
-  const box = $('#chat-messages');
-  box.innerHTML = '';
-  for (const m of conv?.messages || []) {
-    const div = document.createElement('div');
-    div.className = `msg ${m.role}`;
-    div.textContent = m.content;
-    box.appendChild(div);
+async function probeIndexExists() {
+  const probes = [
+    app?.runtime_url && `${app.runtime_url}index.html`,
+    `/run/${encodeURIComponent(appId)}/index.html`,
+    `/api/apps/${encodeURIComponent(appId)}/preview/index.html`,
+  ].filter(Boolean);
+  for (const url of probes) {
+    try {
+      const r = await fetch(url, { cache: 'no-store' });
+      if (r.ok) return true;
+    } catch { /* try next */ }
   }
-  box.scrollTop = box.scrollHeight;
+  return false;
 }
 
 async function loadPreview() {
   const preview = $('#app-preview');
-  const placeholder = $('#preview-placeholder');
-  const previewUrl = `/api/apps/${encodeURIComponent(appId)}/preview/index.html`;
-  const probe = await fetch(previewUrl);
-  if (!probe.ok) {
+  let placeholder = $('#preview-placeholder');
+  updateOpenTabLink();
+  const previewUrl = appPreviewUrl();
+  if (!(await probeIndexExists())) {
+    if (!placeholder) {
+      placeholder = document.createElement('div');
+      placeholder.id = 'preview-placeholder';
+      placeholder.className = 'app-preview-placeholder';
+      preview.appendChild(placeholder);
+    }
     placeholder.textContent =
-      'No index.html yet. Chat with Grok to build the app, or open the folder path in your editor.';
+      'No index.html yet. Grok will build the app here — watch the chat for live progress.';
+    preview.querySelectorAll('iframe').forEach((f) => f.remove());
     return;
   }
-  placeholder.remove();
-  const iframe = document.createElement('iframe');
-  iframe.src = previewUrl;
-  iframe.title = app.name || 'App preview';
-  preview.appendChild(iframe);
+  const iframeUrl = `${previewUrl}${previewUrl.includes('?') ? '&' : '?'}t=${Date.now()}`;
+  if (placeholder) placeholder.remove();
+  if (!preview.querySelector('iframe')) {
+    const iframe = document.createElement('iframe');
+    iframe.src = iframeUrl;
+    iframe.title = app.name || 'App preview';
+    preview.appendChild(iframe);
+  } else {
+    preview.querySelector('iframe').src = iframeUrl;
+  }
+}
+
+async function refreshApp() {
+  const r = await fetch(`/api/apps/${encodeURIComponent(appId)}`);
+  const data = await r.json();
+  if (r.ok && data.app) {
+    app = data.app;
+    updateStatus(app.status);
+    if (app.runtime_port) {
+      const pathEl = $('#app-path');
+      pathEl.textContent = `localhost:${app.runtime_port}`;
+      pathEl.title = app.open_url || app.runtime_url || app.path || '';
+    }
+    updateOpenTabLink();
+  }
+}
+
+async function runAgentStream({ text, mode = 'message' }) {
+  if (busy || !app || !text) return;
+  const endpoint = mode === 'build' ? 'build/stream' : 'message/stream';
+  busy = true;
+  $('#chat-send').disabled = true;
+  updateStatus('building');
+
+  const box = $('#chat-messages');
+  box.querySelector('.building-notice')?.remove();
+  appendUserBubbleIfNew(box, text);
+
+  const ui = createStreamBubble(box);
+  let thinkingText = '';
+  let answerText = '';
+  let sawThought = false;
+  let sawAnswer = false;
+
+  try {
+    const r = await fetch(`/api/apps/${encodeURIComponent(appId)}/${endpoint}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(mode === 'build' ? { prompt: text } : { message: text }),
+    });
+    if (!r.ok || !r.body) {
+      const err = await r.json().catch(() => ({}));
+      throw new Error(err.error || 'stream failed');
+    }
+
+    const reader = r.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      let idx;
+      while ((idx = buffer.indexOf('\n')) >= 0) {
+        const line = buffer.slice(0, idx).trim();
+        buffer = buffer.slice(idx + 1);
+        if (!line) continue;
+        const evt = parseStreamLine(line);
+        if (!evt) continue;
+
+        if (evt.type === 'meta') {
+          /* model metadata — reserved for future label */
+        } else if (evt.type === 'thought') {
+          sawThought = true;
+          thinkingText += evt.data || '';
+          ui.thinkingText.textContent = thinkingText;
+          scrollChat(box);
+        } else if (evt.type === 'text') {
+          if (!sawAnswer) {
+            ui.answerPanel.classList.remove('hidden');
+            if (sawThought) ui.thinkingPanel.removeAttribute('open');
+          }
+          sawAnswer = true;
+          answerText += evt.data || '';
+          ui.answerEl.innerHTML = renderMarkdown(answerText);
+          scrollChat(box);
+        } else if (evt.type === 'result') {
+          if (evt.reply) answerText = stripAnsi(evt.reply);
+          else if (evt.text) answerText = stripAnsi(evt.text);
+          if (answerText) {
+            sawAnswer = true;
+            ui.answerPanel.classList.remove('hidden');
+            ui.answerEl.innerHTML = renderMarkdown(answerText);
+            if (sawThought) ui.thinkingPanel.removeAttribute('open');
+          }
+        } else if (evt.type === 'max_turns_reached') {
+          ui.thinkingText.textContent = (thinkingText || '') +
+            (thinkingText ? '\n\n' : '') + '— Reached max turns (still working in background)';
+        } else if (evt.type === 'error') {
+          throw new Error(evt.error || 'Grok build failed');
+        }
+      }
+    }
+
+    ui.wrap.classList.remove('streaming');
+    ui.thinkingPanel.classList.add('finished');
+    if (sawThought && !sawAnswer) {
+      ui.thinkingPanel.setAttribute('open', '');
+      ui.thinkingPanel.querySelector('summary').textContent = '✦ Thought process';
+    } else if (sawThought) {
+      ui.thinkingPanel.querySelector('summary').textContent = '✦ Thought process';
+    } else if (!sawAnswer) {
+      ui.wrap.remove();
+    }
+
+    await refreshApp();
+    await loadPreview();
+  } catch (err) {
+    ui.wrap.classList.remove('streaming');
+    ui.wrap.classList.add('error');
+    ui.answerPanel.classList.remove('hidden');
+    ui.answerEl.classList.remove('markdown');
+    ui.answerEl.textContent = err.message || String(err);
+    updateStatus('error');
+    await refreshApp();
+  } finally {
+    busy = false;
+    $('#chat-send').disabled = false;
+  }
+}
+
+async function pollWhileBuilding() {
+  const box = $('#chat-messages');
+  let notice = box.querySelector('.building-notice');
+  if (!notice) {
+    notice = document.createElement('div');
+    notice.className = 'msg assistant building-notice';
+    notice.textContent = 'Grok is building… (stream running elsewhere — refreshing chat)';
+    box.appendChild(notice);
+  }
+  while (app?.status === 'building' && !busy) {
+    await new Promise((r) => setTimeout(r, 2000));
+    await loadConversation();
+    await refreshApp();
+    if (app.status !== 'building') {
+      notice.remove();
+      await loadPreview();
+      return;
+    }
+  }
+  notice?.remove();
 }
 
 $('#chat-form').onsubmit = async (e) => {
@@ -78,92 +393,21 @@ $('#chat-form').onsubmit = async (e) => {
   const input = $('#chat-input');
   const text = input.value.trim();
   if (!text) return;
-  busy = true;
-  $('#chat-send').disabled = true;
-  updateStatus('building');
-  const userDiv = document.createElement('div');
-  userDiv.className = 'msg user';
-  userDiv.textContent = text;
-  $('#chat-messages').appendChild(userDiv);
   input.value = '';
-  try {
-    const r = await fetch(`/api/apps/${encodeURIComponent(appId)}/message/stream`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message: text }),
-    });
-    if (!r.ok || !r.body) throw new Error('stream failed');
-    const reader = r.body.getReader();
-    const decoder = new TextDecoder();
-    let buf = '';
-    let assistant = '';
-    let assistantEl = null;
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buf += decoder.decode(value, { stream: true });
-      const lines = buf.split('\n');
-      buf = lines.pop() || '';
-      for (const line of lines) {
-        if (!line.trim() || line[0] !== '{') continue;
-        try {
-          const evt = JSON.parse(line);
-          if (evt.type === 'text' && evt.data) {
-            assistant += evt.data;
-            if (!assistantEl) {
-              assistantEl = document.createElement('div');
-              assistantEl.className = 'msg assistant';
-              $('#chat-messages').appendChild(assistantEl);
-            }
-            assistantEl.textContent = assistant;
-            $('#chat-messages').scrollTop = $('#chat-messages').scrollHeight;
-          } else if (evt.type === 'result' && evt.text) {
-            assistant = evt.text;
-            if (!assistantEl) {
-              assistantEl = document.createElement('div');
-              assistantEl.className = 'msg assistant';
-              $('#chat-messages').appendChild(assistantEl);
-            }
-            assistantEl.textContent = assistant;
-          } else if (evt.type === 'error') {
-            throw new Error(evt.error || 'edit failed');
-          }
-        } catch (parseErr) {
-          if (parseErr.message && parseErr.message !== 'Unexpected end of JSON input')
-            throw parseErr;
-        }
-      }
-    }
-    const refreshed = await fetch(`/api/apps/${encodeURIComponent(appId)}`);
-    const refreshedData = await refreshed.json();
-    if (refreshed.ok) {
-      app = refreshedData.app;
-      updateStatus(app.status);
-    }
-    await loadPreview();
-  } catch (err) {
-    alert(err.message || err);
-    updateStatus('error');
-  } finally {
-    busy = false;
-    $('#chat-send').disabled = false;
-  }
+  await runAgentStream({ text, mode: 'message' });
 };
 
 initSearchHomeToggle($('#home-toggle'));
+initChatToggle();
 startThemeWatcher();
 loadApp().catch((e) => {
   alert(e.message);
   location.href = '/apps';
 });
+
 setInterval(async () => {
   if (!appId || busy) return;
   try {
-    const r = await fetch(`/api/apps/${encodeURIComponent(appId)}`);
-    const data = await r.json();
-    if (r.ok && data.app) {
-      app = data.app;
-      updateStatus(app.status);
-    }
+    await refreshApp();
   } catch { /* ignore */ }
-}, 2000);
+}, 3000);

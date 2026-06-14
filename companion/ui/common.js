@@ -72,7 +72,7 @@ async function saveSettings(partial) {
 }
 
 /** Wire Grok Build / Grok Web / Groki home toggle. */
-async function initSearchHomeToggle(container, { onSwitch } = {}) {
+async function initSearchHomeToggle(container, { onSwitch, pageHome } = {}) {
   if (!container) return;
   const buttons = container.querySelectorAll('[data-home]');
   let settings;
@@ -90,7 +90,7 @@ async function initSearchHomeToggle(container, { onSwitch } = {}) {
       btn.classList.toggle('active', btn.dataset.home === mode);
     });
   };
-  setActive(currentHome);
+  setActive(pageHome || currentHome);
 
   buttons.forEach((btn) => {
     btn.addEventListener('click', async () => {
@@ -162,29 +162,20 @@ function populateModelSelect(select, models, selectedId) {
   }
 }
 
-/** Apply browser theme from AgentGateway GET /theme */
-async function syncBrowserTheme() {
-  let scheme = 'system';
-  try {
-    const res = await fetch('/api/theme');
-    if (res.ok) {
-      const data = await res.json();
-      scheme = data.color_scheme || 'system';
-    }
-  } catch { /* use system */ }
-
-  if (scheme === 'dark') {
-    document.documentElement.setAttribute('data-theme', 'dark');
-  } else if (scheme === 'light') {
-    document.documentElement.setAttribute('data-theme', 'light');
-  } else {
-    document.documentElement.removeAttribute('data-theme');
-  }
+/** Follow macOS / system light-dark via prefers-color-scheme. */
+function applySystemTheme() {
+  const dark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+  document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
 }
 
-function startThemeWatcher(intervalMs = 5000) {
-  syncBrowserTheme();
-  setInterval(syncBrowserTheme, intervalMs);
+function startThemeWatcher() {
+  applySystemTheme();
+  if (window.__grokThemeMqBound) return;
+  window.__grokThemeMqBound = true;
+  const mq = window.matchMedia('(prefers-color-scheme: dark)');
+  const onChange = () => applySystemTheme();
+  if (mq.addEventListener) mq.addEventListener('change', onChange);
+  else if (mq.addListener) mq.addListener(onChange);
 }
 
 function escapeHtml(s) {

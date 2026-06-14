@@ -27,6 +27,7 @@ void ConsumeGrokWebPendingPrompt(const std::string& id);
 base::DictValue LoadCompanionSessions();
 void SaveCompanionSessions(const base::DictValue& data);
 std::string ResolveConfiguredModel(const std::string* model_override);
+std::string ResolveAppBuildModel(const std::string* model_override);
 
 void RunGrokAgentStream(
     net::HttpServer* server,

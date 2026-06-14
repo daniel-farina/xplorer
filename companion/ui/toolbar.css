@@ -2,53 +2,53 @@
 
 :root {
   --toolbar-height: 44px;
-  --toolbar-bg: #f8f9fa;
-  --toolbar-border: #dadce0;
-  --toolbar-text: #202124;
-  --toolbar-muted: #5f6368;
-  --toolbar-elevated: #f1f3f4;
-  --toolbar-accent: #1a73e8;
-  --toolbar-accent-soft: rgba(26, 115, 232, 0.12);
+  --toolbar-bg: #ffffff;
+  --toolbar-border: #d4d4d4;
+  --toolbar-text: #000000;
+  --toolbar-muted: #666666;
+  --toolbar-elevated: #f5f5f5;
+  --toolbar-accent: #000000;
+  --toolbar-accent-soft: rgba(0, 0, 0, 0.08);
   --toolbar-input-bg: #ffffff;
-  --toolbar-shadow: rgba(60, 64, 67, 0.12);
+  --toolbar-shadow: rgba(0, 0, 0, 0.12);
+}
+
+html[data-theme="light"] {
+  --toolbar-bg: #ffffff;
+  --toolbar-border: #d4d4d4;
+  --toolbar-text: #000000;
+  --toolbar-muted: #666666;
+  --toolbar-elevated: #f5f5f5;
+  --toolbar-accent: #000000;
+  --toolbar-accent-soft: rgba(0, 0, 0, 0.08);
+  --toolbar-input-bg: #ffffff;
+  --toolbar-shadow: rgba(0, 0, 0, 0.12);
 }
 
 @media (prefers-color-scheme: dark) {
-  html:not([data-theme="light"]) {
-    --toolbar-bg: #161616;
-    --toolbar-border: #333333;
-    --toolbar-text: #f2f2f2;
-    --toolbar-muted: #aaaaaa;
-    --toolbar-elevated: #222222;
-    --toolbar-accent: #f2f2f2;
-    --toolbar-accent-soft: #2a2a2a;
-    --toolbar-input-bg: #222222;
-    --toolbar-shadow: rgba(0, 0, 0, 0.25);
+  html:not([data-theme]) {
+    --toolbar-bg: #000000;
+    --toolbar-border: #2f2f2f;
+    --toolbar-text: #ffffff;
+    --toolbar-muted: #a3a3a3;
+    --toolbar-elevated: #111111;
+    --toolbar-accent: #ffffff;
+    --toolbar-accent-soft: rgba(255, 255, 255, 0.1);
+    --toolbar-input-bg: #111111;
+    --toolbar-shadow: rgba(0, 0, 0, 0.45);
   }
 }
 
 html[data-theme="dark"] {
-  --toolbar-bg: #161616;
-  --toolbar-border: #333333;
-  --toolbar-text: #f2f2f2;
-  --toolbar-muted: #aaaaaa;
-  --toolbar-elevated: #222222;
-  --toolbar-accent: #f2f2f2;
-  --toolbar-accent-soft: #2a2a2a;
-  --toolbar-input-bg: #222222;
-  --toolbar-shadow: rgba(0, 0, 0, 0.25);
-}
-
-html[data-theme="light"] {
-  --toolbar-bg: #f8f9fa;
-  --toolbar-border: #dadce0;
-  --toolbar-text: #202124;
-  --toolbar-muted: #5f6368;
-  --toolbar-elevated: #f1f3f4;
-  --toolbar-accent: #1a73e8;
-  --toolbar-accent-soft: rgba(26, 115, 232, 0.12);
-  --toolbar-input-bg: #ffffff;
-  --toolbar-shadow: rgba(60, 64, 67, 0.12);
+  --toolbar-bg: #000000;
+  --toolbar-border: #2f2f2f;
+  --toolbar-text: #ffffff;
+  --toolbar-muted: #a3a3a3;
+  --toolbar-elevated: #111111;
+  --toolbar-accent: #ffffff;
+  --toolbar-accent-soft: rgba(255, 255, 255, 0.1);
+  --toolbar-input-bg: #111111;
+  --toolbar-shadow: rgba(0, 0, 0, 0.45);
 }
 
 .grok-toolbar {
@@ -72,7 +72,7 @@ header.grok-toolbar {
   z-index: 100;
 }
 
-#xbrowser-grok-bar.grok-toolbar {
+#xplorer-grok-bar.grok-toolbar {
   position: fixed;
   top: 0;
   left: 0;

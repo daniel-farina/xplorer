@@ -4,6 +4,8 @@
 #ifndef CHROME_BROWSER_GROK_COMPANION_GROK_COMPANION_UTIL_H_
 #define CHROME_BROWSER_GROK_COMPANION_GROK_COMPANION_UTIL_H_
 
+#include "base/files/file_path.h"
+#include "base/strings/string_util.h"
 #include "url/gurl.h"
 
 class BrowserWindowInterface;
@@ -14,19 +16,55 @@ class WebContents;
 
 namespace grok_companion {
 
+inline constexpr char kProductName[] = "Xplorer";
+inline constexpr char kXplorerDataDir[] = ".xplorer";
+
 inline constexpr char kCompanionHost[] = "127.0.0.1";
 // Grok UI is served natively by AgentGateway (default 9334).
 inline constexpr int kCompanionPort = 9334;
 inline constexpr char kCompanionPath[] = "/";
 inline constexpr char kSearchPath[] = "/search";
+inline constexpr char kWelcomePath[] = "/welcome";
 inline constexpr char kGrokWebHomeURL[] = "https://grok.com/";
 inline constexpr char kGrokWikiHomeURL[] = "https://grokipedia.com/";
 inline constexpr char kSearchHomeBuild[] = "build";
 inline constexpr char kSearchHomeWeb[] = "web";
 inline constexpr char kSearchHomeWiki[] = "wiki";
 
+// Sites that receive the injected Grok top toolbar (not the page FAB).
+inline bool IsGrokToolbarOverlayHost(const GURL& url) {
+  if (!url.is_valid() || !url.SchemeIsHTTPOrHTTPS())
+    return false;
+  const std::string_view host = url.host();
+  if (host == "grok.com" || host == "www.grok.com" ||
+      base::EndsWith(host, ".grok.com")) {
+    return true;
+  }
+  if (host == "grokipedia.com" || host == "www.grokipedia.com" ||
+      base::EndsWith(host, ".grokipedia.com")) {
+    return true;
+  }
+  if (host == "x.com" || host == "www.x.com" ||
+      base::EndsWith(host, ".x.com")) {
+    return true;
+  }
+  if (host == "twitter.com" || host == "www.twitter.com" ||
+      base::EndsWith(host, ".twitter.com")) {
+    return true;
+  }
+  return false;
+}
+
+base::FilePath GetXplorerDataDir();
+base::FilePath ResolveDataFile(const char* filename);
+
 GURL GetCompanionURL();
 GURL GetSearchURL();
+GURL GetWelcomeURL();
+GURL GetStartupHomeURL();
+
+bool HasCompletedWelcome();
+void MarkWelcomeCompleted();
 
 // User preference: native Grok Build UI vs grok.com (stored in grok_settings.json).
 std::string GetSearchHomeMode();

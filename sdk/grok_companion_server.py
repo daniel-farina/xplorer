@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""XBrowser Grok Companion — local chat UI + Grok Build backend.
+"""Xplorer Grok Companion — local chat UI + Grok Build backend.
 
 Serves a sidebar-ready chat interface on http://127.0.0.1:9345 and proxies
 messages to `grok` with per-conversation session IDs. Uses OAuth credentials
 already stored in ~/.grok/auth.json (same as Hermes / grok login --oauth).
 
-Writes ~/.aether/companion.json for discovery by the browser side panel.
+Writes ~/.xplorer/companion.json for discovery by the browser side panel.
 """
 from __future__ import annotations
 
@@ -23,13 +23,13 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 PORT = 9345
-AETHER_DIR = pathlib.Path.home() / ".aether"
+AETHER_DIR = pathlib.Path.home() / ".xplorer"
 SESSIONS_FILE = AETHER_DIR / "companion_sessions.json"
 GROK_BIN = os.environ.get("GROK_BIN", shutil.which("grok") or "grok")
 SDK_DIR = pathlib.Path(__file__).resolve().parent
 UI_DIR = SDK_DIR.parent / "companion" / "ui"
 
-SYSTEM_RULES = """You are Grok, the native AI companion built into XBrowser.
+SYSTEM_RULES = """You are Grok, the native AI companion built into Xplorer.
 You can control the browser through MCP tools (aether_* for pages, xbrowser_*
 for bookmarks, history, tabs, groups, splits, and theme). Be proactive: organize
 tabs, manage bookmarks, search history, and help the user browse efficiently.
@@ -77,18 +77,18 @@ def gateway_status() -> dict:
 
 SEARCH_PROMPTS = {
     "web": (
-        "You are Grok Search for XBrowser. Answer the user's web search query "
+        "You are Grok Search for Xplorer. Answer the user's web search query "
         "concisely using current web knowledge. End with a JSON block on its own "
         'line: {"links":[{"title":"...","url":"https://...","snippet":"..."}]} '
         "with up to 5 real relevant links."
     ),
     "images": (
-        "You are Grok Image Search for XBrowser. Describe and list image search "
+        "You are Grok Image Search for Xplorer. Describe and list image search "
         "results for the query. Include image URLs when known. End with JSON: "
         '{"links":[{"title":"...","url":"https://...","snippet":"..."}]}'
     ),
     "videos": (
-        "You are Grok Video Search for XBrowser. Find and summarize video results "
+        "You are Grok Video Search for Xplorer. Find and summarize video results "
         "for the query with titles and URLs. End with JSON: "
         '{"links":[{"title":"...","url":"https://...","snippet":"..."}]}'
     ),
@@ -172,7 +172,7 @@ def grok_chat(message: str, session_id: str | None) -> dict:
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "XBrowserGrokCompanion/0.1"
+    server_version = "XplorerGrokCompanion/0.2"
 
     def log_message(self, fmt, *args):
         sys.stderr.write(f"[companion] {fmt % args}\n")

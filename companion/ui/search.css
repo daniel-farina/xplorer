@@ -12,15 +12,27 @@ html.grok-build body {
 }
 
 .main {
-  max-width: 780px;
+  max-width: 720px;
   margin: 0 auto;
-  padding: 48px 20px 80px;
+  padding: 24px 20px 80px;
+  min-height: calc(100vh - 52px);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.main.has-results {
+  justify-content: flex-start;
+  padding-top: 32px;
 }
 
 .search-box {
   display: flex;
   align-items: center;
   gap: 10px;
+  width: 100%;
+  max-width: 640px;
+  margin: 0 auto;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 28px;
@@ -31,31 +43,6 @@ html.grok-build body {
 .search-box:focus-within {
   border-color: var(--accent);
   box-shadow: 0 1px 6px var(--shadow), 0 0 0 3px var(--accent-soft);
-}
-
-.spark {
-  color: var(--accent);
-  font-size: 18px;
-  flex-shrink: 0;
-}
-
-.search-model-select {
-  border: 1px solid var(--border);
-  border-radius: 14px;
-  background: var(--surface-elevated);
-  color: var(--text);
-  font: inherit;
-  font-size: 13px;
-  line-height: 1.3;
-  padding: 7px 10px;
-  cursor: pointer;
-  max-width: 148px;
-  flex-shrink: 0;
-}
-
-.search-model-select:focus {
-  outline: none;
-  border-color: var(--accent);
 }
 
 .search-box input {
@@ -195,15 +182,40 @@ html.grok-build body {
 
 .hero {
   text-align: center;
-  margin-top: 72px;
+  width: 100%;
   color: var(--text-secondary);
 }
 
-.hero h1 {
+.search-brand {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 32px;
+}
+
+.grok-logo-hero {
+  width: 320px;
+  max-width: min(320px, 80vw);
+  height: auto;
+  color: var(--text);
+}
+
+.search-tagline {
+  margin-top: 36px;
+}
+
+.search-tagline h1 {
   color: var(--text);
   font-size: 26px;
   font-weight: 600;
-  margin-bottom: 8px;
+  margin: 0 0 8px;
+}
+
+.search-tagline p {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.5;
+  max-width: 520px;
+  margin-inline: auto;
 }
 
 .hidden { display: none !important; }

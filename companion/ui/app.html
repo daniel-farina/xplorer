@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>App — Grok Build</title>
   <link rel="stylesheet" href="/theme.css">
+  <script>document.documentElement.setAttribute('data-theme',matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');</script>
   <link rel="stylesheet" href="/toolbar.css">
   <link rel="stylesheet" href="/apps.css">
   <link rel="stylesheet" href="/app.css">
@@ -55,14 +56,16 @@
     <span class="app-path" id="app-path" title=""></span>
     <span class="app-status idle" id="app-status">Idle</span>
     <span class="spacer"></span>
+    <a class="apps-btn" id="open-app-tab" href="#" target="_blank" rel="noopener noreferrer" title="Open app on localhost">Open tab</a>
     <button type="button" class="apps-btn" id="copy-cli" title="Copy grok resume command">Copy CLI</button>
     <a class="apps-btn" id="back-gallery" href="/apps">Gallery</a>
   </div>
-  <div class="app-workspace">
+  <div class="app-workspace" id="app-workspace">
     <section class="app-preview" id="app-preview">
       <div class="app-preview-placeholder" id="preview-placeholder">Loading preview…</div>
     </section>
-    <aside class="app-chat">
+    <button type="button" class="chat-toggle" id="chat-toggle" title="Toggle chat sidebar" aria-expanded="true" aria-controls="app-chat">‹</button>
+    <aside class="app-chat" id="app-chat">
       <div class="app-chat-messages" id="chat-messages"></div>
       <form class="app-chat-form" id="chat-form">
         <textarea id="chat-input" rows="2" placeholder="Ask Grok to edit this app…"></textarea>

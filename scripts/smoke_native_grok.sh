@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Smoke test native Grok companion on AgentGateway (default :9334).
-# Requires XBrowser running. Exit non-zero on failure.
+# Requires Xplorer running. Exit non-zero on failure.
 set -euo pipefail
 
 PORT="${XBROWSER_GATEWAY_PORT:-9334}"
@@ -57,7 +57,10 @@ echo "stream: $(head -1 /tmp/xb_stream.txt | cut -c1-80)..."
 
 # Screenshot API — ensure a normal https tab exists first (NTP/search can fail).
 if [[ "${SKIP_SCREENSHOT:-0}" != "1" ]]; then
-  TOKEN=$(python3 -c "import json; print(json.load(open('/Users/dan/.aether/gateway.json'))['token'])" 2>/dev/null || true)
+  TOKEN=$(python3 -c "import json, pathlib; home=pathlib.Path.home();
+for d in ('.xplorer','.xbrowser','.aether'):
+ p=home/d/'gateway.json'
+ if p.exists(): print(json.load(open(p))['token']); break" 2>/dev/null || true)
   if [[ -n "${TOKEN:-}" ]]; then
     curl -sf -X POST -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
       -d '{"url":"https://example.com"}' "${BASE}/tabs" >/dev/null 2>&1 || true

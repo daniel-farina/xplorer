@@ -4,8 +4,6 @@ const emptyEl = $('#apps-empty');
 const createBtn = $('#create-btn');
 const importBtn = $('#import-btn');
 
-const activeStreams = new Map();
-
 async function fetchApps() {
   const r = await fetch('/api/apps');
   if (!r.ok) throw new Error('failed to load apps');
@@ -38,6 +36,7 @@ function renderApps(data) {
         ${app.status === 'building' ? '<span class="pulse"></span>' : ''}
         ${escapeHtml(statusLabel(app.status))}
       </div>
+      ${app.last_error ? '<p class="app-error">' + escapeHtml(app.last_error) + '</p>' : ''}
       <div class="app-actions">
         <button type="button" class="apps-btn primary" data-open="${escapeHtml(app.id)}">Open</button>
         <button type="button" class="apps-btn" data-modify="${escapeHtml(app.id)}">Modify</button>
@@ -50,11 +49,15 @@ function renderApps(data) {
     };
   });
   grid.querySelectorAll('[data-modify]').forEach((btn) => {
-    btn.onclick = async () => {
+    btn.onclick = () => {
       const prompt = window.prompt('What should Grok change in this app?');
       if (!prompt) return;
-      await startBuildStream(btn.dataset.modify, prompt);
-      refresh();
+      sessionStorage.setItem('xplorer_app_build', JSON.stringify({
+        id: btn.dataset.modify,
+        prompt,
+      }));
+      window.location.href =
+        `/app?id=${encodeURIComponent(btn.dataset.modify)}&autobuild=1`;
     };
   });
 }
@@ -68,39 +71,9 @@ async function refresh() {
   }
 }
 
-async function startBuildStream(appId, prompt) {
-  if (activeStreams.has(appId)) return;
-  activeStreams.set(appId, true);
-  try {
-    const r = await fetch(`/api/apps/${encodeURIComponent(appId)}/build/stream`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prompt }),
-    });
-    if (!r.ok || !r.body) return;
-    const reader = r.body.getReader();
-    const decoder = new TextDecoder();
-    let buf = '';
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buf += decoder.decode(value, { stream: true });
-      const lines = buf.split('\n');
-      buf = lines.pop() || '';
-      for (const line of lines) {
-        if (!line.trim()) continue;
-        try {
-          const evt = JSON.parse(line);
-          if (evt.type === 'error') console.warn('[apps]', evt.error);
-        } catch { /* ignore */ }
-      }
-    }
-  } catch (e) {
-    console.error('[apps] stream', e);
-  } finally {
-    activeStreams.delete(appId);
-    refresh();
-  }
+function openAppBuild(appId, prompt) {
+  sessionStorage.setItem('xplorer_app_build', JSON.stringify({ id: appId, prompt }));
+  window.location.href = `/app?id=${encodeURIComponent(appId)}&autobuild=1`;
 }
 
 createBtn.onclick = async () => {
@@ -118,10 +91,11 @@ createBtn.onclick = async () => {
     if (!r.ok) throw new Error(data.error || r.statusText);
     $('#create-prompt').value = '';
     $('#create-name').value = '';
-    await refresh();
     if (data.app?.id) {
-      startBuildStream(data.app.id, prompt);
+      openAppBuild(data.app.id, prompt);
+      return;
     }
+    await refresh();
   } catch (e) {
     alert(e.message);
   } finally {

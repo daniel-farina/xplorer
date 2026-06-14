@@ -39,15 +39,7 @@ namespace {
 constexpr int kMaxInjectAttempts = 40;
 
 bool IsToolbarOverlayHost(const GURL& url) {
-  if (!url.is_valid() || !url.SchemeIsHTTPOrHTTPS())
-    return false;
-  const std::string_view host = url.host();
-  if (host == "grok.com" || host == "www.grok.com" ||
-      base::EndsWith(host, ".grok.com")) {
-    return true;
-  }
-  return host == "grokipedia.com" || host == "www.grokipedia.com" ||
-         base::EndsWith(host, ".grokipedia.com");
+  return IsGrokToolbarOverlayHost(url);
 }
 
 int GatewayPort() {
@@ -70,7 +62,9 @@ GURL SearchPageURL(const char* search_mode) {
 }
 
 base::FilePath CompanionUiDir() {
-  const char* env = getenv("XBROWSER_COMPANION_UI");
+  const char* env = getenv("XPLORER_COMPANION_UI");
+  if (!env || !*env)
+    env = getenv("XBROWSER_COMPANION_UI");
   if (env && *env)
     return base::FilePath(env);
   base::FilePath home;
@@ -78,6 +72,8 @@ base::FilePath CompanionUiDir() {
     return base::FilePath();
   static constexpr const char* kCandidates[] = {
       "cli_experiment/aether/companion/ui",
+      ".xplorer/companion/ui",
+      ".xbrowser/companion/ui",
       ".aether/companion/ui",
   };
   for (const char* rel : kCandidates) {
@@ -89,7 +85,7 @@ base::FilePath CompanionUiDir() {
 }
 
 constexpr char kToolbarCssFallback[] =
-    "#xbrowser-grok-bar.grok-toolbar{position:fixed;top:0;left:0;right:0;"
+    "#xplorer-grok-bar.grok-toolbar{position:fixed;top:0;left:0;right:0;"
     "z-index:2147483647;display:flex;align-items:center;gap:12px;flex-wrap:"
     "nowrap;min-height:44px;box-sizing:border-box;padding:10px 16px;"
     "font:13px/1.4 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-"
@@ -164,14 +160,9 @@ std::string BuildInjectScript(const std::string& active_mode) {
       base::StringPrintf("http://%s:%d/", kCompanionHost, GatewayPort());
   const std::string apps_href =
       base::StringPrintf("http://%s:%d/apps", kCompanionHost, GatewayPort());
-  const std::string build_active =
-      active_mode == kSearchHomeBuild ? " active" : "";
-  const std::string web_active = active_mode == kSearchHomeWeb ? " active" : "";
-  const std::string wiki_active =
-      active_mode == kSearchHomeWiki ? " active" : "";
-
   const std::string toolbar_css = LoadToolbarCss();
   const std::string css_json = JsonStringLiteral(toolbar_css);
+  const std::string fallback_pill_json = JsonStringLiteral(active_mode);
 
   const std::string html = base::StringPrintf(
       R"(<a class="grok-logo" href="%s">&#10022; Grok</a>)"
@@ -179,24 +170,23 @@ std::string BuildInjectScript(const std::string& active_mode) {
       R"(<div class="grok-toolbar-actions">)"
       R"(<div class="grok-nav-pills">)"
       R"(<div class="grok-pill-wrap">)"
-      R"(<a class="grok-pill" href="https://x.com/i/chat" target="_blank" rel="noopener noreferrer">X Chat</a>)"
-      R"(<div class="grok-pill-menu"><a href="https://x.com/i/chat" target="_blank" rel="noopener noreferrer">Open X Chat</a></div></div>)"
+      R"(<a class="grok-pill" data-pill="xchat" href="https://x.com/i/chat" rel="noopener noreferrer">X Chat</a>)"
+      R"(<div class="grok-pill-menu"><a href="https://x.com/i/chat" rel="noopener noreferrer">Open X Chat</a></div></div>)"
       R"(<div class="grok-pill-wrap">)"
-      R"(<a class="grok-pill%s" href="%s">Grok Build</a>)"
+      R"(<a class="grok-pill" data-pill="build" href="%s">Grok Build</a>)"
       R"(<div class="grok-pill-menu"><a href="%s">Conversations</a><a href="%s">Apps</a></div></div>)"
       R"(<div class="grok-pill-wrap">)"
-      R"(<a class="grok-pill%s" href="%s">Grok Web</a>)"
+      R"(<a class="grok-pill" data-pill="web" href="%s">Grok Web</a>)"
       R"(<div class="grok-pill-menu"><a href="https://grok.com/imagine" target="_blank" rel="noopener noreferrer">Imagine</a></div></div>)"
       R"(<div class="grok-pill-wrap">)"
-      R"(<a class="grok-pill%s" href="%s">Wiki</a>)"
+      R"(<a class="grok-pill" data-pill="wiki" href="%s">Wiki</a>)"
       R"(<div class="grok-pill-menu"><a href="https://grokipedia.com/" target="_blank" rel="noopener noreferrer">Grokipedia</a></div></div>)"
       R"(<div class="grok-pill-wrap">)"
-      R"(<a class="grok-pill" href="https://x.com/" target="_blank" rel="noopener noreferrer">x.com</a>)"
-      R"(<div class="grok-pill-menu"><a href="https://x.com/" target="_blank" rel="noopener noreferrer">Home</a></div></div>)"
+      R"(<a class="grok-pill" data-pill="xcom" href="https://x.com/" rel="noopener noreferrer">x.com</a>)"
+      R"(<div class="grok-pill-menu"><a href="https://x.com/" rel="noopener noreferrer">Home</a></div></div>)"
       R"(</div></div>)",
-      search_href.c_str(), build_active.c_str(), build_href.c_str(),
-      chat_href.c_str(), apps_href.c_str(), web_active.c_str(), web_href.c_str(),
-      wiki_active.c_str(), wiki_href.c_str());
+      search_href.c_str(), build_href.c_str(), chat_href.c_str(),
+      apps_href.c_str(), web_href.c_str(), wiki_href.c_str());
   const std::string html_json = JsonStringLiteral(html);
 
   const std::string theme = BrowserThemeAttribute();
@@ -212,9 +202,48 @@ std::string BuildInjectScript(const std::string& active_mode) {
   return base::StringPrintf(
       R"((function(){
   if(!document.documentElement)return;
-  var BAR_ID='xbrowser-grok-bar',STYLE_ID='xbrowser-grok-toolbar-style';
-  var CSS=%s,HTML=%s;
+  var BAR_ID='xplorer-grok-bar',STYLE_ID='xplorer-grok-toolbar-style';
+  var CSS=%s,HTML=%s,FALLBACK_PILL=%s;
   %s
+  function isXHost(host){
+    return host==='x.com'||host.endsWith('.x.com')||
+      host==='twitter.com'||host.endsWith('.twitter.com');
+  }
+  function activePillId(){
+    var host=(location.hostname||'').toLowerCase();
+    var path=(location.pathname||'').toLowerCase();
+    if(host.indexOf('grok.com')>=0)return 'web';
+    if(host.indexOf('grokipedia.com')>=0)return 'wiki';
+    if(isXHost(host)){
+      if(path==='/i/chat'||path.indexOf('/i/chat/')===0)return 'xchat';
+      return 'xcom';
+    }
+    if(host==='127.0.0.1'||host==='localhost'){
+      if(path.indexOf('/search')===0)return 'web';
+      if(path.indexOf('/apps')===0||path==='/'||path.indexOf('/app')===0)return 'build';
+    }
+    return FALLBACK_PILL||'';
+  }
+  function applyActivePill(){
+    var bar=document.getElementById(BAR_ID);
+    if(!bar)return;
+    var id=activePillId();
+    bar.querySelectorAll('.grok-pill[data-pill]').forEach(function(p){
+      p.classList.toggle('active',!!id&&p.getAttribute('data-pill')===id);
+    });
+  }
+  function hookHistory(){
+    if(window.__xplorerGrokHistoryHooked)return;
+    window.__xplorerGrokHistoryHooked=true;
+    var push=history.pushState,replacement=history.replaceState;
+    if(push)history.pushState=function(){
+      var r=push.apply(this,arguments);applyActivePill();return r;
+    };
+    if(replacement)history.replaceState=function(){
+      var r=replacement.apply(this,arguments);applyActivePill();return r;
+    };
+    window.addEventListener('popstate',applyActivePill);
+  }
   function ensureStyle(){
     if(document.getElementById(STYLE_ID))return;
     var style=document.createElement('style');
@@ -245,6 +274,7 @@ std::string BuildInjectScript(const std::string& active_mode) {
     bar.innerHTML=HTML;
     mountBar(bar);
     applyPadding(bar);
+    applyActivePill();
   }
   function barNeedsMount(){
     var bar=document.getElementById(BAR_ID);
@@ -252,18 +282,22 @@ std::string BuildInjectScript(const std::string& active_mode) {
       document.documentElement.firstChild!==bar;
   }
   ensureBar();
-  if(!window.__xbrowserGrokBarWatch){
-    window.__xbrowserGrokBarWatch=true;
+  hookHistory();
+  if(!window.__xplorerGrokBarWatch){
+    window.__xplorerGrokBarWatch=true;
+    var lastHref=location.href;
     new MutationObserver(function(){
       if(barNeedsMount()) ensureBar();
+      else if(location.href!==lastHref){lastHref=location.href;applyActivePill();}
     }).observe(document.documentElement,{childList:true,subtree:true});
     setInterval(function(){
       if(barNeedsMount()) ensureBar();
-    },1500);
+      else if(location.href!==lastHref){lastHref=location.href;applyActivePill();}
+    },500);
   }
 })();)",
-      css_json.c_str(), html_json.c_str(), theme_boot.c_str(),
-      theme_call.c_str());
+      css_json.c_str(), html_json.c_str(), fallback_pill_json.c_str(),
+      theme_boot.c_str(), theme_call.c_str());
 }
 
 class GrokWebBarInjector : public content::WebContentsObserver,

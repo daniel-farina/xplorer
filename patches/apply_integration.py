@@ -92,14 +92,17 @@ def main(src: Path):
         "  }\n",
     )
 
-    # 4. Branding: rename the product from "Chromium" to "XBrowser".
+    # 4. Branding: rename the product from "Chromium" to "Xplorer".
     branding = src / "chrome/app/theme/chromium/BRANDING"
     b = branding.read_text()
-    if "PRODUCT_FULLNAME=XBrowser" not in b:
-        b = b.replace("PRODUCT_FULLNAME=Chromium", "PRODUCT_FULLNAME=XBrowser")
-        b = b.replace("PRODUCT_SHORTNAME=Chromium", "PRODUCT_SHORTNAME=XBrowser")
+    if "PRODUCT_FULLNAME=Xplorer" not in b:
+        for old in ("Chromium", "XBrowser"):
+            b = b.replace(f"PRODUCT_FULLNAME={old}", "PRODUCT_FULLNAME=Xplorer")
+            b = b.replace(f"PRODUCT_SHORTNAME={old}", "PRODUCT_SHORTNAME=Xplorer")
         b = b.replace("MAC_BUNDLE_ID=org.chromium.Chromium",
-                      "MAC_BUNDLE_ID=org.xbrowser.XBrowser")
+                      "MAC_BUNDLE_ID=org.xplorer.Xplorer")
+        b = b.replace("MAC_BUNDLE_ID=org.xbrowser.XBrowser",
+                      "MAC_BUNDLE_ID=org.xplorer.Xplorer")
         branding.write_text(b)
         print(f"  edited: {branding}")
 
@@ -107,19 +110,20 @@ def main(src: Path):
     # in the (non-Google, non-CfT) else branch of chromium_strings.grd.
     grd = src / "chrome/app/chromium_strings.grd"
     g = grd.read_text()
-    if ">\n            XBrowser\n" not in g:
-        g = g.replace(
-            'desc="The Chrome application name" translateable="false">\n'
-            "            Chromium\n",
-            'desc="The Chrome application name" translateable="false">\n'
-            "            XBrowser\n",
-        )
-        g = g.replace(
-            'desc="The Chrome application short name." translateable="false">\n'
-            "            Chromium\n",
-            'desc="The Chrome application short name." translateable="false">\n'
-            "            XBrowser\n",
-        )
+    if ">\n            Xplorer\n" not in g:
+        for old in ("Chromium", "XBrowser"):
+            g = g.replace(
+                'desc="The Chrome application name" translateable="false">\n'
+                f"            {old}\n",
+                'desc="The Chrome application name" translateable="false">\n'
+                "            Xplorer\n",
+            )
+            g = g.replace(
+                'desc="The Chrome application short name." translateable="false">\n'
+                f"            {old}\n",
+                'desc="The Chrome application short name." translateable="false">\n'
+                "            Xplorer\n",
+            )
         grd.write_text(g)
         print(f"  edited: {grd}")
 
@@ -211,7 +215,7 @@ def main(src: Path):
         'bool AiModePageActionController::ShouldShowPageAction(\n'
         '    Profile* profile,\n'
         '    LocationBarView& location_bar_view) {\n'
-        '  // AETHER: always show Grok entrypoint in XBrowser.\n'
+        '  // AETHER: always show Grok entrypoint in Xplorer.\n'
         '  if (profile && profile->IsRegularProfile()) {\n'
         '    return true;\n'
         '  }',
@@ -272,8 +276,8 @@ def main(src: Path):
         '    if (profile->IsOffTheRecord()) {\n'
         '      return NewTabURLDetails(GURL(), NEW_TAB_URL_INCOGNITO);\n'
         '    }\n\n'
-        '    // AETHER: XBrowser uses Grok search as the default new tab page.\n'
-        '    return NewTabURLDetails(grok_companion::GetDefaultSearchHomeURL(),\n'
+        '    // AETHER: Xplorer uses Grok search as the default new tab page.\n'
+        '    return NewTabURLDetails(grok_companion::GetStartupHomeURL(),\n'
         '                            NEW_TAB_URL_VALID);',
     )
     edit(
@@ -304,7 +308,7 @@ def main(src: Path):
         '    return app_browser_controller->GetAppNewTabUrl();\n'
         '  }\n'
         '  // AETHER: open Grok home directly so page injectors can attach.\n'
-        '  return grok_companion::GetDefaultSearchHomeURL();\n}',
+        '  return grok_companion::GetStartupHomeURL();\n}',
     )
 
     tab_restore_client = (
@@ -320,7 +324,7 @@ def main(src: Path):
         '  return chrome::ChromeUINewTabURLAsGURL();\n}',
         'GURL ChromeTabRestoreServiceClient::GetNewTabURL() {\n'
         '  // AETHER: match Browser::GetNewTabURL().\n'
-        '  return grok_companion::GetDefaultSearchHomeURL();\n}',
+        '  return grok_companion::GetStartupHomeURL();\n}',
     )
 
     # Enable AI Mode omnibox entrypoint feature flag.

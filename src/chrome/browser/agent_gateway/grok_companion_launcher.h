@@ -6,7 +6,7 @@
 
 namespace agent_gateway {
 
-// Writes ~/.aether/companion.json pointing at the native in-browser Grok UI
+// Writes ~/.xplorer/companion.json pointing at the native in-browser Grok UI
 // served by AgentGateway (same port as /tabs, /bookmarks, etc.).
 void WriteCompanionDiscovery(int gateway_port);
 

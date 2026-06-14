@@ -16,6 +16,7 @@
 #include "base/path_service.h"
 #include "base/strings/string_number_conversions.h"
 #include "chrome/browser/agent_gateway/agent_gateway.h"
+#include "chrome/browser/agent_gateway/xplorer_paths.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_features.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
@@ -38,21 +39,23 @@
 namespace grok_companion {
 namespace {
 
+constexpr char kGrokSettingsFile[] = "grok_settings.json";
+constexpr char kGatewayFile[] = "gateway.json";
+
 int GatewayPort() {
   if (auto* gw = agent_gateway::AgentGateway::GetInstance())
     return gw->port();
-  base::FilePath home;
-  if (base::PathService::Get(base::DIR_HOME, &home)) {
+  base::FilePath gateway = xplorer_paths::Resolve(kGatewayFile);
+  if (!gateway.empty()) {
     std::string json;
-    if (base::ReadFileToString(home.AppendASCII(".aether/gateway.json"),
-                               &json)) {
+    if (base::ReadFileToString(gateway, &json)) {
       if (auto parsed = base::JSONReader::ReadDict(json, base::JSON_PARSE_RFC)) {
         if (std::optional<int> port = parsed->FindInt("port"))
           return *port;
       }
     }
   }
-  return 9334;
+  return kCompanionPort;
 }
 
 GURL MakeURL(const char* path) {
@@ -61,10 +64,7 @@ GURL MakeURL(const char* path) {
 }
 
 base::FilePath GrokSettingsFile() {
-  base::FilePath home;
-  if (!base::PathService::Get(base::DIR_HOME, &home))
-    return base::FilePath();
-  return home.AppendASCII(".aether/grok_settings.json");
+  return xplorer_paths::Resolve(kGrokSettingsFile);
 }
 
 base::DictValue LoadGrokSettings() {
@@ -108,12 +108,41 @@ std::unique_ptr<views::View> CreateGrokCompanionView(
 
 }  // namespace
 
+base::FilePath GetXplorerDataDir() {
+  return xplorer_paths::DataDir();
+}
+
+base::FilePath ResolveDataFile(const char* filename) {
+  return xplorer_paths::Resolve(filename);
+}
+
 GURL GetCompanionURL() {
   return MakeURL(kCompanionPath);
 }
 
 GURL GetSearchURL() {
   return MakeURL(kSearchPath);
+}
+
+GURL GetWelcomeURL() {
+  return MakeURL(kWelcomePath);
+}
+
+bool HasCompletedWelcome() {
+  base::DictValue settings = LoadGrokSettings();
+  return settings.FindBool("welcome_completed").value_or(false);
+}
+
+void MarkWelcomeCompleted() {
+  base::DictValue settings = LoadGrokSettings();
+  settings.Set("welcome_completed", true);
+  SaveGrokSettings(settings);
+}
+
+GURL GetStartupHomeURL() {
+  if (!HasCompletedWelcome())
+    return GetWelcomeURL();
+  return GetDefaultSearchHomeURL();
 }
 
 std::string GetSearchHomeMode() {
@@ -164,7 +193,7 @@ void RedirectLegacyNewTabIfNeeded(content::WebContents* contents) {
     url = contents->GetVisibleURL();
   if (!IsLegacyChromeNewTab(url))
     return;
-  content::NavigationController::LoadURLParams params(GetDefaultSearchHomeURL());
+  content::NavigationController::LoadURLParams params(GetStartupHomeURL());
   params.transition_type = ui::PAGE_TRANSITION_AUTO_BOOKMARK;
   contents->GetController().LoadURLWithParams(params);
 }

@@ -11,6 +11,14 @@
 namespace agent_gateway {
 
 // Grok Build app gallery: registry, folders, per-app conversations, agents.
+
+// Serves built apps at /run/{appId}/ and starts per-app localhost static servers.
+bool TryHandleAppRunRequest(
+    int connection_id,
+    const net::HttpServerRequestInfo& info,
+    net::HttpServer* server,
+    int gateway_port);
+
 bool TryHandleAppsRequest(
     int connection_id,
     const net::HttpServerRequestInfo& info,

@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en" class="grok-build">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Welcome — Xplorer</title>
+  <link rel="stylesheet" href="/theme.css">
+  <script>document.documentElement.setAttribute('data-theme',matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');</script>
+  <link rel="stylesheet" href="/welcome.css">
+</head>
+<body>
+  <main class="welcome">
+    <header class="welcome-hero">
+      <div class="welcome-brand">
+        <span class="welcome-mark" aria-hidden="true">✦</span>
+        <h1>Xplorer</h1>
+      </div>
+      <p class="welcome-lead">
+        Internet Explorer energy, X product soul — the browser built around Grok.
+        Search, chat, build apps, and browse the web with an AI companion that
+        lives inside every page.
+      </p>
+    </header>
+
+    <section class="welcome-grid" aria-label="What Xplorer can do">
+      <article class="welcome-card">
+        <h2>Grok-native search</h2>
+        <p>
+          Start every session from a Grok-powered search home. Ask questions,
+          get web results, images, and videos — then open answers on grok.com
+          with full context carried over.
+        </p>
+      </article>
+      <article class="welcome-card">
+        <h2>AI on every site</h2>
+        <p>
+          A Grok toolbar on grok.com, x.com, and Grokipedia keeps Chat, Build,
+          Web, and Wiki one click away. The Grok It button on any page sends
+          what you are reading straight into Grok Web.
+        </p>
+      </article>
+      <article class="welcome-card">
+        <h2>Build mini-apps</h2>
+        <p>
+          Describe an app in plain language and Xplorer hosts it on localhost
+          with its own runtime. Iterate in chat, open in a tab, and keep
+          building without leaving the browser.
+        </p>
+      </article>
+      <article class="welcome-card">
+        <h2>Agent-ready by default</h2>
+        <p>
+          Remote debugging and an agent gateway run out of the box so coding
+          agents can drive tabs, capture screenshots, and automate workflows —
+          no flags or extensions required.
+        </p>
+      </article>
+    </section>
+
+    <section class="welcome-compare" aria-label="How Xplorer is different">
+      <h2>Why not just use Chrome?</h2>
+      <ul>
+        <li><strong>AI-first home</strong> — new tabs open Grok search, not a blank page or ad feed.</li>
+        <li><strong>Native Grok UI</strong> — chat and apps are served inside the browser, not a slow extension popup.</li>
+        <li><strong>X + Grok together</strong> — jump between x.com, X Chat, grok.com, and Grokipedia from one toolbar.</li>
+        <li><strong>Built for agents</strong> — CDP on 9333 and a local gateway on 9334; discovery at <code>~/.xplorer/gateway.json</code>.</li>
+      </ul>
+    </section>
+
+    <footer class="welcome-actions">
+      <button type="button" id="get-started" class="welcome-cta">Get started</button>
+      <p class="welcome-note">Your settings and apps are stored in <code>~/.xplorer</code></p>
+    </footer>
+  </main>
+  <script src="/common.js"></script>
+  <script src="/welcome.js"></script>
+</body>
+</html>

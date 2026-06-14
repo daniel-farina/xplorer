@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""XBrowser MCP — page control (aether_*) plus browser-level tools for Grok.
+"""Xplorer MCP — page control (aether_*) plus browser-level tools for Grok.
 
 Registers with Grok Build as the native browser companion MCP server.
-Stdlib only. Auto-discovers ~/.aether/gateway.json.
+Stdlib only. Auto-discovers ~/.xplorer/gateway.json.
 """
 import importlib.util
 import json
