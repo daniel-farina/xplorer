@@ -159,10 +159,17 @@ std::string BuildFabInjectScript() {
     if(!port||port===parseInt(String(new URL(GW).port||'9334'),10))return null;
     return {port:port};
   }
+  function resolveAppFromContext(ctx,apps){
+    if(!ctx||!apps)return null;
+    if(ctx.id)return apps.find(function(a){return a.id===ctx.id;})||null;
+    if(ctx.port)return apps.find(function(a){return a.runtime_port===ctx.port;})||null;
+    return null;
+  }
   function buildMenu(menu){
     clearNode(menu);
     var appCtx=detectAppContext();
     if(appCtx){
+      appendMenuItem(menu,'openappbuilder','\u2699','Open in builder');
       appendMenuItem(menu,'exportapp','\u2b07','Export app');
     }
     appendMenuItem(menu,'analyze','\u2726','Analyze with Grok');
@@ -279,8 +286,8 @@ std::string BuildFabInjectScript() {
     }else if(fab.parentNode!==wrap){
       wrap.appendChild(fab);
     }
-    if(menu.dataset.version!=='8'){
-      menu.dataset.version='8';
+    if(menu.dataset.version!=='9'){
+      menu.dataset.version='9';
       buildMenu(menu);
       fab.dataset.wired='';
     }
@@ -289,8 +296,8 @@ std::string BuildFabInjectScript() {
     buildFabButton(fab);
     var oldPanel=document.getElementById('xplorer-grok-panel');
     if(oldPanel)oldPanel.remove();
-    if(fab.dataset.wired==='8')return;
-    fab.dataset.wired='8';
+    if(fab.dataset.wired==='9')return;
+    fab.dataset.wired='9';
     function setBusy(on){
       state.busy=on;
       fab.disabled=on;
@@ -311,6 +318,23 @@ std::string BuildFabInjectScript() {
         return;
       }
       state.pageData=extractPage();
+      if(action==='openappbuilder'){
+        var ctx=detectAppContext();
+        if(!ctx){
+          alert('Not viewing an Xplorer app.');
+          return;
+        }
+        setBusy(true);
+        fetch(GW+'/api/apps').then(function(r){return r.json();}).then(function(d){
+          if(d.error)throw new Error(d.error);
+          var app=resolveAppFromContext(ctx,d.apps||[]);
+          if(!app)throw new Error('App not found');
+          window.open(GW+'/app?id='+encodeURIComponent(app.id),'_blank');
+        }).catch(function(e){
+          alert('Open builder failed: '+(e.message||e));
+        }).finally(function(){setBusy(false);});
+        return;
+      }
       if(action==='exportapp'){
         var ctx=detectAppContext();
         if(!ctx){
@@ -320,10 +344,7 @@ std::string BuildFabInjectScript() {
         setBusy(true);
         fetch(GW+'/api/apps').then(function(r){return r.json();}).then(function(d){
           if(d.error)throw new Error(d.error);
-          var apps=(d.apps||[]);
-          var app=null;
-          if(ctx.id)app=apps.find(function(a){return a.id===ctx.id;});
-          else if(ctx.port)app=apps.find(function(a){return a.runtime_port===ctx.port;});
+          var app=resolveAppFromContext(ctx,d.apps||[]);
           if(!app||!app.exportable)throw new Error('App not exportable');
           return fetch(GW+'/api/apps/'+encodeURIComponent(app.id)+'/export').then(function(r){
             if(!r.ok)return r.json().then(function(e){throw new Error(e.error||'export failed');});

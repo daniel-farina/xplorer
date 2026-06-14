@@ -7,6 +7,7 @@ const MODEL_STORAGE_KEY = 'grok_model';
 const SEARCH_MODEL_STORAGE_KEY = 'grok_search_model';
 const SEARCH_HOME_STORAGE_KEY = 'grok_search_home';
 const SEARCH_QUERY_STORAGE_KEY = 'xplorer_search_query';
+const SEARCH_MODE_STORAGE_KEY = 'xplorer_search_mode';
 const SEARCH_HOME_BUILD = 'build';
 const SEARCH_HOME_WEB = 'web';
 const SEARCH_HOME_WIKI = 'wiki';
@@ -66,6 +67,23 @@ function persistSearchQuery(query) {
     const q = String(query || '').trim();
     if (q) localStorage.setItem(SEARCH_QUERY_STORAGE_KEY, q);
     else localStorage.removeItem(SEARCH_QUERY_STORAGE_KEY);
+  } catch { /* ignore */ }
+}
+
+function getStoredSearchMode() {
+  try {
+    const m = localStorage.getItem(SEARCH_MODE_STORAGE_KEY) || 'web';
+    return ['web', 'images', 'videos', 'imagine'].includes(m) ? m : 'web';
+  } catch {
+    return 'web';
+  }
+}
+
+function persistSearchMode(mode) {
+  try {
+    if (['web', 'images', 'videos', 'imagine'].includes(mode)) {
+      localStorage.setItem(SEARCH_MODE_STORAGE_KEY, mode);
+    }
   } catch { /* ignore */ }
 }
 
@@ -151,9 +169,9 @@ async function initSearchHomeToggle(container, { onSwitch, pageHome } = {}) {
           const params = new URLSearchParams(window.location.search);
           let url = `${window.location.origin}/switch-home?mode=${encodeURIComponent(saved)}`;
           const q = params.get('q') || getStoredSearchQuery();
-          const m = params.get('mode');
+          const m = params.get('mode') || getStoredSearchMode();
           if (q) url += `&q=${encodeURIComponent(q)}`;
-          if (m) url += `&m=${encodeURIComponent(m)}`;
+          if (m && m !== 'web') url += `&m=${encodeURIComponent(m)}`;
           window.location.href = url;
         }
       } catch (e) {
@@ -379,11 +397,18 @@ function extractResultsFromText(text, mode) {
 }
 
 /** Minimal syntax colors for fenced code (no external deps). */
-function highlightCodeLight(code) {
+function highlightCodeLight(code, lang) {
   let s = escapeHtml(code);
-  const keywords = /\b(const|let|var|function|return|if|else|for|while|class|import|export|from|async|await|new|try|catch|throw|typeof|interface|type|enum)\b/g;
-  s = s.replace(keywords, '<span class="hl-kw">$1</span>');
-  s = s.replace(/(\/\/[^\n]*)/g, '<span class="hl-cmt">$1</span>');
+  const langKw = {
+    python: /\b(def|class|import|from|return|if|elif|else|for|while|with|as|try|except|raise|pass|lambda|yield|True|False|None)\b/g,
+    rust: /\b(fn|let|mut|const|struct|enum|impl|trait|pub|use|mod|return|if|else|match|for|while|loop|async|await|true|false|Some|None|Ok|Err)\b/g,
+    go: /\b(func|package|import|return|if|else|for|range|switch|case|default|var|const|type|struct|interface|map|chan|go|defer|true|false|nil)\b/g,
+    bash: /\b(if|then|else|elif|fi|for|do|done|case|esac|function|return|export|local)\b/g,
+  };
+  const baseKw = /\b(const|let|var|function|return|if|else|for|while|class|import|export|from|async|await|new|try|catch|throw|typeof|interface|type|enum|def|self|print)\b/g;
+  const kw = langKw[lang] || baseKw;
+  s = s.replace(kw, '<span class="hl-kw">$1</span>');
+  s = s.replace(/(#.*$|\/\/[^\n]*)/gm, '<span class="hl-cmt">$1</span>');
   s = s.replace(/('(?:\\.|[^'\\])*'|"(?:\\.|[^"\\])*"|`(?:\\.|[^`\\])*`)/g, '<span class="hl-str">$1</span>');
   s = s.replace(/\b(\d+(?:\.\d+)?)\b/g, '<span class="hl-num">$1</span>');
   return s;
@@ -403,8 +428,8 @@ function renderMarkdown(raw) {
     const block = codeBlocks[Number(n)];
     if (!block) return '';
     const lang = block.lang ? ` language-${escapeHtml(block.lang)}` : '';
-    const body = highlightCodeLight(block.code.trim());
-    return `<pre class="code-block"><button type="button" class="code-copy-btn" title="Copy code">Copy</button><code class="${lang.trim()}">${body}</code></pre>`;
+    const body = highlightCodeLight(block.code.trim(), block.lang);
+    return `<pre class="code-block"><button type="button" class="code-copy-btn" title="Copy code (⌘⇧C)">Copy</button><code class="${lang.trim()}">${body}</code></pre>`;
   });
 
   s = s.replace(
@@ -449,6 +474,46 @@ function renderMarkdown(raw) {
   return s;
 }
 
+function copyCodeBlockText(pre) {
+  const text = pre?.querySelector('code')?.textContent || '';
+  if (!text) return Promise.reject(new Error('no code'));
+  return navigator.clipboard.writeText(text);
+}
+
+/** Cmd+Shift+C copies the hovered or focused code block. */
+function initCodeCopyHotkey() {
+  if (window.__xplorerCodeCopyHotkey) return;
+  window.__xplorerCodeCopyHotkey = true;
+  let hoveredPre = null;
+  document.addEventListener('mouseover', (e) => {
+    const pre = e.target.closest?.('pre.code-block');
+    hoveredPre = pre || null;
+  });
+  document.addEventListener('keydown', (e) => {
+    if (!(e.metaKey || e.ctrlKey) || !e.shiftKey || e.key.toLowerCase() !== 'c') return;
+    const active = document.activeElement?.closest?.('pre.code-block');
+    const sel = window.getSelection?.();
+    const selPre = sel?.anchorNode
+      ? (sel.anchorNode.nodeType === 1 ? sel.anchorNode : sel.anchorNode.parentElement)
+          ?.closest?.('pre.code-block')
+      : null;
+    const pre = active || selPre || hoveredPre;
+    if (!pre) return;
+    e.preventDefault();
+    const btn = pre.querySelector('.code-copy-btn');
+    copyCodeBlockText(pre).then(() => {
+      if (btn) {
+        const prev = btn.textContent;
+        btn.textContent = 'Copied';
+        setTimeout(() => { btn.textContent = prev; }, 1500);
+      }
+    }).catch(() => {
+      const text = pre.querySelector('code')?.textContent || '';
+      prompt('Copy code:', text);
+    });
+  });
+}
+
 /** Wire copy buttons injected by renderMarkdown into code fences. */
 function wireCodeCopyButtons(root) {
   if (!root) return;
@@ -459,14 +524,18 @@ function wireCodeCopyButtons(root) {
       e.preventDefault();
       e.stopPropagation();
       const pre = btn.closest('pre.code-block');
-      const text = pre?.querySelector('code')?.textContent || '';
-      navigator.clipboard.writeText(text).then(() => {
+      copyCodeBlockText(pre).then(() => {
         btn.textContent = 'Copied';
         setTimeout(() => { btn.textContent = 'Copy'; }, 1500);
-      }).catch(() => prompt('Copy code:', text));
+      }).catch(() => {
+        const text = pre?.querySelector('code')?.textContent || '';
+        prompt('Copy code:', text);
+      });
     });
   });
 }
+
+initCodeCopyHotkey();
 
 /** Resize/compress image for vision API (keeps CLI args under limits). */
 async function compressImageForVision(fileOrBlob, maxDim = 1280, quality = 0.82) {

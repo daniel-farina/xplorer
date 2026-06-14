@@ -3,6 +3,11 @@ const grid = $('#apps-grid');
 const emptyEl = $('#apps-empty');
 const createBtn = $('#create-btn');
 const importBtn = $('#import-btn');
+const bulkBar = $('#apps-bulk-bar');
+const selectAllCb = $('#apps-select-all');
+const exportSelectedBtn = $('#export-selected-btn');
+
+let lastApps = [];
 
 function showAppsToast(message, isError = false) {
   let el = document.getElementById('apps-toast');
@@ -32,14 +37,50 @@ function statusLabel(status) {
   return 'Idle';
 }
 
+async function downloadAppZip(app) {
+  const res = await fetch(`/api/apps/${encodeURIComponent(app.id)}/export`);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || res.statusText || 'Export failed');
+  }
+  const blob = await res.blob();
+  const cd = res.headers.get('Content-Disposition') || '';
+  const match = cd.match(/filename="([^"]+)"/);
+  const slug = (app.name || 'app').trim().replace(/[^\w.-]+/g, '_').slice(0, 48);
+  const filename = match?.[1] || `${slug}.zip`;
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+  return filename;
+}
+
+function updateBulkBar(apps) {
+  const exportable = apps.filter((a) => a.exportable);
+  bulkBar?.classList.toggle('hidden', exportable.length === 0);
+  if (!exportSelectedBtn) return;
+  const checked = grid.querySelectorAll('.app-select-cb:checked').length;
+  exportSelectedBtn.disabled = checked === 0;
+  if (selectAllCb) {
+    selectAllCb.indeterminate = checked > 0 && checked < exportable.length;
+    selectAllCb.checked = exportable.length > 0 && checked === exportable.length;
+  }
+}
+
 function renderApps(data) {
   const apps = data.apps || [];
+  lastApps = apps;
   grid.innerHTML = '';
   emptyEl.classList.toggle('hidden', apps.length > 0);
   for (const app of apps) {
     const card = document.createElement('article');
     card.className = 'app-card' + (app.status === 'building' ? ' building' : '');
     card.innerHTML = `
+      ${app.exportable
+        ? `<label class="app-select"><input type="checkbox" class="app-select-cb" data-id="${escapeHtml(app.id)}"></label>`
+        : ''}
       <div class="app-card-head">
         <img class="app-icon" src="/api/apps/${encodeURIComponent(app.id)}/icon" alt="">
         <div>
@@ -119,23 +160,9 @@ function renderApps(data) {
     btn.onclick = async () => {
       btn.disabled = true;
       try {
-        const id = btn.dataset.export;
-        const res = await fetch(`/api/apps/${encodeURIComponent(id)}/export`);
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({}));
-          throw new Error(err.error || res.statusText || 'Export failed');
-        }
-        const blob = await res.blob();
-        const cd = res.headers.get('Content-Disposition') || '';
-        const match = cd.match(/filename="([^"]+)"/);
-        const slug = (btn.dataset.name || 'app').trim().replace(/[^\w.-]+/g, '_').slice(0, 48);
-        const filename = match?.[1] || `${slug}.zip`;
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = filename;
-        a.click();
-        URL.revokeObjectURL(url);
+        const app = lastApps.find((a) => a.id === btn.dataset.export);
+        if (!app) throw new Error('App not found');
+        const filename = await downloadAppZip(app);
         showAppsToast(`Exported ${filename}`);
       } catch (e) {
         showAppsToast(e.message, true);
@@ -144,6 +171,10 @@ function renderApps(data) {
       }
     };
   });
+  grid.querySelectorAll('.app-select-cb').forEach((cb) => {
+    cb.onchange = () => updateBulkBar(apps);
+  });
+  updateBulkBar(apps);
   grid.querySelectorAll('[data-modify]').forEach((btn) => {
     btn.onclick = () => {
       const prompt = window.prompt('What should Grok change in this app?');
@@ -241,6 +272,33 @@ importBtn.onclick = async () => {
     importBtn.disabled = false;
   }
 };
+
+selectAllCb?.addEventListener('change', () => {
+  const on = !!selectAllCb.checked;
+  grid.querySelectorAll('.app-select-cb').forEach((cb) => { cb.checked = on; });
+  updateBulkBar(lastApps);
+});
+
+exportSelectedBtn?.addEventListener('click', async () => {
+  const ids = [...grid.querySelectorAll('.app-select-cb:checked')].map((cb) => cb.dataset.id);
+  if (!ids.length) return;
+  exportSelectedBtn.disabled = true;
+  let ok = 0;
+  try {
+    for (const id of ids) {
+      const app = lastApps.find((a) => a.id === id);
+      if (!app?.exportable) continue;
+      await downloadAppZip(app);
+      ok += 1;
+    }
+    showAppsToast(ok === 1 ? 'Exported 1 app' : `Exported ${ok} apps`);
+  } catch (e) {
+    showAppsToast(e.message, true);
+  } finally {
+    exportSelectedBtn.disabled = false;
+    updateBulkBar(lastApps);
+  }
+});
 
 initSearchHomeToggle($('#home-toggle'));
 startThemeWatcher();

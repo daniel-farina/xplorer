@@ -11,7 +11,6 @@ const resultsEl = $('#results');
 const modesEl = $('#search-modes');
 const mainEl = document.querySelector('.main');
 
-const SEARCH_MODE_KEY = 'xplorer_search_mode';
 let mode = 'web';
 let attachedImage = null;
 
@@ -41,9 +40,7 @@ function setMode(next) {
   });
   updateModeUi();
   syncUrl();
-  try {
-    localStorage.setItem(SEARCH_MODE_KEY, mode);
-  } catch { /* ignore */ }
+  persistSearchMode(mode);
 }
 
 function updateModeUi() {
@@ -424,12 +421,7 @@ const modeParam = urlParams.get('mode');
 if (modeParam && ['web', 'images', 'videos', 'imagine'].includes(modeParam)) {
   setMode(modeParam);
 } else {
-  try {
-    const saved = localStorage.getItem(SEARCH_MODE_KEY);
-    if (saved && ['web', 'images', 'videos', 'imagine'].includes(saved)) {
-      setMode(saved);
-    }
-  } catch { /* ignore */ }
+  setMode(getStoredSearchMode());
 }
 const urlQuery = urlParams.get('q');
 const initialQuery = urlQuery || getStoredSearchQuery();

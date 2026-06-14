@@ -61,8 +61,15 @@ def main() -> int:
     assert "syncCompanionToolbarPill" in common
     assert "renderMarkdown" in common
     assert "persistSearchQuery" in common
+    assert "getStoredSearchMode" in common
     assert "wireCodeCopyButtons" in common
+    assert "initCodeCopyHotkey" in common
     print("common.js markers: OK")
+
+    _, apps_js = get("/apps.js")
+    assert "export-selected-btn" in apps_js
+    assert "downloadAppZip" in apps_js
+    print("apps.js bulk export: OK")
 
     _, search_js = get("/search.js")
     assert "Try Grok Web instead" in search_js
@@ -86,6 +93,19 @@ def main() -> int:
         location = e.headers.get("Location", "")
         assert "search" in location, f"unexpected Location: {location}"
     print("switch-home redirect: OK")
+
+    req = urllib.request.Request(
+        f"{BASE}/switch-home?mode=build&q=testquery&m=images", method="GET"
+    )
+    try:
+        opener.open(req, timeout=10)
+        raise AssertionError("switch-home q+m should redirect")
+    except urllib.error.HTTPError as e:
+        assert e.code in (302, 303, 307), f"switch-home q+m status {e.code}"
+        location = e.headers.get("Location", "")
+        assert "q=testquery" in location, f"missing q in Location: {location}"
+        assert "mode=images" in location, f"missing mode in Location: {location}"
+    print("switch-home q+m redirect: OK")
 
     exportable = [a for a in apps["apps"] if a.get("exportable")]
     if exportable:

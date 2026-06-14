@@ -152,10 +152,30 @@ See above. Verified: search page serves mode pills + results section (curl).
 | FAB exportapp in grok_fab.cc | ✓ |
 | Build + reinstall | 43s, relaunch OK ✓ |
 
+## Loop 8 (2026-06-14 ~07:00)
+
+### Commit — feat(ui+fab): mode persistence, bulk export, builder shortcut
+- **Search:** `getStoredSearchMode` / `persistSearchMode` — mode survives home toggle via switch-home `m` param
+- **Chat:** ⌘⇧C copies hovered/focused code block (`initCodeCopyHotkey`)
+- **Apps:** bulk select + "Export selected" for exportable apps (`downloadAppZip`)
+- **FAB:** "Open in builder" on app runtime pages (`openappbuilder`)
+- **Markdown:** language-aware highlighting (python/rust/go/bash) + `#` comments
+- **Smoke:** switch-home `q+m` redirect check; apps.js bulk export markers
+- **Test:** companion_smoke_test.py ALL OK ✓ | build 41s ✓ | reinstall Xplorer.app ✓
+
+**Loop 8 test summary**
+| Check | Result |
+|-------|--------|
+| companion_smoke_test.py | ALL OK (switch-home q+m) |
+| getStoredSearchMode | ✓ |
+| apps bulk export UI | ✓ |
+| FAB openappbuilder | ✓ |
+| Build + reinstall | 41s, relaunch OK ✓ |
+
 ## Next loop priorities
-- Search: restore mode from localStorage on switch-home return
-- Chat: copy code block keyboard shortcut
-- Apps gallery: bulk export or multi-select
-- FAB: open app builder for current runtime app
-- Smoke test: switch-home with q+m params
-- Syntax highlighting: more languages / dark-theme tuning
+- Apps gallery: bulk delete with confirmation
+- Search: pass query to Grok Web when switching from search page
+- FAB: rename app from runtime preview
+- Chat: model picker persistence per conversation
+- Native: app runtime health probe in /api/apps
+- Toolbar: keyboard nav between Grok pills

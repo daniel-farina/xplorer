@@ -131,6 +131,42 @@ html.grok-build body.apps-page {
   border-radius: 10px;
 }
 
+.apps-bulk-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border: 1px dashed var(--border);
+  border-radius: 12px;
+  background: var(--surface-elevated);
+}
+
+.apps-bulk-bar.hidden {
+  display: none;
+}
+
+.apps-bulk-select-all {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.app-select {
+  display: flex;
+  justify-content: flex-end;
+  margin: -4px 0 -6px;
+}
+
+.app-select input {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+
 .apps-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
