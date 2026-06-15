@@ -279,6 +279,10 @@ bool ServeUiFile(net::HttpServer* server,
     ctype = "image/png";
   else if (base::EndsWith(name, ".svg"))
     ctype = "image/svg+xml";
+  else if (base::EndsWith(name, ".jpg") || base::EndsWith(name, ".jpeg"))
+    ctype = "image/jpeg";
+  else if (base::EndsWith(name, ".webp"))
+    ctype = "image/webp";
   SendBytes(server, connection_id, net::HTTP_OK, std::move(content), ctype);
   return true;
 }
@@ -1838,7 +1842,8 @@ bool GrokNative::TryHandleRequest(
   if (info.method == "GET" && !base::StartsWith(path, "/run/") &&
       (base::EndsWith(path, ".css") || base::EndsWith(path, ".js") ||
        base::EndsWith(path, ".ico") || base::EndsWith(path, ".png") ||
-       base::EndsWith(path, ".svg"))) {
+       base::EndsWith(path, ".svg") || base::EndsWith(path, ".jpg") ||
+       base::EndsWith(path, ".jpeg") || base::EndsWith(path, ".webp"))) {
     return ServeUiFile(server, connection_id, path.substr(path.rfind('/') + 1));
   }
 

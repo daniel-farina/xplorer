@@ -2,14 +2,104 @@
 
 * { box-sizing: border-box; }
 
-html.grok-build,
-html.grok-build body {
+html.grok-build {
   margin: 0;
   min-height: 100%;
-  background: var(--bg);
+  background: var(--bg);          /* fallback under the photo, no flash */
   color: var(--text);
   font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
+html.grok-build body {
+  margin: 0;
+  min-height: 100%;
+  background: transparent;        /* let the new-tab photo show through */
+  color: var(--text);
+  font: inherit;
+}
+
+/* ---------- New-tab background (the landing-page landscape) ---------- */
+.nt-bg {
+  position: fixed; inset: 0; z-index: -2; pointer-events: none;
+  background-position: center; background-size: cover; background-repeat: no-repeat;
+  opacity: 0; transition: opacity .5s ease;
+}
+.nt-bg.is-ready { opacity: 1; }
+/* readability scrim over the photo — theme-aware, modest */
+.nt-scrim {
+  position: fixed; inset: 0; z-index: -1; pointer-events: none;
+  background:
+    radial-gradient(120% 90% at 50% 38%, rgba(255,255,255,0.0) 40%, rgba(255,255,255,0.0) 100%);
+}
+html[data-theme="light"] .nt-scrim { background: rgba(255,255,255,0.34); }
+html[data-theme="dark"]  .nt-scrim { background: rgba(0,0,0,0.40); }
+
+/* ---------- Background gear + picker panel ---------- */
+.nt-bg-gear {
+  position: fixed; right: 18px; bottom: 18px; z-index: 30;
+  width: 40px; height: 40px; border-radius: 50%;
+  display: grid; place-items: center; cursor: pointer;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-secondary);
+  box-shadow: 0 2px 10px var(--shadow);
+  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+  transition: color .15s, border-color .15s, transform .15s;
+}
+.nt-bg-gear:hover { color: var(--text); border-color: var(--accent); transform: translateY(-1px) rotate(20deg); }
+.nt-bg-gear svg { width: 19px; height: 19px; }
+
+.nt-bg-panel {
+  position: fixed; right: 18px; bottom: 68px; z-index: 31;
+  width: 340px; max-width: calc(100vw - 36px);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  box-shadow: 0 18px 50px var(--shadow);
+  backdrop-filter: blur(18px) saturate(160%); -webkit-backdrop-filter: blur(18px) saturate(160%);
+  padding: 16px;
+  transform: translateY(8px); opacity: 0; pointer-events: none;
+  transition: opacity .18s ease, transform .18s ease;
+}
+.nt-bg-panel.is-open { transform: translateY(0); opacity: 1; pointer-events: auto; }
+.nt-bg-panel__title {
+  font-size: 14px; font-weight: 600; color: var(--text); margin: 0 0 4px;
+}
+.nt-bg-panel__hint { font-size: 12px; color: var(--text-secondary); margin: 0 0 14px; }
+
+.nt-mode { margin-bottom: 14px; }
+.nt-mode:last-of-type { margin-bottom: 4px; }
+.nt-mode__head {
+  display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;
+}
+.nt-mode__label {
+  font-size: 12px; font-weight: 600; color: var(--text);
+  display: inline-flex; align-items: center; gap: 7px;
+}
+.nt-mode__label .swatch { width: 10px; height: 10px; border-radius: 50%; border: 1px solid var(--border); }
+.nt-mode__label .swatch.light { background: #eef1f4; }
+.nt-mode__label .swatch.dark  { background: #16181f; }
+.nt-mode__reset {
+  border: none; background: none; color: var(--text-secondary);
+  font: inherit; font-size: 12px; cursor: pointer; padding: 2px 4px; border-radius: 6px;
+}
+.nt-mode__reset:hover { color: var(--accent); }
+.nt-mode__reset[hidden] { display: none; }
+
+.nt-drop {
+  position: relative; display: flex; align-items: center; gap: 12px;
+  border: 1.5px dashed var(--border); border-radius: 12px;
+  padding: 10px; cursor: pointer; transition: border-color .15s, background .15s;
+  background: var(--surface-elevated);
+}
+.nt-drop:hover, .nt-drop.dragover { border-color: var(--accent); background: var(--accent-soft); }
+.nt-drop__thumb {
+  width: 64px; height: 40px; flex: none; border-radius: 8px; overflow: hidden;
+  border: 1px solid var(--border); background-size: cover; background-position: center;
+  background-color: var(--surface);
+}
+.nt-drop__text { font-size: 12px; color: var(--text-secondary); line-height: 1.4; }
+.nt-drop__text b { color: var(--text); font-weight: 600; }
+.nt-drop input[type="file"] { display: none; }
 
 .main {
   max-width: 720px;
