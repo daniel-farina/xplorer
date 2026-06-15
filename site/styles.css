@@ -105,7 +105,7 @@ h1, h2, h3 { line-height: 1.1; letter-spacing: -0.02em; margin: 0; }
   gap: 0; margin-bottom: 34px;
 }
 .hero__brandname { margin-left: -10px; }
-.hero__logo { width: 84px; height: 84px; object-fit: contain; }
+.hero__logo { width: 84px; height: 84px; object-fit: contain; position: relative; top: 3px; }
 .hero__brandname {
   font-size: 56px; font-weight: 850; letter-spacing: -0.03em; line-height: 1;
 }
