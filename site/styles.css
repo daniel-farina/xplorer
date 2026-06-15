@@ -34,23 +34,28 @@ a { color: inherit; text-decoration: none; }
 
 h1, h2, h3 { line-height: 1.1; letter-spacing: -0.02em; margin: 0; }
 
-/* ---------- Background ambience ---------- */
-.bg-grid {
-  position: fixed; inset: 0; z-index: -2;
-  background-image:
-    linear-gradient(to right, rgba(255,255,255,0.025) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(255,255,255,0.025) 1px, transparent 1px);
-  background-size: 56px 56px;
-  mask-image: radial-gradient(ellipse 90% 60% at 50% 0%, #000 30%, transparent 80%);
+/* ---------- Earth backdrop ---------- */
+/* Pinned to the top of the viewport, scaled to the display, and faded
+   into the page's black so the seam is invisible on any screen. */
+.bg-space {
+  position: fixed; top: 0; left: 0; right: 0;
+  height: 105vh; z-index: -1; pointer-events: none;
+  background-image: url("assets/explorebg.jpg");
+  background-repeat: no-repeat;
+  background-position: top center;
+  background-size: cover;        /* fill width, anchored at the top, no gaps */
+  filter: brightness(0.82);      /* dim slightly so white hero text stays crisp */
+  /* fade the image downward into the body's black background */
+  -webkit-mask-image: linear-gradient(to bottom,
+    #000 0%, #000 38%, rgba(0,0,0,0.6) 64%, rgba(0,0,0,0) 96%);
+  mask-image: linear-gradient(to bottom,
+    #000 0%, #000 38%, rgba(0,0,0,0.6) 64%, rgba(0,0,0,0) 96%);
 }
-.bg-glow {
-  position: fixed; z-index: -1; border-radius: 50%;
-  filter: blur(120px); opacity: 0.5; pointer-events: none;
+/* On portrait / very narrow screens the 16:9 image zooms hard; cap its
+   visible height so the Earth still reads and the fade lands above the fold. */
+@media (max-aspect-ratio: 3/4) {
+  .bg-space { height: 72vh; background-size: 130% auto; }
 }
-.bg-glow--1 { width: 620px; height: 620px; top: -200px; left: -120px;
-  background: radial-gradient(circle, rgba(255,255,255,0.18), transparent 70%); }
-.bg-glow--2 { width: 560px; height: 560px; top: 120px; right: -160px;
-  background: radial-gradient(circle, rgba(255,255,255,0.10), transparent 70%); }
 
 /* ---------- Nav ---------- */
 .nav {
