@@ -233,6 +233,25 @@ h1, h2, h3 { line-height: 1.1; letter-spacing: -0.02em; margin: 0; }
   color: #000; background: #fff; border: 1px solid #fff;
 }
 .pill::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: #000; }
+.pill--soon {
+  color: var(--text); background: transparent; border: 1px dashed var(--line-strong);
+}
+.pill--soon::before { background: var(--muted); animation: soonPulse 1.8s ease-in-out infinite; }
+@keyframes soonPulse { 0%,100% { opacity: 0.35; } 50% { opacity: 1; } }
+
+/* ---------- Coming soon band ---------- */
+.soon { max-width: var(--maxw); margin: 0 auto; padding: 40px 24px; }
+.soon__inner {
+  position: relative; overflow: hidden; text-align: center;
+  padding: 64px 32px; border-radius: 28px; border: 1px solid var(--line);
+  background:
+    repeating-linear-gradient(135deg, rgba(255,255,255,0.015) 0 2px, transparent 2px 18px),
+    linear-gradient(180deg, var(--panel), var(--bg-soft));
+}
+.soon__inner h2 { margin-top: 18px; font-size: clamp(28px, 4.5vw, 44px); font-weight: 850; max-width: 760px; margin-left: auto; margin-right: auto; }
+.soon__lead { max-width: 640px; margin: 18px auto 0; color: var(--text); font-size: 18px; }
+.soon__note { max-width: 600px; margin: 14px auto 0; color: var(--muted-2); font-size: 15px; }
+.soon__note em { color: var(--muted); font-style: italic; }
 .showcase__text p { color: var(--muted); font-size: 16.5px; margin: 0; }
 .showcase__shot {
   aspect-ratio: 16 / 10; border-radius: var(--radius); overflow: hidden;

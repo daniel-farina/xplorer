@@ -19,12 +19,11 @@ automatically (until then, styled placeholders show):
 
 | File | Where it shows |
 |------|----------------|
-| `assets/logo.png` | nav + footer + favicon (square, ~256px+) |
+| `assets/logo.png` | the **X** logo — hero wordmark + footer + favicon (square) |
 | `assets/screenshot-hero.png` | big hero screenshot (16:9) |
-| `assets/screenshot-sidebar.png` | "Grok in the sidebar" |
-| `assets/screenshot-command.png` | "Command bar" |
-| `assets/screenshot-build.png` | "Grok Build, inside the browser" |
-| `assets/screenshot-agents.png` | "Agents driving the web" |
+| `assets/screenshot-build.png` | "Build apps by describing them" (builder + live preview) |
+| `assets/screenshot-grokit.png` | "The Grok it button" (FAB menu on a page) |
+| `assets/screenshot-toolbar.png` | "All of Grok in one toolbar" |
 
 > `assets/logo.png` currently holds a temporary placeholder icon — replace it
 > with the real logo when ready.
