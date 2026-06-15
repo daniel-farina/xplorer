@@ -300,29 +300,25 @@ std::string BuildInjectScript(const std::string& active_mode) {
     if(document.body)document.body.style.removeProperty('padding-top');
   }
   function isHidden(){try{return localStorage.getItem(HIDE_KEY)==='1';}catch(e){return false;}}
-  // Offset the page so the fixed bar never covers content. Normal pages: pad the
-  // root once (padding both <html>+<body> double-counted). Fixed/absolute app
-  // shells (x.com) ignore root padding, so detect that (content still under the
-  // bar) and translateY the root instead, which offsets fixed descendants too.
+  // Offset the page so the fixed bar never covers content: pad the root once.
+  // (Padding <html> reserves space below the fixed bar; the bar stays pinned to
+  // the viewport top.) Do NOT transform the root — the bar is a child of <html>,
+  // so a transform moves the bar itself and breaks its fixed positioning,
+  // leaving a gap at the top on scroll.
   function applyPadding(bar){
     var s=document.documentElement.style;
     if(isHidden()){clearOffset();return;}
     var px=bar.getBoundingClientRect().height||44;
     var pad=px+'px';
-    s.setProperty('scroll-padding-top',pad,'important');
+    // Clear any transform a previous build left behind (it caused the scroll gap).
     if(s.transform&&s.transform!=='none'){
-      s.setProperty('transform','translateY('+pad+')','important');  // sticky mode
-      s.setProperty('transform-origin','0 0','important');
-      return;
+      s.removeProperty('transform');
+      s.removeProperty('transform-origin');
     }
     s.setProperty('padding-top',pad,'important');
     s.setProperty('box-sizing','border-box','important');
+    s.setProperty('scroll-padding-top',pad,'important');
     if(document.body)document.body.style.removeProperty('padding-top');
-    if(document.body&&document.body.getBoundingClientRect().top<px-4){
-      s.removeProperty('padding-top');
-      s.setProperty('transform','translateY('+pad+')','important');
-      s.setProperty('transform-origin','0 0','important');
-    }
   }
   function wireHideToggle(bar){
     var reveal=document.getElementById('grok-toolbar-reveal');
