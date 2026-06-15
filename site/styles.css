@@ -211,13 +211,13 @@ html.theme-animating * {
 .hero__inner { max-width: 820px; margin: 0 auto; }
 /* hero brand wordmark: X mark + "plorer" */
 .hero__wordmark {
-  /* Tunable alignment knobs (the align tool / persisted values override these). */
-  --wm-gap: -6px;
-  --wm-x-size: clamp(38px, 6vw, 58px);
-  --wm-x-dx: 0px; --wm-x-dy: 0px;
-  --wm-word-size: clamp(38px, 6vw, 58px);
-  --wm-word-dx: 0px; --wm-word-dy: 0px;
-  --wm-letter: -0.01em;
+  /* Final tuned alignment (X mark + "plorer"). */
+  --wm-gap: -30px;
+  --wm-x-size: 76px;
+  --wm-x-dx: 15px; --wm-x-dy: 1px;
+  --wm-word-size: 63px;
+  --wm-word-dx: -1px; --wm-word-dy: -1px;
+  --wm-letter: 0em;
   display: inline-flex; align-items: center; justify-content: center; gap: var(--wm-gap);
   margin-bottom: 26px; color: var(--text);
   font-family: "Space Grotesk", -apple-system, "Inter", sans-serif;
@@ -231,23 +231,6 @@ html.theme-animating * {
   transform: translate(var(--wm-x-dx), var(--wm-x-dy));
 }
 .hero__wordmark > span { display: inline-block; transform: translate(var(--wm-word-dx), var(--wm-word-dy)); }
-
-/* Alignment tool (only shown with ?align in the URL) */
-.wm-tool {
-  position: fixed; bottom: 16px; left: 16px; z-index: 9999;
-  width: 240px; padding: 14px; border-radius: 14px;
-  background: var(--panel, #14161d); color: var(--text, #fff);
-  border: 1px solid var(--line, rgba(255,255,255,.15)); box-shadow: 0 10px 40px rgba(0,0,0,.4);
-  font: 12px/1.4 -apple-system, BlinkMacSystemFont, sans-serif;
-}
-.wm-tool h4 { margin: 0 0 10px; font-size: 13px; }
-.wm-tool__row { display: grid; grid-template-columns: 84px 1fr 42px; align-items: center; gap: 6px; margin-bottom: 7px; }
-.wm-tool__row label { color: var(--muted, #9aa); }
-.wm-tool__row input[type="range"] { width: 100%; }
-.wm-tool__row output { text-align: right; font-variant-numeric: tabular-nums; }
-.wm-tool__btns { display: flex; gap: 6px; margin-top: 10px; }
-.wm-tool__btns button { flex: 1; padding: 6px; border-radius: 8px; border: 1px solid var(--line, rgba(255,255,255,.2)); background: rgba(255,255,255,.06); color: inherit; cursor: pointer; font: inherit; }
-.wm-tool__btns button:hover { background: rgba(255,255,255,.14); }
 .badge {
   display: inline-flex; align-items: center; gap: 9px;
   padding: 6px 14px; border-radius: 999px; font-size: 13px; font-weight: 550;
