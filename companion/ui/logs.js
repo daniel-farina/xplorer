@@ -47,7 +47,7 @@
         ? `<a href="/app?id=${esc(e.app_id)}" title="Open app">${esc(String(e.app_id).slice(0, 8))}</a>`
         : '';
       tr.innerHTML =
-        `<td class="col-time">${esc(fmtTime(e.ts_ms))}</td>` +
+        `<td class="col-time">${esc(fmtTime(e.ts_us))}</td>` +
         `<td class="col-level"><span class="log-level ${esc(level)}">${esc(level)}</span></td>` +
         `<td class="col-source">${esc(e.source || '')}</td>` +
         `<td class="col-app">${appCell}</td>` +
