@@ -198,7 +198,7 @@ const TOOLBAR_HIDDEN_KEY = 'xplorer_toolbar_hidden';
 /** Uniform Xplorer topbar — single source of truth for all companion pages. */
 function grokToolbarHTML() {
   return `<header class="grok-toolbar">
-    <a class="grok-logo" href="/search" title="Xplorer home">${GROK_ICONS.xplorer}<span>Xplorer</span></a>
+    <a class="grok-logo" href="/search" title="Xplorer home" aria-label="Xplorer">${GROK_ICONS.xplorer}<span>plorer</span></a>
     <div class="grok-toolbar-spacer"></div>
     <div class="grok-toolbar-actions">
       <div class="grok-nav-pills" id="home-toggle" title="Xplorer navigation">
