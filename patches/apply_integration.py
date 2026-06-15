@@ -477,6 +477,89 @@ def main(src: Path):
         'DEFINE_ELEMENT_IDENTIFIER_VALUE(kToolbarGrokButtonElementId);\n',
     )
 
+    # --- Grok as the default search engine --------------------------------
+    # Repoint the prepopulated "google" fallback entry (the first-run default,
+    # keyed on id==1) at the gateway GET /omnibox 302 handoff, so typing a
+    # query in the address bar searches Grok. The engine short_name "Grok"
+    # also makes the omnibox placeholder read "Search Grok or type a URL".
+    # suggest_url is emptied to drop Google autocomplete suggestions, and
+    # kCurrentDataVersion is bumped so existing profiles re-merge the change.
+    prepop = src / ("third_party/search_engines_data/resources/definitions/"
+                    "prepopulated_engines.json")
+    pp = prepop.read_text()
+    if "127.0.0.1:9334/omnibox" not in pp:
+        pp = pp.replace(
+            '"name": "Google",\n      "keyword": "google.com",',
+            '"name": "Grok",\n      "keyword": "grok.com",')
+        pp = re.sub(
+            r'"search_url": "\{google:baseURL\}search\?q=\{searchTerms\}[^"]*"',
+            '"search_url": "http://127.0.0.1:9334/omnibox?q={searchTerms}"', pp)
+        pp = re.sub(r'"suggest_url": "\{google:baseSuggestURL\}[^"]*"',
+                    '"suggest_url": ""', pp)
+        pp = pp.replace('"kCurrentDataVersion": 206',
+                        '"kCurrentDataVersion": 207')
+        prepop.write_text(pp)
+        print(f"  edited: {prepop}")
+
+    # --- About page: "About Xplorer" + no failed-update error -------------
+    grdp = src / "chrome/app/settings_chromium_strings.grdp"
+    sg = grdp.read_text()
+    if "About Xplorer" not in sg:
+        sg = sg.replace(
+            'desc="Menu title for the About Chromium page.">\n'
+            "        About Chromium\n",
+            'desc="Menu title for the About Chromium page.">\n'
+            "        About Xplorer\n")
+        sg = sg.replace(
+            'desc="Text of the button which takes the user to the Chrome help'
+            ' page.">\n        Get help with Chromium\n',
+            'desc="Text of the button which takes the user to the Chrome help'
+            ' page.">\n        Get help with Xplorer\n')
+        sg = sg.replace(
+            'desc="Status label: Already up to date (Chromium)">\n'
+            "      Chromium is up to date\n",
+            'desc="Status label: Already up to date (Chromium)">\n'
+            "      Xplorer is up to date\n")
+        grdp.write_text(sg)
+        print(f"  edited: {grdp}")
+
+    # macOS: Xplorer ships no Google updater, so the about page's update check
+    # failed with "error code 0". Report up-to-date instead. (Live GitHub
+    # release check deferred until the repo is public.)
+    vum = src / "chrome/browser/ui/webui/help/version_updater_mac.mm"
+    vm = vum.read_text()
+    if "Xplorer has no Google updater" not in vm:
+        vm = vm.replace(
+            "  void CheckForUpdate(StatusCallback status_callback,\n"
+            "                      PromoteCallback promote_callback) override {\n"
+            "    updater::EnsureUpdater(\n"
+            "        base::TaskPriority::USER_VISIBLE,\n"
+            "        base::BindOnce(promote_callback, "
+            "PromotionState::PROMOTE_ENABLED),\n"
+            "        base::BindOnce(&updater::CheckForUpdate,\n"
+            "                       base::BindRepeating(&UpdateStatus, "
+            "status_callback)));\n"
+            "  }",
+            "  void CheckForUpdate(StatusCallback status_callback,\n"
+            "                      PromoteCallback promote_callback) override {\n"
+            "    // AETHER: Xplorer has no Google updater; skip the broken\n"
+            "    // Keystone check (which reported \"error code 0\") and report\n"
+            "    // up to date instead.\n"
+            "    status_callback.Run(VersionUpdater::Status::UPDATED, 0, false,\n"
+            "                        false, std::string(), 0, std::u16string());\n"
+            "  }")
+        vum.write_text(vm)
+        print(f"  edited: {vum}")
+    # Our CheckForUpdate no longer calls the UpdateStatus helper, which now
+    # trips -Werror,-Wunused-function. Mark it maybe_unused.
+    vm2 = vum.read_text()
+    if "[[maybe_unused]] void UpdateStatus" not in vm2:
+        vm2 = vm2.replace(
+            "\nvoid UpdateStatus(VersionUpdater::StatusCallback",
+            "\n[[maybe_unused]] void UpdateStatus(VersionUpdater::StatusCallback")
+        vum.write_text(vm2)
+        print(f"  edited (maybe_unused): {vum}")
+
     print("Integration edits applied.")
 
 

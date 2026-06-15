@@ -26,6 +26,7 @@
 #include "base/process/launch.h"
 #include "base/process/process.h"
 #include "base/rand_util.h"
+#include "base/strings/escape.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
@@ -1860,6 +1861,42 @@ bool GrokNative::TryHandleRequest(
     return false;  // Agent discovery JSON handled by AgentGateway.
   }
 
+  // Default-search handoff: the omnibox (Grok is the default engine) and the
+  // AI "Grok" button hit GET /omnibox?q=<query>; store the query as a pending
+  // grok-web prompt and 302 to grok.com, where the injector auto-submits it.
+  if (info.method == "GET" &&
+      (path == "/omnibox" ||
+       base::StartsWith(path, "/omnibox?", base::CompareCase::SENSITIVE))) {
+    std::string raw_q;
+    const std::string& full = info.path;
+    auto qpos = full.find('?');
+    if (qpos != std::string::npos) {
+      for (const auto& pair : base::SplitString(
+               full.substr(qpos + 1), "&", base::TRIM_WHITESPACE,
+               base::SPLIT_WANT_NONEMPTY)) {
+        if (base::StartsWith(pair, "q=", base::CompareCase::SENSITIVE)) {
+          raw_q = pair.substr(2);
+          break;
+        }
+      }
+    }
+    const std::string query = base::UnescapeURLComponent(
+        raw_q, base::UnescapeRule::REPLACE_PLUS_WITH_SPACE |
+                   base::UnescapeRule::SPACES |
+                   base::UnescapeRule::PATH_SEPARATORS |
+                   base::UnescapeRule::URL_SPECIAL_CHARS_EXCEPT_PATH_SEPARATORS);
+    std::string dest = "https://grok.com/";
+    if (!query.empty())
+      dest = "https://grok.com/#xplorer_grok=" + StoreGrokWebPending(query);
+    net::HttpServerResponseInfo resp(net::HTTP_FOUND);
+    resp.SetBody("", "text/plain");
+    resp.AddHeader("Location", dest);
+    resp.AddHeader("Cache-Control", "no-store");
+    resp.AddHeader("Connection", "close");
+    server->SendResponse(connection_id, resp, TRAFFIC_ANNOTATION_FOR_TESTS);
+    return true;
+  }
+
   if (info.method == "GET" && (path == "/search" || path == "/search/")) {
     return ServeUiFile(server, connection_id, "search.html");
   }
@@ -1872,7 +1909,8 @@ bool GrokNative::TryHandleRequest(
     return ServeUiFile(server, connection_id, "settings.html");
   }
 
-  if (info.method == "GET" && (path == "/apps" || path == "/apps/")) {
+  if (info.method == "GET" &&
+      (path == "/apps" || path == "/apps/" || path == "/apps/new")) {
     return ServeUiFile(server, connection_id, "apps.html");
   }
 
