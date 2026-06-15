@@ -543,12 +543,14 @@ std::string BuildFabInjectScript() {
       e.stopPropagation();
       toggleMenu();
     };
-    menu.querySelectorAll('[data-action]').forEach(function(btn){
-      btn.onclick=function(e){
-        e.stopPropagation();
-        runGrokWeb(btn.getAttribute('data-action'));
-      };
-    });
+    // Delegate on the stable menu container: buildMenu() clears+recreates the
+    // items on every open, so per-button handlers wired once here never fire.
+    menu.onclick=function(e){
+      var btn=e.target&&e.target.closest?e.target.closest('[data-action]'):null;
+      if(!btn||!menu.contains(btn))return;
+      e.stopPropagation();
+      runGrokWeb(btn.getAttribute('data-action'));
+    };
     if(!window.__xplorerGrokMenuClose){
       window.__xplorerGrokMenuClose=true;
       document.addEventListener('click',function(){toggleMenu(false);});

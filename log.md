@@ -370,3 +370,41 @@ file consumed by every surface.
 | glass (backdrop-filter) + @supports fallback | computed saturate(1.8) blur(20px) ✓ |
 | adversarial review (2 workflows) | merge-blockers resolved ✓ |
 | UI only (no build) | smoke passed live ✓ |
+
+## Loop 17 (2026-06-15)
+
+### assets + fix: logo badge, Grok-It menu, app-page polish
+Logo + four bugs (root-caused by a background multi-agent diagnostic workflow, all
+reproduced live).
+
+- **Logo (`site/assets/logo.png`):** rebuilt from the transparent X mark — cropped to the
+  alpha bbox (was off-center), recentered, composited onto a rounded dark-glow badge so it
+  reads on light OR dark backgrounds (white-X-on-transparent vanished on light). Verified
+  24–128px on white/gray/dark. Added `logo-mark.png` (transparent) for dark-only contexts.
+- **Bug — Grok FAB menu dead (`grok_fab.cc`, native):** `buildMenu()` clears+recreates the
+  menu items on every open, but `onclick` was wired once in `ensureFab` (when the menu was
+  still empty) → every item had `onclick===null`. Fixed with event delegation on the stable
+  `#xplorer-grok-menu` container. Verified live: all 7 actions fire, menu closes, grok-web
+  handoff reaches the backend.
+- **Bug — rename shows stale "grok build failed" (`apps.js`):** rename succeeds (200 ok) but
+  the gallery re-rendered the prior failed build's `last_error` unconditionally, reading as a
+  rename error. Now gated on `status === 'error'` and labeled `Last build failed: …`.
+- **Bug — collapsed chat re-open hard to click (`app.css`):** collapsed rule kept the base
+  `translate(50%)` with `right:0`, pushing the 22px handle half off-screen (11px visible).
+  Now `right:8px; transform:translateY(-50%); 32×64`. Mobile equivalent un-clipped too.
+- **Bug — preview scrollbars unstyled (`app-view.js`):** preview iframe is same-origin, so
+  inject a theme-aware `::-webkit-scrollbar` + `scrollbar-color` `<style>` into its
+  `contentDocument` on load (both create + reuse branches, try/catch guard).
+- **Test:** companion fixes live (no rebuild); native `grok_fab.cc` rebuilt + reinstalled
+  (clean relaunch). Verified each fix via SDK `eval` on the live app. `companion_smoke_test.py`
+  ALL OK.
+
+**Loop 17 test summary**
+| Check | Result |
+|-------|--------|
+| companion_smoke_test.py | ALL OK |
+| logo centered + works light/dark | 24–128px verified ✓ |
+| Grok FAB menu actions fire (delegation) | 7 items, menu closes, handoff ✓ |
+| rename stale-error badge | gated on status=error + labeled ✓ |
+| collapsed sidebar re-open handle | 32×64, fully on-screen ✓ |
+| preview iframe scrollbars themed | style injected into contentDocument ✓ |

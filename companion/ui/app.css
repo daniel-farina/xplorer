@@ -117,12 +117,11 @@ html.grok-build body.app-view-page {
 }
 
 .app-workspace.chat-collapsed .chat-toggle {
-  right: 0;
-  transform: translate(50%, -50%);
-}
-
-.app-workspace.chat-collapsed .chat-toggle {
-  content: "›";
+  right: 8px;
+  transform: translateY(-50%);
+  width: 32px;
+  height: 64px;
+  font-size: 18px;
 }
 
 .app-preview {
@@ -357,6 +356,11 @@ html[data-theme="dark"] .app-chat-messages .msg.error {
     transform: translateY(50%);
   }
   .app-workspace.chat-collapsed .chat-toggle {
-    bottom: 0;
+    bottom: 8px;
+    right: 12px;
+    top: auto;
+    transform: none;
+    width: 64px;
+    height: 32px;
   }
 }

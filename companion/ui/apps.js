@@ -159,7 +159,7 @@ function renderApps(data) {
         ${app.runtime_alive ? '<span class="runtime-dot alive" title="Runtime server running">●</span>' : ''}
         ${app.runtime_ready && !app.runtime_alive ? '<span class="runtime-dot idle" title="Built but runtime stopped">○</span>' : ''}
       </div>
-      ${app.last_error ? '<p class="app-error">' + escapeHtml(app.last_error) + '</p>' : ''}
+      ${app.status === 'error' && app.last_error ? '<p class="app-error">Last build failed: ' + escapeHtml(app.last_error) + '</p>' : ''}
       <div class="app-actions">
         <button type="button" class="apps-btn primary" data-open="${escapeHtml(app.id)}">Build</button>
         ${app.status === 'ready' && app.runtime_ready && previewUrl(app)

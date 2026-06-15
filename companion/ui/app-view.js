@@ -286,11 +286,51 @@ async function loadPreview() {
   if (placeholder) placeholder.remove();
   if (!preview.querySelector('iframe')) {
     const iframe = document.createElement('iframe');
-    iframe.src = iframeUrl;
     iframe.title = app.name || 'App preview';
+    hookPreviewScrollbars(iframe);
+    iframe.src = iframeUrl;
     preview.appendChild(iframe);
   } else {
-    preview.querySelector('iframe').src = iframeUrl;
+    const iframe = preview.querySelector('iframe');
+    hookPreviewScrollbars(iframe);
+    iframe.src = iframeUrl;
+  }
+}
+
+/** Attach a one-time load hook that themes the preview's own scrollbars. */
+function hookPreviewScrollbars(iframe) {
+  if (iframe.dataset.sbHook) return;
+  iframe.dataset.sbHook = '1';
+  iframe.addEventListener('load', () => styleIframeScrollbars(iframe));
+}
+
+/** Inject theme-aware scrollbar CSS into the (same-origin) preview document. */
+function styleIframeScrollbars(iframe) {
+  try {
+    const doc = iframe.contentDocument;
+    if (!doc) return; // cross-origin or not ready
+    const cs = getComputedStyle(document.documentElement);
+    const v = (n, f) => (cs.getPropertyValue(n) || f).trim();
+    const thumb = v('--border', '#555');
+    const thumbHover = v('--text-secondary', '#888');
+    const ID = 'xplorer-scrollbar-style';
+    let st = doc.getElementById(ID);
+    if (!st) {
+      st = doc.createElement('style');
+      st.id = ID;
+      (doc.head || doc.documentElement).appendChild(st);
+    }
+    st.textContent =
+      'html{scrollbar-width:thin;scrollbar-color:' + thumb + ' transparent}' +
+      '::-webkit-scrollbar{width:12px;height:12px}' +
+      '::-webkit-scrollbar-track{background:transparent}' +
+      '::-webkit-scrollbar-thumb{background:' + thumb + ';border-radius:10px;' +
+      'background-clip:padding-box;border:3px solid transparent}' +
+      '::-webkit-scrollbar-thumb:hover{background:' + thumbHover + ';' +
+      'background-clip:padding-box;border:3px solid transparent}' +
+      '::-webkit-scrollbar-corner{background:transparent}';
+  } catch (e) {
+    /* cross-origin guard */
   }
 }
 
