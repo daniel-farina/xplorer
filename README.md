@@ -1,6 +1,12 @@
-# XBrowser — an AI-native Chromium fork
+<p align="center">
+  <img src="branding/xplorer-mark-512.png" alt="Xplorer" width="96" height="96">
+</p>
 
-XBrowser is a full web browser: a fork of Chromium (the real thing — Blink, V8,
+<h1 align="center">Xplorer</h1>
+
+<p align="center"><b>An open-source, Grok-native web browser.</b></p>
+
+Xplorer is a full web browser: a fork of Chromium (the real thing — Blink, V8,
 the multiprocess sandbox, the whole content layer), modified at the C++ source
 level to be **AI-native**. It is not a wrapper, not Electron, not CEF.
 

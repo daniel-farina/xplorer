@@ -187,7 +187,7 @@ std::string BuildInjectScript(const std::string& active_mode) {
   const std::string fallback_pill_json = JsonStringLiteral(active_mode);
 
   const std::string html = base::StringPrintf(
-      R"(<a class="grok-logo" href="%s">&#10022; Xplorer</a>)"
+      R"(<a class="grok-logo" href="%s"><svg class="gi" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 9.5 L22.5 22.5 M22.5 9.5 L9.5 22.5"></path></svg> Xplorer</a>)"
       R"(<div class="grok-toolbar-spacer"></div>)"
       R"(<div class="grok-toolbar-actions">)"
       R"(<div class="grok-nav-pills">)"
@@ -242,7 +242,7 @@ std::string BuildInjectScript(const std::string& active_mode) {
   // the companion pages render the SAME bar. (Baked in C++ rather than fetched
   // because third-party CSP blocks a cross-origin fetch to the loopback gateway.)
   var BAR_HTML=HTML,HIDE_KEY='xplorer_toolbar_hidden';
-  var REVEAL_SVG='<svg class="gi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><polygon points="15.5 8.5 11 11 8.5 15.5 13 13" fill="currentColor" stroke="none"></polygon></svg><svg class="gi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>';
+  var REVEAL_SVG='<svg class="gi" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 9.5 L22.5 22.5 M22.5 9.5 L9.5 22.5"></path></svg><svg class="gi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>';
   %s
   function isXHost(host){
     return host==='x.com'||host.endsWith('.x.com')||
