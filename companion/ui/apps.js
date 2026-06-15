@@ -161,7 +161,7 @@ function renderApps(data) {
       <label class="app-select"><input type="checkbox" class="app-select-cb" data-id="${escapeHtml(app.id)}"></label>
       <div class="app-thumb${thumbReady ? '' : ' is-placeholder'}" data-open="${escapeHtml(app.id)}" title="Open builder">
         ${thumbReady
-          ? `<iframe class="app-thumb-frame" src="${escapeHtml(pUrl)}" loading="lazy" tabindex="-1" aria-hidden="true" scrolling="no" sandbox="allow-scripts allow-same-origin"></iframe><span class="app-thumb-overlay"></span>`
+          ? `<iframe class="app-thumb-frame" src="${escapeHtml(pUrl)}" tabindex="-1" aria-hidden="true" scrolling="no" sandbox="allow-scripts allow-same-origin"></iframe><span class="app-thumb-overlay"></span>`
           : `<img class="app-thumb-icon" src="/api/apps/${encodeURIComponent(app.id)}/icon" alt=""><span class="app-thumb-hint">${app.status === 'building' ? 'Building…' : 'Not built yet'}</span>`}
       </div>
       <div class="app-card-head">
