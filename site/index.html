@@ -265,17 +265,53 @@
       <p>Xplorer runs an always-on local gateway and ships as an MCP server — so any agent can drive it, with no launch flags and no setup dance.</p>
     </div>
 
-    <div class="codeblock">
+    <div class="codeblock" id="agent-codeblock">
       <div class="codeblock__bar">
         <span class="dot dot--r"></span><span class="dot dot--y"></span><span class="dot dot--g"></span>
-        <span class="codeblock__name">connect</span>
+        <div class="codeblock__tabs" role="tablist">
+          <button type="button" class="codeblock__tab is-active" data-panel="connect" role="tab">connect</button>
+          <button type="button" class="codeblock__tab" data-panel="docs" role="tab">Docs for your agent</button>
+        </div>
+        <button type="button" class="codeblock__copy" id="agent-copy" aria-label="Copy to clipboard">Copy</button>
       </div>
-      <pre><code><span class="c-com"># Always-on local gateway — no launch flags, no setup.</span>
+      <pre class="codeblock__panel is-active" data-panel="connect"><code><span class="c-com"># Always-on local gateway — no launch flags, no setup.</span>
 CDP        <span class="c-str">ws://127.0.0.1:9333</span>     <span class="c-com"># Playwright / Puppeteer compatible</span>
 Agent API  <span class="c-str">http://127.0.0.1:9334</span>   <span class="c-com"># navigate · text · click · type · screenshot · tabs</span>
 
 <span class="c-com"># …or register the bundled MCP server, and your agent</span>
 <span class="c-com"># (Grok, Claude, Cursor) gets native browser tools.</span>
+</code></pre>
+      <pre class="codeblock__panel" data-panel="docs"><code># Drive Xplorer with your agent — no flags, no setup.
+
+# 1. Discover the gateway: read ~/.xplorer/gateway.json
+#    { "url": "http://127.0.0.1:9334", "cdp_url": "ws://127.0.0.1:9333", "token": "…" }
+#    Send  Authorization: Bearer &lt;token&gt;  on every request (loopback-only, token-gated).
+
+# 2. High-level Agent API — http://127.0.0.1:9334  (one round trip per action)
+#    Tab ids come from GET /tabs, e.g. "12:0".
+GET  /tabs                          -&gt; { tabs: [ { id, url, title } ] }
+POST /tabs               {url}       -&gt; open a new tab
+POST /tabs/{id}/navigate {url}       -&gt; navigate (resolves on load)
+POST /tabs/{id}/text                 -&gt; { title, url, text }   # clean readable text
+POST /tabs/{id}/axtree               -&gt; accessibility tree     # ground click targets
+POST /tabs/{id}/click    {selector}
+POST /tabs/{id}/type     {selector, text}
+POST /tabs/{id}/press    {key}       -&gt; e.g. "Enter"
+POST /tabs/{id}/screenshot           -&gt; { data: "&lt;base64 png&gt;" }   # works on background tabs
+POST /tabs/{id}/eval     {expression} -&gt; run JS, awaits promises
+
+# 3. Raw CDP — ws://127.0.0.1:9333   # point Playwright / Puppeteer here, no flags.
+
+# 4. MCP (recommended): register sdk/aether_mcp.py (stdio, stdlib-only) and your
+#    agent gets native tools — aether_tabs, aether_navigate, aether_read_text,
+#    aether_click, aether_type, aether_press, aether_screenshot, aether_eval.
+#    It auto-discovers the running browser via ~/.xplorer/gateway.json.
+
+# Agents drive tabs while Xplorer is in the background; hidden tabs stay live.
+
+# Quick check (shell):
+TOKEN=$(python3 -c "import json,os;print(json.load(open(os.path.expanduser('~/.xplorer/gateway.json')))['token'])")
+curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:9334/tabs
 </code></pre>
     </div>
 
@@ -367,6 +403,31 @@ Agent API  <span class="c-str">http://127.0.0.1:9334</span>   <span class="c-com
       // warm the HTTP cache so the first toggle plays immediately
       window.addEventListener('load', function () {
         [FWD, REV].forEach(function (u) { try { fetch(u).catch(function () {}); } catch (e) {} });
+      });
+    })();
+  </script>
+  <script>
+    // Agent codeblock: tab switching + copy-to-clipboard.
+    (function () {
+      var cb = document.getElementById('agent-codeblock');
+      if (!cb) return;
+      var tabs = cb.querySelectorAll('.codeblock__tab');
+      var panels = cb.querySelectorAll('.codeblock__panel');
+      tabs.forEach(function (t) {
+        t.addEventListener('click', function () {
+          var name = t.dataset.panel;
+          tabs.forEach(function (x) { x.classList.toggle('is-active', x === t); });
+          panels.forEach(function (p) { p.classList.toggle('is-active', p.dataset.panel === name); });
+        });
+      });
+      var copy = document.getElementById('agent-copy');
+      if (copy) copy.addEventListener('click', function () {
+        var active = cb.querySelector('.codeblock__panel.is-active code');
+        var text = active ? active.textContent : '';
+        navigator.clipboard.writeText(text).then(function () {
+          copy.textContent = 'Copied!';
+          setTimeout(function () { copy.textContent = 'Copy'; }, 1500);
+        }).catch(function () {});
       });
     })();
   </script>

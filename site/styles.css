@@ -401,7 +401,25 @@ html.theme-animating * {
   background: #14161d; border-bottom: 1px solid rgba(255,255,255,0.08);
 }
 .codeblock__name { margin-left: 12px; font: 500 13px "JetBrains Mono", monospace; color: #8a8f9c; }
+.codeblock__tabs { display: flex; gap: 4px; margin-left: 10px; }
+.codeblock__tab {
+  border: 0; background: transparent; color: #8a8f9c; cursor: pointer;
+  font: 500 12.5px "JetBrains Mono", monospace; padding: 4px 10px;
+  border-radius: 7px; white-space: nowrap;
+}
+.codeblock__tab:hover { color: #d7dcea; }
+.codeblock__tab.is-active { background: rgba(255, 255, 255, 0.08); color: #fff; }
+.codeblock__copy {
+  margin-left: auto; border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.04); color: #d7dcea; cursor: pointer;
+  font: 500 12px -apple-system, BlinkMacSystemFont, sans-serif;
+  padding: 5px 12px; border-radius: 7px;
+}
+.codeblock__copy:hover { border-color: rgba(255, 255, 255, 0.3); color: #fff; }
 .codeblock pre { margin: 0; padding: 22px 24px; overflow-x: auto; }
+.codeblock__panel { display: none; }
+.codeblock__panel.is-active { display: block; }
+.codeblock__panel[data-panel="docs"] { max-height: 440px; overflow-y: auto; }
 .codeblock code { font: 400 14px/1.7 "JetBrains Mono", monospace; color: #d7dcea; }
 .c-key { color: #e6e6e6; } .c-str { color: #cfcfcf; } .c-com { color: #7c8294; font-style: italic; }
 .c-fn { color: #e6e6e6; }
