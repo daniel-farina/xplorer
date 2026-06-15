@@ -100,6 +100,15 @@ h1, h2, h3 { line-height: 1.1; letter-spacing: -0.02em; margin: 0; }
   text-align: center;
 }
 .hero__inner { max-width: 820px; margin: 0 auto; }
+.hero__brand {
+  display: flex; flex-direction: column; align-items: center; gap: 14px;
+  margin-bottom: 34px;
+}
+.hero__logo { width: 112px; height: 112px; object-fit: contain; }
+.hero__brandname {
+  font-size: 30px; font-weight: 850; letter-spacing: -0.02em;
+}
+@media (max-width: 600px) { .hero__logo { width: 88px; height: 88px; } }
 .badge {
   display: inline-flex; align-items: center; gap: 9px;
   padding: 7px 15px; border-radius: 999px; font-size: 13.5px; font-weight: 600;
