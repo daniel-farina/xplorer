@@ -23,6 +23,23 @@ html.grok-build body.apps-page {
   color: var(--text-secondary);
 }
 
+.apps-hero-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.apps-hero-row > div:first-child {
+  flex: 1;
+  min-width: 220px;
+}
+
+.apps-hero-row .apps-btn {
+  flex-shrink: 0;
+  margin-top: 4px;
+}
+
 .apps-create {
   display: flex;
   flex-direction: column;

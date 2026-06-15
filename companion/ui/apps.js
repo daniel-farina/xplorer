@@ -14,6 +14,39 @@ let lastRenderSig = '';
 let statusFilter = 'all';
 const filterBar = $('#apps-filter-bar');
 
+// --- View routing: /apps shows the gallery; /apps/new shows only the form. ---
+const galleryPanel = $('#apps-gallery-panel');
+const createPanel = $('#apps-create-panel');
+const newAppBtn = $('#new-app-btn');
+const backToGalleryBtn = $('#back-to-gallery-btn');
+const appsTitle = $('#apps-title');
+const appsSubtitle = $('#apps-subtitle');
+
+function isNewView() {
+  return location.pathname.replace(/\/+$/, '') === '/apps/new';
+}
+
+// Toggle between gallery view (/apps) and the create-app form view (/apps/new).
+function applyView() {
+  const creating = isNewView();
+  createPanel?.classList.toggle('hidden', !creating);
+  galleryPanel?.classList.toggle('hidden', creating);
+  newAppBtn?.classList.toggle('hidden', creating);
+  backToGalleryBtn?.classList.toggle('hidden', !creating);
+  if (appsTitle) appsTitle.textContent = creating ? 'Create new app' : 'Apps';
+  if (appsSubtitle) {
+    appsSubtitle.textContent = creating
+      ? 'Describe an app for Grok to build, or import an existing app folder.'
+      : 'Build, import, and manage apps with Grok Build agents. Each app lives in its own folder with a dedicated conversation.';
+  }
+  if (creating) $('#create-prompt')?.focus();
+}
+
+function goToView(path) {
+  if (location.pathname !== path) history.pushState({}, '', path);
+  applyView();
+}
+
 function showAppsToast(message, isError = false) {
   let el = document.getElementById('apps-toast');
   if (!el) {
@@ -133,10 +166,13 @@ function renderApps(data) {
   const apps = data.apps || [];
   lastApps = apps;
   const visible = appsForFilter(apps);
-  grid.innerHTML = '';
+  // NOTE: do NOT clear the grid here. Clearing before the signature guard
+  // (below) would destroy the live <iframe> thumbnails every poll and make
+  // grid.childElementCount 0, defeating the guard. The grid is only cleared
+  // right before an actual rebuild (after the guard passes).
   emptyEl.classList.toggle('hidden', visible.length > 0);
   emptyEl.textContent = statusFilter === 'all'
-    ? 'No apps yet. Create one above.'
+    ? 'No apps yet. Click “Create new app” to build one.'
     : `No ${statusFilter} apps.`;
   filterBar?.querySelectorAll('[data-filter]').forEach((btn) => {
     btn.classList.toggle('active', btn.dataset.filter === statusFilter);
@@ -145,8 +181,13 @@ function renderApps(data) {
   // Skip the grid rebuild when nothing visible changed — this preserves the
   // live <iframe> thumbnails (rebuilding innerHTML every 2s would reload them).
   // Never rebuild while a ⋯ menu is open (it would close it).
+  // NOTE: runtime_alive is a live process-health check that legitimately flaps
+  // False/True between polls (the per-app runtime spins up when the thumbnail
+  // loads /run/<id>/, then reaps when idle). It must NOT be in the rebuild
+  // signature or it recreates the <iframe> thumbnails every poll (the "preview
+  // refreshes every second" bug). Its small UI bits are updated in place below.
   const sig = statusFilter + '|' + visible.map((a) =>
-    `${a.id}:${a.status}:${a.runtime_ready ? 1 : 0}:${a.runtime_alive ? 1 : 0}:${a.exportable ? 1 : 0}:${a.name || ''}`).join(',');
+    `${a.id}:${a.status}:${a.runtime_ready ? 1 : 0}:${a.exportable ? 1 : 0}:${a.name || ''}`).join(',');
   if (grid.querySelector('.app-menu-pop:not(.hidden)')) return;
   if (sig === lastRenderSig && grid.childElementCount) return;
   lastRenderSig = sig;
@@ -363,6 +404,7 @@ createBtn.onclick = async () => {
       openAppBuild(data.app.id, prompt);
       return;
     }
+    goToView('/apps');
     await refresh();
   } catch (e) {
     alert(e.message);
@@ -386,6 +428,7 @@ importBtn.onclick = async () => {
     if (!r.ok) throw new Error(data.error || r.statusText);
     $('#import-path').value = '';
     $('#import-name').value = '';
+    goToView('/apps');
     await refresh();
   } catch (e) {
     alert(e.message);
@@ -393,6 +436,10 @@ importBtn.onclick = async () => {
     importBtn.disabled = false;
   }
 };
+
+newAppBtn?.addEventListener('click', () => goToView('/apps/new'));
+backToGalleryBtn?.addEventListener('click', () => goToView('/apps'));
+window.addEventListener('popstate', applyView);
 
 selectAllCb?.addEventListener('change', () => {
   const on = !!selectAllCb.checked;
@@ -505,5 +552,6 @@ document.addEventListener('click', (e) => {
 
 mountGrokToolbar({ pageHome: 'build' });
 startThemeWatcher();
+applyView();
 refresh();
 setInterval(refresh, 2000);

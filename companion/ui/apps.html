@@ -13,39 +13,47 @@
   <div id="grok-toolbar-mount"></div>
   <main class="apps-main">
     <section class="apps-hero">
-      <h1>Apps</h1>
-      <p>Build, import, and manage apps with Grok Build agents. Each app lives in its own folder with a dedicated conversation.</p>
+      <div class="apps-hero-row">
+        <div>
+          <h1 id="apps-title">Apps</h1>
+          <p id="apps-subtitle">Build, import, and manage apps with Grok Build agents. Each app lives in its own folder with a dedicated conversation.</p>
+        </div>
+        <button type="button" class="apps-btn primary" id="new-app-btn">Create new app</button>
+        <button type="button" class="apps-btn" id="back-to-gallery-btn">← Back to gallery</button>
+      </div>
     </section>
-    <section class="apps-create">
+    <section class="apps-create" id="apps-create-panel">
       <textarea id="create-prompt" placeholder="Describe an app to build or changes to make…"></textarea>
       <div class="apps-create-row">
         <input id="create-name" type="text" placeholder="App name (optional)">
         <button type="button" class="apps-btn primary" id="create-btn">Create app</button>
       </div>
+      <section class="apps-import">
+        <input id="import-path" type="text" placeholder="Import existing app folder path…">
+        <input id="import-name" type="text" placeholder="Display name (optional)">
+        <button type="button" class="apps-btn" id="import-btn">Import</button>
+      </section>
     </section>
-    <section class="apps-import">
-      <input id="import-path" type="text" placeholder="Import existing app folder path…">
-      <input id="import-name" type="text" placeholder="Display name (optional)">
-      <button type="button" class="apps-btn" id="import-btn">Import</button>
-    </section>
-    <div id="apps-filter-bar" class="apps-filter-bar">
-      <button type="button" class="apps-filter active" data-filter="all">All</button>
-      <button type="button" class="apps-filter" data-filter="ready">Ready</button>
-      <button type="button" class="apps-filter" data-filter="building">Building</button>
-      <button type="button" class="apps-filter" data-filter="idle">Idle</button>
-      <button type="button" class="apps-filter" data-filter="error">Error</button>
+    <div id="apps-gallery-panel">
+      <div id="apps-filter-bar" class="apps-filter-bar">
+        <button type="button" class="apps-filter active" data-filter="all">All</button>
+        <button type="button" class="apps-filter" data-filter="ready">Ready</button>
+        <button type="button" class="apps-filter" data-filter="building">Building</button>
+        <button type="button" class="apps-filter" data-filter="idle">Idle</button>
+        <button type="button" class="apps-filter" data-filter="error">Error</button>
+      </div>
+      <div id="apps-bulk-bar" class="apps-bulk-bar hidden">
+        <label class="apps-bulk-select-all">
+          <input type="checkbox" id="apps-select-all">
+          <span>Select all</span>
+        </label>
+        <button type="button" class="apps-btn" id="export-selected-btn" disabled>Export selected</button>
+        <button type="button" class="apps-btn" id="restart-selected-btn" disabled>Restart selected</button>
+        <button type="button" class="apps-btn danger" id="delete-selected-btn" disabled>Delete selected</button>
+      </div>
+      <section id="apps-grid" class="apps-grid"></section>
+      <p id="apps-empty" class="apps-empty hidden">No apps yet.</p>
     </div>
-    <div id="apps-bulk-bar" class="apps-bulk-bar hidden">
-      <label class="apps-bulk-select-all">
-        <input type="checkbox" id="apps-select-all">
-        <span>Select all</span>
-      </label>
-      <button type="button" class="apps-btn" id="export-selected-btn" disabled>Export selected</button>
-      <button type="button" class="apps-btn" id="restart-selected-btn" disabled>Restart selected</button>
-      <button type="button" class="apps-btn danger" id="delete-selected-btn" disabled>Delete selected</button>
-    </div>
-    <section id="apps-grid" class="apps-grid"></section>
-    <p id="apps-empty" class="apps-empty hidden">No apps yet. Create one above.</p>
   </main>
   <script src="/common.js"></script>
   <script src="/apps.js"></script>

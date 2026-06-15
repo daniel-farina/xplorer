@@ -480,3 +480,45 @@ reproduced live).
 | gallery: live iframe thumbnail | .app-thumb-frame renders ✓ |
 | gallery: Build + Preview + ⋯ menu (6 items) | actionCount=3, menu opens ✓ |
 | builder: ↻ refresh + ⋯ overflow (4 items) + Gallery | compact toolbar ✓ |
+
+## Loop 20 (2026-06-15)
+
+### feat(native): Grok default search + About Xplorer; fix apps preview flicker; apps /apps/new
+Native search/identity rebrand (designed by a background workflow) + apps polish.
+
+- **Grok is the default search engine** (`patches/apply_integration.py` → `prepopulated_engines.json`):
+  repointed the prepopulated google fallback entry (id 1) to a new gateway endpoint
+  `GET /omnibox?q={searchTerms}` (`grok_native.cc`) that url-decodes the query, stores it as a
+  grok-web pending prompt, and **302s to `grok.com/#xplorer_grok=<id>`** where the injector
+  auto-submits — same handoff as the search page. Bumped `kCurrentDataVersion` so existing
+  profiles re-merge (verified: profile keyword DB now `Grok → /omnibox`). suggest_url emptied
+  (no more Google autocomplete). Pressing Enter in the address bar now searches Grok.
+- **Omnibox placeholder** "Search Google or type a URL" → "Search **Grok**…" automatically:
+  it derives from the default engine's short_name, now "Grok" (no separate string edit).
+- **About page** (`settings_chromium_strings.grdp` + `version_updater_mac.mm`): "About Chromium"
+  → "About **Xplorer**", "Get help with Chromium" → "…Xplorer", and the failing Google
+  update check ("error code 0") replaced with **"Xplorer is up to date"** (no Google updater
+  on this build; live GitHub version deferred until the repo is public). Marked the now-unused
+  `UpdateStatus` helper `[[maybe_unused]]`.
+- **Apps preview flicker FIXED** (`apps.js`): the render signature included `runtime_alive`, a
+  process-health flag that flaps every poll (the thumbnail loading /run/<id> spins the runtime
+  up, then it reaps) — so the grid rebuilt every ~2s and recreated/reloaded the iframes.
+  Dropped `runtime_alive` from the signature; iframe is now the same element across polls.
+- **Apps gallery default + /apps/new**: the create form is hidden behind a "Create new app"
+  button; `/apps` shows only the gallery, `/apps/new` shows the form (native route +
+  client-side `applyView`); plus apps style cleanup.
+- **Deferred:** the AI "Grok" omnibox button passing the typed query (it already routes to
+  Grok search; carrying the text means modifying already-applied patches — follow-up).
+- **Test:** native rebuild (apply→build→reinstall, clean relaunch). Verified LIVE: `/omnibox`
+  302 + decode ("who is elon?"), profile DB default engine = Grok, About page = "About Xplorer"
+  / "Xplorer is up to date" (no error code), apps iframe preserved across polls, gallery form
+  hidden + Create button.
+
+**Loop 20 test summary**
+| Check | Result |
+|-------|--------|
+| GET /omnibox 302 → grok.com + decode | who+is+elon%3F → "who is elon?" ✓ |
+| default search engine = Grok (profile DB) | Grok → /omnibox, prepopulate_id 1 ✓ |
+| About page rebrand + no update error | About Xplorer / up to date, no "error code" ✓ |
+| apps preview no longer refreshing | iframe same element across polls ✓ |
+| apps gallery default + Create-new-app/​/apps/new | form hidden, gallery shown ✓ |
