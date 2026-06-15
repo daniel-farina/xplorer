@@ -15,17 +15,25 @@
   <meta property="og:type" content="website" />
 
   <link rel="icon" type="image/svg+xml" href="assets/logo.svg" />
+  <link rel="icon" type="image/png" sizes="32x32" href="assets/icon-32.png" media="(prefers-color-scheme: light)" />
+  <link rel="icon" type="image/png" sizes="32x32" href="assets/icon-32-dark.png" media="(prefers-color-scheme: dark)" />
+  <link rel="icon" type="image/png" sizes="16x16" href="assets/icon-16.png" media="(prefers-color-scheme: light)" />
+  <link rel="icon" type="image/png" sizes="16x16" href="assets/icon-16-dark.png" media="(prefers-color-scheme: dark)" />
+  <link rel="apple-touch-icon" sizes="180x180" href="assets/apple-touch-icon.png" />
+  <link rel="manifest" href="site.webmanifest" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <!-- Earth backdrop, fixed to the top, fading into the page -->
+  <!-- Landscape backdrop (static per theme) + the theme-transition video -->
   <div class="bg-space" aria-hidden="true"></div>
+  <video id="bg-anim" class="bg-anim" muted playsinline preload="auto" aria-hidden="true"></video>
 
   <!-- Nav -->
   <header class="nav">
+    <div class="nav__inner">
     <a class="nav__brand" href="#top" aria-label="Xplorer home">
       <svg class="nav__x" viewBox="0 0 32 32" aria-hidden="true"><path d="M9.5 9.5 L22.5 22.5 M22.5 9.5 L9.5 22.5" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round"/></svg>
       <span>Xplorer</span>
@@ -45,6 +53,7 @@
         <svg class="ico ico--sun" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M12 17a5 5 0 1 0 0-10 5 5 0 0 0 0 10zm0-13a1 1 0 0 1 1 1v1a1 1 0 1 1-2 0V5a1 1 0 0 1 1-1zm0 14a1 1 0 0 1 1 1v1a1 1 0 1 1-2 0v-1a1 1 0 0 1 1-1zM4 11h1a1 1 0 1 1 0 2H4a1 1 0 1 1 0-2zm15 0h1a1 1 0 1 1 0 2h-1a1 1 0 1 1 0-2zM6.3 5.3l.7.7A1 1 0 1 1 5.6 7.4l-.7-.7a1 1 0 0 1 1.4-1.4zm11 11l.7.7a1 1 0 0 1-1.4 1.4l-.7-.7a1 1 0 0 1 1.4-1.4zM17.7 5.3a1 1 0 0 1 0 1.4l-.7.7A1 1 0 1 1 15.6 6l.7-.7a1 1 0 0 1 1.4 0zM6.3 16.3a1 1 0 0 1 1.4 1.4l-.7.7A1 1 0 0 1 5.6 17l.7-.7z"/></svg>
       </button>
     </nav>
+    </div>
   </header>
 
   <a id="top"></a>
@@ -52,10 +61,6 @@
   <!-- Hero -->
   <section class="hero">
     <div class="hero__inner">
-      <div class="badge">
-        <span class="badge__dot"></span>
-        Open source · Grok-native
-      </div>
       <h1 class="hero__title">
         The browser with<br />
         <span class="grad">Grok in every tab.</span>
@@ -73,7 +78,6 @@
           View on GitHub
         </a>
       </div>
-      <p class="hero__note">Free &amp; open source</p>
     </div>
 
     <!-- Hero screenshot placeholder -->
@@ -273,12 +277,57 @@ Agent API  <span class="c-str">http://127.0.0.1:9334</span>   <span class="c-com
   </footer>
 
   <script>
-    document.getElementById('theme-toggle').addEventListener('click', function () {
-      var r = document.documentElement;
-      var next = r.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
-      r.setAttribute('data-theme', next);
-      try { localStorage.setItem('xplorer-theme', next); } catch (e) {}
-    });
+    (function () {
+      var html = document.documentElement;
+      var btn = document.getElementById('theme-toggle');
+      var video = document.getElementById('bg-anim');
+      var FWD = 'assets/anim_to_dark.mp4';   // light -> dark
+      var REV = 'assets/anim_to_light.mp4';  // dark -> light
+      var animating = false;
+
+      function persist(t) { try { localStorage.setItem('xplorer-theme', t); } catch (e) {} }
+      function instant(next) { html.setAttribute('data-theme', next); persist(next); }
+
+      // hold the video's last frame, swap the static theme under it, then fade it out
+      function settle(next) {
+        html.classList.add('theme-animating');     // smooth cross-fade of page chrome
+        html.setAttribute('data-theme', next);
+        persist(next);
+        setTimeout(function () { video.classList.remove('is-on'); }, 20);
+        setTimeout(function () {
+          try { video.pause(); video.removeAttribute('src'); video.load(); } catch (e) {}
+          html.classList.remove('theme-animating');
+          animating = false;
+        }, 580);
+      }
+
+      function toggle() {
+        if (animating) return;
+        var cur = html.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
+        var next = cur === 'dark' ? 'light' : 'dark';
+        var reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+        if (!video || reduce) { instant(next); return; }
+        animating = true;
+        try {
+          video.src = next === 'dark' ? FWD : REV;
+          video.currentTime = 0;
+          video.classList.add('is-on');
+          var done = false;
+          var finish = function () { if (done) return; done = true; clearTimeout(guard); settle(next); };
+          var guard = setTimeout(finish, 6000);               // safety net
+          video.addEventListener('ended', finish, { once: true });
+          var p = video.play();
+          if (p && p.catch) p.catch(function () { finish(); }); // autoplay blocked -> just settle
+        } catch (e) { animating = false; instant(next); }
+      }
+
+      if (btn) btn.addEventListener('click', toggle);
+
+      // warm the HTTP cache so the first toggle plays immediately
+      window.addEventListener('load', function () {
+        [FWD, REV].forEach(function (u) { try { fetch(u).catch(function () {}); } catch (e) {} });
+      });
+    })();
   </script>
 </body>
 </html>

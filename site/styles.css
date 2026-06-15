@@ -61,9 +61,9 @@
   --pill-bg: #ffffff;
   --pill-fg: #000000;
 
-  /* drop a friendlier dark hero into assets/darkmode.jpg to enable */
+  /* dark hero = the last frame of the transition video (assets/darkmode.jpg) */
   --hero-img: url("assets/darkmode.jpg");
-  --hero-filter: brightness(0.82);
+  --hero-filter: none;
   --logo-drop: rgba(0, 0, 0, 0.55);
 
   --wm-grad: linear-gradient(180deg, #ffffff 0%, #cfcfcf 60%, #a8a8a8 100%);
@@ -77,7 +77,7 @@
 
 * { box-sizing: border-box; }
 
-html { scroll-behavior: smooth; }
+html { scroll-behavior: smooth; scroll-padding-top: 72px; }
 
 body {
   margin: 0;
@@ -115,11 +115,34 @@ h1, h2, h3 { line-height: 1.07; letter-spacing: -0.022em; margin: 0; }
   .bg-space { height: 70vh; background-size: 135% auto; }
 }
 
+/* theme-transition video — sits exactly over .bg-space, matched framing + fade */
+.bg-anim {
+  position: fixed; top: 0; left: 0; right: 0;
+  height: 100vh; z-index: -1; pointer-events: none;
+  object-fit: cover; object-position: top center;
+  opacity: 0; transition: opacity .4s ease;
+  -webkit-mask-image: linear-gradient(to bottom,
+    #000 0%, #000 42%, rgba(0,0,0,0.55) 68%, rgba(0,0,0,0) 94%);
+  mask-image: linear-gradient(to bottom,
+    #000 0%, #000 42%, rgba(0,0,0,0.55) 68%, rgba(0,0,0,0) 94%);
+}
+.bg-anim.is-on { opacity: 1; }
+@media (max-aspect-ratio: 3/4) { .bg-anim { height: 70vh; } }
+
+/* smooth cross-fade of page chrome while the backdrop animates between themes */
+html.theme-animating,
+html.theme-animating * {
+  transition: background-color .5s ease, border-color .5s ease, color .5s ease,
+    fill .5s ease, box-shadow .5s ease !important;
+}
+
 /* ---------- Nav ---------- */
 .nav {
-  position: sticky; top: 0; z-index: 50;
+  position: fixed; top: 0; left: 0; right: 0; z-index: 50;
+}
+.nav__inner {
   display: flex; align-items: center; justify-content: space-between;
-  max-width: var(--maxw); margin: 0 auto; padding: 16px 24px;
+  max-width: var(--maxw); margin: 0 auto; padding: 14px 24px;
 }
 .nav__brand {
   display: inline-flex; align-items: center; gap: 8px;

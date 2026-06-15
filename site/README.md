@@ -19,25 +19,39 @@ automatically (until then, styled placeholders show):
 
 | File | Where it shows |
 |------|----------------|
-| `assets/logo.png` | the logo — hero (above the wordmark) + footer + favicon (square) |
-| `assets/lightmode.jpg` | **light-mode hero backdrop** (landscape, 16:9) — already added |
-| `assets/darkmode.jpg` | **dark-mode hero backdrop** (16:9) — _optional, drop in to enable_ |
 | `assets/screenshot-hero.png` | big hero screenshot (16:9) |
 | `assets/screenshot-build.png` | "Build apps by describing them" (builder + live preview) |
 | `assets/screenshot-grokit.png` | "The Grok it button" (FAB menu on a page) |
 | `assets/screenshot-toolbar.png` | "All of Grok in one toolbar" |
 
-## Theme
+Until you drop these in, styled placeholders show in their place.
 
-The site is **light by default** (clean, Apple-style) and ships a **dark mode**
-behind the sun/moon toggle in the nav (preference saved to `localStorage`).
-Light mode uses `assets/lightmode.jpg` as the hero backdrop; dark mode looks for
-`assets/darkmode.jpg` — until you add one, dark mode just shows the dark
-background. All colors are driven by CSS variables in `:root` /
-`:root[data-theme="dark"]` at the top of `styles.css`.
+## Logo & icons
 
-> `assets/logo.png` currently holds a temporary placeholder icon — replace it
-> with the real logo when ready.
+The logo is a clean **X** mark in `assets/logo.svg` (theme-aware — dark on light
+UI, light on dark). The full icon set is generated from it:
+
+- `icon-16/32/48.png` + `icon-16/32-dark.png` — adaptive browser-tab favicons
+- `apple-touch-icon.png` (180) — iOS home screen
+- `icon-192/512.png` + `icon-maskable-192/512.png` — PWA / Android (`site.webmanifest`)
+
+To regenerate after editing `logo.svg`, re-run the headless-Chrome render
+(see commit history) — no design tool needed.
+
+## Theme & the dark-mode transition
+
+The site is **light by default** (clean, Apple-style) with a **dark mode** behind
+the sun/moon toggle (saved to `localStorage`). Backdrops:
+
+- Light: `assets/lightmode.jpg`
+- Dark: `assets/darkmode.jpg` — the **last frame** of the transition video
+
+Toggling **plays a video**: `assets/anim_to_dark.mp4` (day→night) on the way to
+dark, `assets/anim_to_light.mp4` (night→day) on the way back, then settles on the
+matching static image. Refreshing loads the current mode's static image with no
+animation. Source clip: `assets/anim_dark_mode.mp4` (re-encode the two directional
+clips from it with ffmpeg if you swap it). All colors are CSS variables in
+`:root` / `:root[data-theme="dark"]` at the top of `styles.css`.
 
 ## Deploying (GitHub Pages)
 
