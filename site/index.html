@@ -431,5 +431,79 @@ curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:9334/tabs
       });
     })();
   </script>
+  <script>
+    // Hero wordmark: persist tuned alignment, animate in, and (with ?align) an
+    // interactive alignment tool that reports coordinates.
+    (function () {
+      var wm = document.querySelector('.hero__wordmark');
+      if (!wm) return;
+      var KEY = 'xplorer-wm';
+      // {var, label, min, max, step, unit, def}  (em values stored as N*0.01em)
+      var SPEC = [
+        { k: '--wm-gap',       l: 'Gap',        min: -30, max: 40, step: 1,   u: 'px', d: -6 },
+        { k: '--wm-x-size',    l: 'X size',     min: 24,  max: 96, step: 1,   u: 'px', d: 58 },
+        { k: '--wm-x-dx',      l: 'X ← →',      min: -40, max: 40, step: 1,   u: 'px', d: 0 },
+        { k: '--wm-x-dy',      l: 'X ↑ ↓',      min: -40, max: 40, step: 1,   u: 'px', d: 0 },
+        { k: '--wm-word-size', l: 'word size',  min: 24,  max: 96, step: 1,   u: 'px', d: 58 },
+        { k: '--wm-word-dx',   l: 'word ← →',   min: -40, max: 40, step: 1,   u: 'px', d: 0 },
+        { k: '--wm-word-dy',   l: 'word ↑ ↓',   min: -40, max: 40, step: 1,   u: 'px', d: 0 },
+        { k: '--wm-letter',    l: 'tracking',   min: -10, max: 10, step: 0.5, u: 'em', d: -1, s: 0.01 },
+      ];
+      var toVal = function (s, n) { return (s.s ? n * s.s : n) + s.u; };
+
+      // Apply persisted values so reloads remember the chosen alignment.
+      var saved = {};
+      try { saved = JSON.parse(localStorage.getItem(KEY) || '{}'); } catch (e) {}
+      SPEC.forEach(function (s) { if (saved[s.k] != null) wm.style.setProperty(s.k, toVal(s, saved[s.k])); });
+
+      // Animate the wordmark in on load. setTimeout is a fallback so it never
+      // stays invisible if rAF is throttled (e.g. a backgrounded tab).
+      var reveal = function () { wm.classList.add('wm-in'); };
+      requestAnimationFrame(function () { requestAnimationFrame(reveal); });
+      setTimeout(reveal, 150);
+
+      // Tool: only when ?align (or #align) is present.
+      if (!/align/.test(location.search + location.hash)) return;
+      var panel = document.createElement('div');
+      panel.className = 'wm-tool';
+      panel.innerHTML = '<h4>Wordmark alignment</h4>';
+      var state = {};
+      SPEC.forEach(function (s) {
+        var v = saved[s.k] != null ? saved[s.k] : s.d;
+        state[s.k] = v;
+        var row = document.createElement('div');
+        row.className = 'wm-tool__row';
+        row.innerHTML = '<label>' + s.l + '</label>' +
+          '<input type="range" min="' + s.min + '" max="' + s.max + '" step="' + s.step + '" value="' + v + '">' +
+          '<output>' + v + '</output>';
+        var input = row.querySelector('input'), out = row.querySelector('output');
+        input.addEventListener('input', function () {
+          var n = parseFloat(input.value);
+          state[s.k] = n; out.textContent = n;
+          wm.style.setProperty(s.k, toVal(s, n));
+          try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {}
+        });
+        panel.appendChild(row);
+      });
+      var btns = document.createElement('div');
+      btns.className = 'wm-tool__btns';
+      btns.innerHTML = '<button data-act="copy">Copy CSS</button>' +
+        '<button data-act="reset">Reset</button>';
+      panel.appendChild(btns);
+      document.body.appendChild(panel);
+      btns.querySelector('[data-act="copy"]').addEventListener('click', function (e) {
+        var css = '.hero__wordmark {\n' + SPEC.map(function (s) {
+          return '  ' + s.k + ': ' + toVal(s, state[s.k]) + ';';
+        }).join('\n') + '\n}';
+        navigator.clipboard.writeText(css).then(function () {
+          e.target.textContent = 'Copied!'; setTimeout(function () { e.target.textContent = 'Copy CSS'; }, 1500);
+        }).catch(function () {});
+      });
+      btns.querySelector('[data-act="reset"]').addEventListener('click', function () {
+        try { localStorage.removeItem(KEY); } catch (e) {}
+        location.reload();
+      });
+    })();
+  </script>
 </body>
 </html>
