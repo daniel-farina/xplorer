@@ -237,7 +237,19 @@ html.theme-animating * {
 .hero__note { margin-top: 16px; font-size: 13.5px; color: var(--muted-2); }
 
 /* ---------- Screenshot frame ---------- */
-.hero__shot { max-width: 980px; margin: 60px auto 0; }
+.hero__shot { max-width: 980px; margin: 60px auto 0; position: relative; }
+/* The screenshot already includes its own browser window — show it directly
+   (no fake macOS frame), with light/dark variants swapped by theme. */
+.hero__shot-img {
+  width: 100%;
+  height: auto;
+  display: block;
+  border-radius: 16px;
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.45);
+}
+.hero__shot-img--dark { display: none; }
+:root[data-theme="dark"] .hero__shot-img--light { display: none; }
+:root[data-theme="dark"] .hero__shot-img--dark { display: block; }
 .shot-frame {
   border: 1px solid var(--line); border-radius: 18px; overflow: hidden;
   background: var(--panel); box-shadow: var(--shadow); position: relative;

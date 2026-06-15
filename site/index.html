@@ -85,17 +85,10 @@
       </div>
     </div>
 
-    <!-- Hero screenshot placeholder -->
+    <!-- Hero screenshot (already includes its own window chrome; light/dark variants) -->
     <div class="hero__shot">
-      <div class="shot-frame">
-        <div class="shot-frame__bar">
-          <span class="dot dot--r"></span><span class="dot dot--y"></span><span class="dot dot--g"></span>
-          <div class="shot-frame__url">xplorer://welcome</div>
-        </div>
-        <div class="shot-frame__body placeholder" data-label="Drop hero screenshot here — assets/screenshot-hero.png">
-          <img src="assets/screenshot-hero.png" alt="Xplorer browser screenshot" onerror="this.parentElement.classList.add('is-empty');this.remove();" />
-        </div>
-      </div>
+      <img class="hero__shot-img hero__shot-img--light" src="assets/screenshot-hero-light.png" alt="Xplorer browser showing Grok Web search" />
+      <img class="hero__shot-img hero__shot-img--dark" src="assets/screenshot-hero-dark.png" alt="" aria-hidden="true" />
     </div>
   </section>
 
