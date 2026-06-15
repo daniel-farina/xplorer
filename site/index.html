@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Xplorer — The Grok-Native Browser</title>
+  <meta name="description" content="Xplorer is an open-source browser built from the ground up to be Grok-native. AI lives in the browser process, not in a tab." />
+
+  <!-- Open Graph -->
+  <meta property="og:title" content="Xplorer — The Grok-Native Browser" />
+  <meta property="og:description" content="An open-source browser with AI baked into its core. Grok-native, agent-ready, fully yours." />
+  <meta property="og:type" content="website" />
+
+  <link rel="icon" type="image/png" href="assets/logo.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <!-- Ambient background -->
+  <div class="bg-grid" aria-hidden="true"></div>
+  <div class="bg-glow bg-glow--1" aria-hidden="true"></div>
+  <div class="bg-glow bg-glow--2" aria-hidden="true"></div>
+
+  <!-- Nav -->
+  <header class="nav">
+    <a class="nav__brand" href="#top">
+      <!-- Replace assets/logo.png with your logo -->
+      <img src="assets/logo.png" alt="Xplorer logo" class="nav__logo" onerror="this.style.display='none'" />
+      <span class="nav__name">Xplorer</span>
+    </a>
+    <nav class="nav__links">
+      <a href="#features">Features</a>
+      <a href="#showcase">Showcase</a>
+      <a href="#agents">For Agents</a>
+      <a href="#download">Download</a>
+      <a class="nav__gh" href="https://github.com/daniel-farina/xplorer" target="_blank" rel="noopener">
+        <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"></path></svg>
+        <span>Star</span>
+      </a>
+    </nav>
+  </header>
+
+  <a id="top"></a>
+
+  <!-- Hero -->
+  <section class="hero">
+    <div class="hero__inner">
+      <div class="badge">
+        <span class="badge__dot"></span>
+        Open source · Grok-native
+      </div>
+      <h1 class="hero__title">
+        The browser where<br />
+        <span class="grad">Grok lives natively.</span>
+      </h1>
+      <p class="hero__sub">
+        Xplorer is an open-source web browser with AI baked into its core — not bolted onto a tab.
+        Ask, automate, and explore the web with Grok woven directly into the browser process.
+      </p>
+      <div class="hero__cta">
+        <a class="btn btn--primary" href="#download">
+          Download Xplorer
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M12 16l-5-5h3V4h4v7h3l-5 5zm-7 2h14v2H5v-2z"/></svg>
+        </a>
+        <a class="btn btn--ghost" href="https://github.com/daniel-farina/xplorer" target="_blank" rel="noopener">
+          View on GitHub
+        </a>
+      </div>
+      <p class="hero__note">Free &amp; open source · macOS, Windows &amp; Linux</p>
+    </div>
+
+    <!-- Hero screenshot placeholder -->
+    <div class="hero__shot">
+      <div class="shot-frame">
+        <div class="shot-frame__bar">
+          <span class="dot dot--r"></span><span class="dot dot--y"></span><span class="dot dot--g"></span>
+          <div class="shot-frame__url">xplorer://welcome</div>
+        </div>
+        <div class="shot-frame__body placeholder" data-label="Drop hero screenshot here — assets/screenshot-hero.png">
+          <img src="assets/screenshot-hero.png" alt="Xplorer browser screenshot" onerror="this.parentElement.classList.add('is-empty');this.remove();" />
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Logo cloud / trust strip -->
+  <section class="strip">
+    <p>Built on a real Chromium-class engine — full web compatibility, real sandbox, real extensions.</p>
+  </section>
+
+  <!-- Features -->
+  <section id="features" class="section">
+    <div class="section__head">
+      <span class="eyebrow">Why Xplorer</span>
+      <h2>A browser that thinks with you.</h2>
+      <p>Most "AI browsers" are a chat box in a sidebar. Xplorer puts Grok where it can actually help — at the core of how you browse.</p>
+    </div>
+
+    <div class="grid">
+      <article class="card">
+        <div class="card__icon">✦</div>
+        <h3>Grok, natively</h3>
+        <p>Grok is wired into the browser itself. Summarize any page, ask about what you're reading, or rewrite a draft — without copy-pasting into another app.</p>
+      </article>
+      <article class="card">
+        <div class="card__icon">⚡</div>
+        <h3>Agent-ready core</h3>
+        <p>A first-class agent gateway lives in the browser process. Automation isn't a hidden debug mode — agents are first-class users of the web.</p>
+      </article>
+      <article class="card">
+        <div class="card__icon">◎</div>
+        <h3>Full web, no compromise</h3>
+        <p>Built on the same engine that powers the modern web. Every site works, every extension runs, the sandbox is real.</p>
+      </article>
+      <article class="card">
+        <div class="card__icon">⌘</div>
+        <h3>Ask anything, anywhere</h3>
+        <p>A single shortcut summons Grok over the page you're on. Context-aware answers grounded in what's actually on screen.</p>
+      </article>
+      <article class="card">
+        <div class="card__icon">⟲</div>
+        <h3>Automate the boring</h3>
+        <p>Fill forms, gather data, organize tabs, and run multi-step tasks. Tell Grok the goal; let Xplorer do the clicking.</p>
+      </article>
+      <article class="card">
+        <div class="card__icon">⚙</div>
+        <h3>Open &amp; yours</h3>
+        <p>Fully open source. Inspect it, fork it, self-host the AI layer. No telemetry you didn't ask for, no lock-in.</p>
+      </article>
+    </div>
+  </section>
+
+  <!-- Showcase -->
+  <section id="showcase" class="section section--alt">
+    <div class="section__head">
+      <span class="eyebrow">Showcase</span>
+      <h2>See it in motion.</h2>
+      <p>A few looks at Xplorer doing its thing. (Swap these placeholders for real screenshots.)</p>
+    </div>
+
+    <div class="showcase">
+      <div class="showcase__row">
+        <div class="showcase__text">
+          <h3>Grok in the sidebar</h3>
+          <p>Pull up Grok beside any page. It reads what you read and answers in context — research, code, shopping, anything.</p>
+        </div>
+        <div class="showcase__shot placeholder" data-label="assets/screenshot-sidebar.png">
+          <img src="assets/screenshot-sidebar.png" alt="Grok sidebar" onerror="this.parentElement.classList.add('is-empty');this.remove();" />
+        </div>
+      </div>
+
+      <div class="showcase__row showcase__row--reverse">
+        <div class="showcase__text">
+          <h3>One-shortcut command bar</h3>
+          <p>Hit the hotkey, type intent, hit enter. Navigate, search, summarize, or kick off an automation — all from one place.</p>
+        </div>
+        <div class="showcase__shot placeholder" data-label="assets/screenshot-command.png">
+          <img src="assets/screenshot-command.png" alt="Command bar" onerror="this.parentElement.classList.add('is-empty');this.remove();" />
+        </div>
+      </div>
+
+      <div class="showcase__row">
+        <div class="showcase__text">
+          <h3>Agents that drive the web</h3>
+          <p>Watch an agent open tabs, extract clean text, and act on pages — first-class, no fragile screen-scraping.</p>
+        </div>
+        <div class="showcase__shot placeholder" data-label="assets/screenshot-agents.png">
+          <img src="assets/screenshot-agents.png" alt="Agents driving the web" onerror="this.parentElement.classList.add('is-empty');this.remove();" />
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- For agents / developers -->
+  <section id="agents" class="section">
+    <div class="section__head">
+      <span class="eyebrow">For developers &amp; agents</span>
+      <h2>An API the agent layer deserves.</h2>
+      <p>Xplorer exposes fast, high-level primitives over a local gateway — plus raw CDP for everything you already built.</p>
+    </div>
+
+    <div class="codeblock">
+      <div class="codeblock__bar">
+        <span class="dot dot--r"></span><span class="dot dot--y"></span><span class="dot dot--g"></span>
+        <span class="codeblock__name">connect.py</span>
+      </div>
+      <pre><code><span class="c-key">from</span> xplorer_sdk <span class="c-key">import</span> Browser
+
+b = Browser()                  <span class="c-com"># local gateway, token-authed</span>
+page = b.new_tab(<span class="c-str">"https://example.com"</span>)
+
+<span class="c-fn">print</span>(page.text())             <span class="c-com"># clean extracted text, one round trip</span>
+page.click(<span class="c-str">"a#more"</span>)
+tree = page.axtree()           <span class="c-com"># accessibility tree for grounding</span>
+</code></pre>
+    </div>
+
+    <div class="feat-row">
+      <div class="feat-row__item"><strong>Agent API</strong><span>navigate · text · click · type · screenshot · tabs</span></div>
+      <div class="feat-row__item"><strong>Raw CDP</strong><span>Playwright &amp; Puppeteer compatible</span></div>
+      <div class="feat-row__item"><strong>Local &amp; private</strong><span>runs on 127.0.0.1, token-protected</span></div>
+    </div>
+  </section>
+
+  <!-- Download / CTA -->
+  <section id="download" class="cta">
+    <div class="cta__inner">
+      <h2>Bring Grok to the browser.</h2>
+      <p>Download Xplorer and explore the web with AI at its core. Free, open source, and getting better every week.</p>
+      <div class="cta__buttons">
+        <a class="btn btn--primary btn--lg" href="https://github.com/daniel-farina/xplorer/releases" target="_blank" rel="noopener">
+          Download for macOS
+        </a>
+        <a class="btn btn--ghost btn--lg" href="https://github.com/daniel-farina/xplorer" target="_blank" rel="noopener">
+          Build from source
+        </a>
+      </div>
+      <p class="cta__platforms">macOS · Windows · Linux &nbsp;·&nbsp; Apache-2.0</p>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <div class="footer__brand">
+      <img src="assets/logo.png" alt="" class="footer__logo" onerror="this.style.display='none'" />
+      <span>Xplorer</span>
+    </div>
+    <p class="footer__copy">Open-source, Grok-native browser. © 2026 · Apache-2.0.</p>
+    <div class="footer__links">
+      <a href="https://github.com/daniel-farina/xplorer" target="_blank" rel="noopener">GitHub</a>
+      <a href="#features">Features</a>
+      <a href="#download">Download</a>
+    </div>
+  </footer>
+</body>
+</html>
