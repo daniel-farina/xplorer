@@ -23,6 +23,7 @@ automatically (until then, styled placeholders show):
 | `assets/screenshot-hero.png` | big hero screenshot (16:9) |
 | `assets/screenshot-sidebar.png` | "Grok in the sidebar" |
 | `assets/screenshot-command.png` | "Command bar" |
+| `assets/screenshot-build.png` | "Grok Build, inside the browser" |
 | `assets/screenshot-agents.png` | "Agents driving the web" |
 
 > `assets/logo.png` currently holds a temporary placeholder icon — replace it
