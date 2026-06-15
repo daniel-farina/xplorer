@@ -324,4 +324,49 @@ User ran `/loop 15m improve our browser…`. Background conductor task `task-BFB
 | Esc clears conv filter | key handler in app.js + input ✓ |
 | apps idle filter tab | data-filter=idle + label in html/js ✓ |
 | chrome://settings link | present in settings.html ✓ |
+
+## Loop 16 (2026-06-15)
+
+### feat(ui+native): unified glass toolbar — single canonical source for all surfaces
+Redesigned the top toolbar and **consolidated the two divergent copies** (companion JS
+`grokToolbarHTML()` vs hardcoded C++ string in `grok_web_bar.cc`) into ONE canonical
+file consumed by every surface.
+
+- **New canonical source:** `companion/ui/toolbar.html` — baked SVG icons, root-relative
+  hrefs, pills carry BOTH `data-home` (companion home-switch) and `data-pill` (native
+  active-state/handoff). Served by the gateway at `GET /toolbar.html` + `/partials/toolbar`
+  (`grok_native.cc`, unauthenticated, CORS `*`).
+- **Companion side (`common.js`):** `mountGrokToolbar()` is now async — fetches
+  `/toolbar.html` same-origin; `grokToolbarHTML()` kept only as an aligned inline fallback.
+  Home pills `preventDefault` (now `<a>`). New `initToolbarHideToggle()` → hide/show with a
+  floating `#grok-toolbar-reveal` handle, persisted in `localStorage.xplorer_toolbar_hidden`.
+- **Native side (`grok_web_bar.cc`):** removed the CSP-blocked cross-origin fetch; new
+  `LoadToolbarHtml(gw)` reads the SAME file from disk each injection (live, like
+  `LoadToolbarCss`), rewrites root-relative hrefs → absolute gateway URLs, bakes it into the
+  isolated-world injection. Baked C++ string remains a complete fallback (now incl. settings +
+  hide buttons + `data-home`). `wireHideToggle()` mirrors companion hide/show.
+- **Design asks delivered:** logo→**Xplorer** (compass icon), **gear SVG** settings,
+  **glass** bar (`backdrop-filter` + `@supports` opaque fallback), **semi-glass** pills +
+  dropdowns, **icons** on every item, **Wiki→Groki**, **hide/show** with persistence — all
+  identical on companion pages AND the x.com/grok/grokipedia overlay.
+- **Parity:** home pills use `/switch-home?mode=build|web|wiki` so native click behavior
+  (home-switch + redirect) matches companion exactly; grokipedia `data-pill="web"` query
+  handoff preserved.
+- **Review:** two background multi-agent adversarial reviews (14 raw → 11 confirmed → all
+  HIGH/MEDIUM merge-blockers fixed; follow-up re-verify of the fixes).
+- **Test:** native build (apply→build→reinstall, clean relaunch). Verified LIVE via SDK
+  `eval` on grokipedia + x.com (canonical markup, 15 icons, switch-home hrefs, hide/show,
+  glass computed style) and companion `/settings` + `/apps`. `companion_smoke_test.py` ALL OK.
+
+**Loop 16 test summary**
+| Check | Result |
+|-------|--------|
+| companion_smoke_test.py | ALL OK |
+| GET /toolbar.html (+/partials/toolbar) | 200, canonical markup ✓ |
+| native overlay = canonical (x.com, grokipedia) | logo/icons/Groki/hide/gear ✓ |
+| href rewrite root-relative → absolute GW | switch-home?mode=X ✓ |
+| native↔companion parity (switch-home) | both /switch-home?mode=X ✓ |
+| hide/show toggle + persistence | class + reveal + localStorage ✓ |
+| glass (backdrop-filter) + @supports fallback | computed saturate(1.8) blur(20px) ✓ |
+| adversarial review (2 workflows) | merge-blockers resolved ✓ |
 | UI only (no build) | smoke passed live ✓ |

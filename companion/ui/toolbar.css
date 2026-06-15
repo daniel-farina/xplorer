@@ -11,6 +11,11 @@
   --toolbar-accent-soft: rgba(0, 0, 0, 0.08);
   --toolbar-input-bg: #ffffff;
   --toolbar-shadow: rgba(0, 0, 0, 0.12);
+  --toolbar-glass: rgba(255, 255, 255, 0.62);
+  --toolbar-glass-border: rgba(0, 0, 0, 0.1);
+  --toolbar-glass-pill: rgba(255, 255, 255, 0.45);
+  --toolbar-glass-hover: rgba(255, 255, 255, 0.85);
+  --toolbar-glass-menu: rgba(255, 255, 255, 0.78);
 }
 
 html[data-theme="light"] {
@@ -23,6 +28,11 @@ html[data-theme="light"] {
   --toolbar-accent-soft: rgba(0, 0, 0, 0.08);
   --toolbar-input-bg: #ffffff;
   --toolbar-shadow: rgba(0, 0, 0, 0.12);
+  --toolbar-glass: rgba(255, 255, 255, 0.62);
+  --toolbar-glass-border: rgba(0, 0, 0, 0.1);
+  --toolbar-glass-pill: rgba(255, 255, 255, 0.45);
+  --toolbar-glass-hover: rgba(255, 255, 255, 0.85);
+  --toolbar-glass-menu: rgba(255, 255, 255, 0.78);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -36,6 +46,11 @@ html[data-theme="light"] {
     --toolbar-accent-soft: rgba(255, 255, 255, 0.1);
     --toolbar-input-bg: #111111;
     --toolbar-shadow: rgba(0, 0, 0, 0.45);
+    --toolbar-glass: rgba(20, 20, 22, 0.55);
+    --toolbar-glass-border: rgba(255, 255, 255, 0.12);
+    --toolbar-glass-pill: rgba(255, 255, 255, 0.06);
+    --toolbar-glass-hover: rgba(255, 255, 255, 0.14);
+    --toolbar-glass-menu: rgba(24, 24, 27, 0.82);
   }
 }
 
@@ -49,6 +64,39 @@ html[data-theme="dark"] {
   --toolbar-accent-soft: rgba(255, 255, 255, 0.1);
   --toolbar-input-bg: #111111;
   --toolbar-shadow: rgba(0, 0, 0, 0.45);
+  --toolbar-glass: rgba(20, 20, 22, 0.55);
+  --toolbar-glass-border: rgba(255, 255, 255, 0.12);
+  --toolbar-glass-pill: rgba(255, 255, 255, 0.06);
+  --toolbar-glass-hover: rgba(255, 255, 255, 0.14);
+  --toolbar-glass-menu: rgba(24, 24, 27, 0.82);
+}
+
+/* Where backdrop-filter is unsupported, drop the translucency to opaque so the
+   bar, pills and menus stay legible (no blur to separate them from the page). */
+@supports not ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
+  :root,
+  html[data-theme="light"] {
+    --toolbar-glass: #ffffff;
+    --toolbar-glass-menu: #ffffff;
+    --toolbar-glass-pill: #f0f0f0;
+    --toolbar-glass-hover: #e8e8e8;
+  }
+  html[data-theme="dark"] {
+    --toolbar-glass: #18181b;
+    --toolbar-glass-menu: #18181b;
+    --toolbar-glass-pill: rgba(255, 255, 255, 0.08);
+    --toolbar-glass-hover: rgba(255, 255, 255, 0.16);
+  }
+}
+@media (prefers-color-scheme: dark) {
+  @supports not ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
+    html:not([data-theme]) {
+      --toolbar-glass: #18181b;
+      --toolbar-glass-menu: #18181b;
+      --toolbar-glass-pill: rgba(255, 255, 255, 0.08);
+      --toolbar-glass-hover: rgba(255, 255, 255, 0.16);
+    }
+  }
 }
 
 .grok-toolbar {
@@ -59,11 +107,63 @@ html[data-theme="dark"] {
   box-sizing: border-box;
   padding: 10px 16px;
   font: 13px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  background: var(--toolbar-bg);
+  background: var(--toolbar-glass);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  backdrop-filter: saturate(180%) blur(20px);
   color: var(--toolbar-text);
-  border-bottom: 1px solid var(--toolbar-border);
-  box-shadow: 0 1px 0 var(--toolbar-shadow);
+  border-bottom: 1px solid var(--toolbar-glass-border);
+  box-shadow: 0 1px 12px var(--toolbar-shadow);
   flex-wrap: nowrap;
+  transition: transform 0.22s ease, opacity 0.22s ease;
+}
+
+/* Hidden state — slide up out of view; reveal handle takes over. */
+.grok-toolbar.grok-toolbar-hidden {
+  transform: translateY(-110%);
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Floating reveal handle (appended to body when toolbar is hidden). */
+#grok-toolbar-reveal {
+  position: fixed;
+  top: 8px;
+  right: 12px;
+  z-index: 2147483647;
+  display: none;
+  align-items: center;
+  gap: 2px;
+  padding: 5px 8px;
+  border: 1px solid var(--toolbar-glass-border);
+  border-radius: 999px;
+  background: var(--toolbar-glass);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  backdrop-filter: saturate(180%) blur(20px);
+  color: var(--toolbar-text);
+  box-shadow: 0 2px 12px var(--toolbar-shadow);
+  cursor: pointer;
+}
+
+#grok-toolbar-reveal.show {
+  display: inline-flex;
+}
+
+#grok-toolbar-reveal:hover {
+  background: var(--toolbar-glass-hover);
+}
+
+#grok-toolbar-reveal .gi {
+  width: 15px;
+  height: 15px;
+}
+
+/* Shared icon sizing */
+.grok-toolbar .gi {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+  display: inline-block;
+  vertical-align: middle;
 }
 
 header.grok-toolbar {
@@ -86,16 +186,25 @@ header.grok-toolbar {
 }
 
 .grok-logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   font-weight: 700;
-  font-size: 16px;
+  font-size: 15px;
+  letter-spacing: -0.01em;
   line-height: 1;
   color: var(--toolbar-accent);
   text-decoration: none;
   white-space: nowrap;
 }
 
+.grok-logo .gi {
+  width: 18px;
+  height: 18px;
+}
+
 .grok-logo:hover {
-  opacity: 0.9;
+  opacity: 0.85;
 }
 
 .grok-modes {
@@ -144,9 +253,11 @@ header.grok-toolbar {
 .grok-nav-pills {
   display: inline-flex;
   align-items: stretch;
-  border: 1px solid var(--toolbar-border);
+  border: 1px solid var(--toolbar-glass-border);
   border-radius: 999px;
-  background: var(--toolbar-elevated);
+  background: var(--toolbar-glass-pill);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
   overflow: visible;
 }
 
@@ -168,7 +279,7 @@ header.grok-toolbar {
 }
 
 .grok-pill-wrap + .grok-pill-wrap .grok-pill {
-  border-left: 1px solid var(--toolbar-border);
+  border-left: 1px solid var(--toolbar-glass-border);
 }
 
 .grok-pill {
@@ -184,12 +295,27 @@ header.grok-toolbar {
   white-space: nowrap;
   display: inline-flex;
   align-items: center;
+  gap: 6px;
+}
+
+.grok-pill .gi {
+  opacity: 0.85;
 }
 
 .grok-pill:hover,
 .grok-pill-wrap:hover > .grok-pill {
   color: var(--toolbar-text);
-  background: var(--toolbar-bg);
+  background: var(--toolbar-glass-hover);
+}
+
+.grok-pill-wrap:first-child .grok-pill {
+  border-top-left-radius: 999px;
+  border-bottom-left-radius: 999px;
+}
+
+.grok-pill-wrap:last-child .grok-pill {
+  border-top-right-radius: 999px;
+  border-bottom-right-radius: 999px;
 }
 
 .grok-pill.active {
@@ -204,12 +330,14 @@ header.grok-toolbar {
   top: 100%;
   margin-top: 6px;
   right: 0;
-  min-width: 148px;
+  min-width: 168px;
   padding: 4px;
-  border: 1px solid var(--toolbar-border);
-  border-radius: 10px;
-  background: var(--toolbar-bg);
-  box-shadow: 0 6px 20px var(--toolbar-shadow);
+  border: 1px solid var(--toolbar-glass-border);
+  border-radius: 12px;
+  background: var(--toolbar-glass-menu);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  backdrop-filter: saturate(180%) blur(20px);
+  box-shadow: 0 8px 24px var(--toolbar-shadow);
   flex-direction: column;
   z-index: 200;
 }
@@ -220,9 +348,11 @@ header.grok-toolbar {
 }
 
 .grok-pill-menu a {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 8px;
   padding: 7px 10px;
-  border-radius: 7px;
+  border-radius: 8px;
   color: var(--toolbar-text);
   text-decoration: none;
   font-size: 12px;
@@ -230,8 +360,12 @@ header.grok-toolbar {
   white-space: nowrap;
 }
 
+.grok-pill-menu a .gi {
+  opacity: 0.8;
+}
+
 .grok-pill-menu a:hover {
-  background: var(--toolbar-elevated);
+  background: var(--toolbar-glass-hover);
   color: var(--toolbar-accent);
 }
 
@@ -307,8 +441,10 @@ header.grok-toolbar {
 }
 
 .grok-toolbar-btn {
-  border: 1px solid var(--toolbar-border);
-  background: var(--toolbar-elevated);
+  border: 1px solid var(--toolbar-glass-border);
+  background: var(--toolbar-glass-pill);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
   color: var(--toolbar-text);
   border-radius: 8px;
   padding: 5px 12px;
@@ -322,5 +458,26 @@ header.grok-toolbar {
 
 .grok-toolbar-btn:hover {
   border-color: var(--toolbar-accent);
+  background: var(--toolbar-glass-hover);
   color: var(--toolbar-accent);
+}
+
+/* Square icon-only buttons (gear settings, hide). */
+.grok-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  padding: 0;
+  border-radius: 999px;
+}
+
+.grok-icon-btn .gi {
+  width: 16px;
+  height: 16px;
+}
+
+.grok-settings-btn:hover .gi {
+  transform: rotate(35deg);
+  transition: transform 0.25s ease;
 }

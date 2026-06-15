@@ -128,6 +128,26 @@ std::string LoadToolbarCss() {
   return kToolbarCssFallback;
 }
 
+// Reads the canonical toolbar markup shared with the companion pages
+// (companion/ui/toolbar.html) and rewrites its root-relative hrefs ("/search",
+// "/apps", …) to absolute gateway URLs so the same DOM works when injected onto
+// a third-party page. Read fresh on each injection — like LoadToolbarCss(), so
+// markup edits go live without a rebuild. Returns "" if the file is missing, so
+// the caller falls back to the baked-in string. We bake the markup in C++
+// rather than fetching it from the page because third-party CSP (connect-src)
+// blocks a cross-origin fetch to the loopback gateway.
+std::string LoadToolbarHtml(const std::string& gateway_origin) {
+  base::FilePath html_file = CompanionUiDir().AppendASCII("toolbar.html");
+  std::string html;
+  if (!base::ReadFileToString(html_file, &html) || html.empty())
+    return std::string();
+  base::ReplaceSubstringsAfterOffset(&html, 0, "href=\"/",
+                                     "href=\"" + gateway_origin + "/");
+  base::ReplaceSubstringsAfterOffset(&html, 0, "href='/",
+                                     "href='" + gateway_origin + "/");
+  return html;
+}
+
 std::string JsonStringLiteral(const std::string& value) {
   std::string json;
   base::JSONWriter::Write(base::Value(value), &json);
@@ -160,12 +180,14 @@ std::string BuildInjectScript(const std::string& active_mode) {
       base::StringPrintf("http://%s:%d/", kCompanionHost, GatewayPort());
   const std::string apps_href =
       base::StringPrintf("http://%s:%d/apps", kCompanionHost, GatewayPort());
+  const std::string settings_href =
+      base::StringPrintf("http://%s:%d/settings", kCompanionHost, GatewayPort());
   const std::string toolbar_css = LoadToolbarCss();
   const std::string css_json = JsonStringLiteral(toolbar_css);
   const std::string fallback_pill_json = JsonStringLiteral(active_mode);
 
   const std::string html = base::StringPrintf(
-      R"(<a class="grok-logo" href="%s">&#10022; Grok</a>)"
+      R"(<a class="grok-logo" href="%s">&#10022; Xplorer</a>)"
       R"(<div class="grok-toolbar-spacer"></div>)"
       R"(<div class="grok-toolbar-actions">)"
       R"(<div class="grok-nav-pills">)"
@@ -173,25 +195,32 @@ std::string BuildInjectScript(const std::string& active_mode) {
       R"(<a class="grok-pill" data-pill="xchat" href="https://x.com/i/chat" rel="noopener noreferrer">X Chat</a>)"
       R"(<div class="grok-pill-menu"><a href="https://x.com/i/chat" rel="noopener noreferrer">Open X Chat</a></div></div>)"
       R"(<div class="grok-pill-wrap">)"
-      R"(<a class="grok-pill" data-pill="build" href="%s">Grok Build</a>)"
+      R"(<a class="grok-pill" data-home="build" data-pill="build" href="%s">Grok Build</a>)"
       R"(<div class="grok-pill-menu"><a href="%s">Conversations</a><a href="%s">Apps</a></div></div>)"
       R"(<div class="grok-pill-wrap">)"
-      R"(<a class="grok-pill" data-pill="web" href="%s">Grok Web</a>)"
+      R"(<a class="grok-pill" data-home="web" data-pill="web" href="%s">Grok Web</a>)"
       R"(<div class="grok-pill-menu"><a href="%s">Search</a><a href="https://grok.com/imagine" target="_blank" rel="noopener noreferrer">Imagine</a></div></div>)"
       R"(<div class="grok-pill-wrap">)"
-      R"(<a class="grok-pill" data-pill="wiki" href="%s">Wiki</a>)"
+      R"(<a class="grok-pill" data-home="wiki" data-pill="wiki" href="%s">Groki</a>)"
       R"(<div class="grok-pill-menu"><a href="https://grokipedia.com/" target="_blank" rel="noopener noreferrer">Grokipedia</a></div></div>)"
       R"(<div class="grok-pill-wrap">)"
       R"(<a class="grok-pill" data-pill="xcom" href="https://x.com/" rel="noopener noreferrer">x.com</a>)"
       R"(<div class="grok-pill-menu"><a href="https://x.com/" rel="noopener noreferrer">Home</a></div></div>)"
-      R"(</div></div>)",
+      R"(</div>)"
+      R"(<a href="%s" class="grok-toolbar-btn grok-icon-btn grok-settings-btn" data-route="settings" title="Xplorer settings" aria-label="Settings">&#9881;</a>)"
+      R"(<button type="button" class="grok-toolbar-btn grok-icon-btn grok-toolbar-hide" title="Hide toolbar" aria-label="Hide toolbar">&#8963;</button>)"
+      R"(</div>)",
       search_href.c_str(), build_href.c_str(), chat_href.c_str(),
       apps_href.c_str(), web_href.c_str(), search_href.c_str(),
-      wiki_href.c_str());
-  const std::string html_json = JsonStringLiteral(html);
+      wiki_href.c_str(), settings_href.c_str());
   const std::string gw =
       base::StringPrintf("http://%s:%d", kCompanionHost, GatewayPort());
   const std::string gw_json = JsonStringLiteral(gw);
+  // Prefer the canonical shared markup (read live from disk); fall back to the
+  // baked-in string above only if the file is missing.
+  std::string canonical_html = LoadToolbarHtml(gw);
+  const std::string html_json =
+      JsonStringLiteral(canonical_html.empty() ? html : canonical_html);
 
   const std::string theme = BrowserThemeAttribute();
   const std::string theme_boot =
@@ -208,6 +237,12 @@ std::string BuildInjectScript(const std::string& active_mode) {
   if(!document.documentElement)return;
   var BAR_ID='xplorer-grok-bar',STYLE_ID='xplorer-grok-toolbar-style';
   var CSS=%s,HTML=%s,FALLBACK_PILL=%s,GW=%s;
+  // HTML is the canonical shared markup (companion/ui/toolbar.html), baked in by
+  // the browser process with absolute gateway hrefs — so the native overlay and
+  // the companion pages render the SAME bar. (Baked in C++ rather than fetched
+  // because third-party CSP blocks a cross-origin fetch to the loopback gateway.)
+  var BAR_HTML=HTML,HIDE_KEY='xplorer_toolbar_hidden';
+  var REVEAL_SVG='<svg class="gi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><polygon points="15.5 8.5 11 11 8.5 15.5 13 13" fill="currentColor" stroke="none"></polygon></svg><svg class="gi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>';
   %s
   function isXHost(host){
     return host==='x.com'||host.endsWith('.x.com')||
@@ -256,11 +291,37 @@ std::string BuildInjectScript(const std::string& active_mode) {
     style.textContent=CSS;
     document.documentElement.appendChild(style);
   }
+  function setPad(px){
+    document.documentElement.style.setProperty('padding-top',px,'important');
+    if(document.body)document.body.style.setProperty('padding-top',px,'important');
+  }
+  function isHidden(){try{return localStorage.getItem(HIDE_KEY)==='1';}catch(e){return false;}}
   function applyPadding(bar){
+    if(isHidden()){setPad('0px');return;}
     var h=bar.getBoundingClientRect().height||44;
-    var pad=h+'px';
-    document.documentElement.style.setProperty('padding-top',pad,'important');
-    if(document.body)document.body.style.setProperty('padding-top',pad,'important');
+    setPad(h+'px');
+  }
+  function wireHideToggle(bar){
+    var reveal=document.getElementById('grok-toolbar-reveal');
+    if(!reveal){
+      reveal=document.createElement('button');
+      reveal.id='grok-toolbar-reveal';reveal.type='button';
+      reveal.title='Show toolbar';reveal.setAttribute('aria-label','Show toolbar');
+      reveal.innerHTML=REVEAL_SVG;
+      (document.body||document.documentElement).appendChild(reveal);
+    }
+    function apply(hidden){
+      bar.classList.toggle('grok-toolbar-hidden',hidden);
+      reveal.classList.toggle('show',hidden);
+      try{localStorage.setItem(HIDE_KEY,hidden?'1':'0');}catch(e){}
+      applyPadding(bar);
+    }
+    apply(isHidden());
+    var hideBtn=bar.querySelector('.grok-toolbar-hide');
+    if(hideBtn&&!hideBtn.dataset.wired){hideBtn.dataset.wired='1';
+      hideBtn.addEventListener('click',function(){apply(true);});}
+    if(!reveal.dataset.wired){reveal.dataset.wired='1';
+      reveal.addEventListener('click',function(){apply(false);});}
   }
   function mountBar(bar){
     var html=document.documentElement;
@@ -276,11 +337,12 @@ std::string BuildInjectScript(const std::string& active_mode) {
       bar.id=BAR_ID;
       bar.className='grok-toolbar';
     }
-    bar.innerHTML=HTML;
+    bar.innerHTML=BAR_HTML;
     mountBar(bar);
     applyPadding(bar);
     applyActivePill();
     wirePillHandoffs(bar);
+    wireHideToggle(bar);
   }
   function barNeedsMount(){
     var bar=document.getElementById(BAR_ID);

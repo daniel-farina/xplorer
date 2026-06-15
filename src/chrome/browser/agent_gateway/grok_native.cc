@@ -1720,6 +1720,13 @@ bool GrokNative::TryHandleRequest(
     return ServeUiFile(server, connection_id, path.substr(path.rfind('/') + 1));
   }
 
+  // Canonical shared toolbar markup — single source for the companion pages
+  // and the native overlay bar (grok_web_bar.cc fetches this).
+  if (info.method == "GET" &&
+      (path == "/toolbar.html" || path == "/partials/toolbar")) {
+    return ServeUiFile(server, connection_id, "toolbar.html");
+  }
+
   if (info.method == "GET" && (path == "/" || path == "/index.html")) {
     if (WantsHtml(info))
       return ServeUiFile(server, connection_id, "index.html");
