@@ -522,3 +522,35 @@ Native search/identity rebrand (designed by a background workflow) + apps polish
 | About page rebrand + no update error | About Xplorer / up to date, no "error code" ✓ |
 | apps preview no longer refreshing | iframe same element across polls ✓ |
 | apps gallery default + Create-new-app/​/apps/new | form hidden, gallery shown ✓ |
+
+## Loop 21 (2026-06-15)
+
+### feat: "Ask Grok about this page" + draggable minimized-toolbar pill
+- **"Ask Google about this page" → "Ask Grok about this page"** (designed by a background
+  workflow): the omnibox Lens action. Rebranded the strings (`omnibox_strings.grdp`, 5
+  messages) and **rewired** its handler — `ChromeAutocompleteProviderClient::OpenLensOverlay`
+  now calls new `grok_companion::AskGrokAboutPage(web_contents)` instead of opening the Google
+  Lens overlay. `AskGrokAboutPage` builds a page-context prompt (title + URL) and navigates the
+  tab to the gateway `GET /omnibox?q=…` handoff → grok.com auto-submits. Reliable, reuses the
+  proven Grok-web path.
+  - **Note / scoped follow-up:** the user pointed out grok web accepts **clipboard-paste
+    images** — which unblocks the full "screenshot a region → paste into grok.com → ask"
+    flow (the investigation had flagged grok.com image-attach as the blocker). That's the next
+    iteration: image-carrying pending store + native screenshot capture + injector synthesizing
+    a paste ClipboardEvent. This loop ships the text/page-context v1.
+- **Draggable minimized-toolbar pill** (`common.js` + `grok_web_bar.cc` + `toolbar.css`): the
+  floating reveal pill (shown when the toolbar is hidden) now has a **grip** and is
+  **draggable** (pointer events, >4px = drag, clamped to viewport, position persisted in
+  `localStorage.xplorer_toolbar_reveal_pos`); a plain click still reveals the toolbar (drag is
+  suppressed from the click). So it can be moved out of the way if it blocks page content.
+- **Test:** native rebuild (apply→build→reinstall, clean relaunch). Verified LIVE: rebrand
+  (6× strings) + rewire (AskGrokAboutPage compiled/linked, /omnibox handoff works); pill grip +
+  drag (933→732/8→159, persisted) + click-reveals.
+
+**Loop 21 test summary**
+| Check | Result |
+|-------|--------|
+| "Ask Grok about this page" string + rewire | 6× strings, OpenLensOverlay→AskGrokAboutPage ✓ |
+| AskGrokAboutPage → /omnibox handoff | builds + links; /omnibox 302 verified ✓ |
+| reveal pill draggable + persists | drag moves + saved to localStorage ✓ |
+| reveal pill click still reveals | barHidden=false after click ✓ |

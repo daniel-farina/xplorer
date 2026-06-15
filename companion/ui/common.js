@@ -190,6 +190,7 @@ const GROK_ICONS = {
   hide: '<svg class="gi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>',
   reveal: '<svg class="gi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>',
   logs: '<svg class="gi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16M4 10h16M4 15h10M4 20h7"/></svg>',
+  grip: '<svg class="gi grok-reveal-grip" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg>',
 };
 
 const TOOLBAR_HIDDEN_KEY = 'xplorer_toolbar_hidden';
@@ -282,11 +283,12 @@ function initToolbarHideToggle() {
     reveal = document.createElement('button');
     reveal.id = 'grok-toolbar-reveal';
     reveal.type = 'button';
-    reveal.title = 'Show toolbar';
+    reveal.title = 'Show toolbar (drag the grip to move)';
     reveal.setAttribute('aria-label', 'Show toolbar');
-    reveal.innerHTML = `${GROK_ICONS.xplorer}${GROK_ICONS.reveal}`;
+    reveal.innerHTML = `${GROK_ICONS.grip}${GROK_ICONS.xplorer}${GROK_ICONS.reveal}`;
     document.body.appendChild(reveal);
   }
+  makeRevealDraggable(reveal);
   const apply = (hidden) => {
     bar.classList.toggle('grok-toolbar-hidden', hidden);
     reveal.classList.toggle('show', hidden);
@@ -304,6 +306,66 @@ function initToolbarHideToggle() {
     reveal.dataset.wired = '1';
     reveal.addEventListener('click', () => apply(false));
   }
+}
+
+const TOOLBAR_REVEAL_POS_KEY = 'xplorer_toolbar_reveal_pos';
+
+/** Let the floating reveal pill be dragged out of the way; persists position.
+ *  A real drag (>4px) repositions and suppresses the reveal click. */
+function makeRevealDraggable(reveal) {
+  if (reveal.dataset.dragWired) return;
+  reveal.dataset.dragWired = '1';
+  reveal.style.touchAction = 'none';
+  const clamp = (v, max) => Math.max(0, Math.min(v, max));
+  const positionAt = (x, y) => {
+    const r = reveal.getBoundingClientRect();
+    reveal.style.left = clamp(x, window.innerWidth - r.width) + 'px';
+    reveal.style.top = clamp(y, window.innerHeight - r.height) + 'px';
+    reveal.style.right = 'auto';
+  };
+  try {
+    const p = JSON.parse(localStorage.getItem(TOOLBAR_REVEAL_POS_KEY) || 'null');
+    if (p && typeof p.x === 'number') {
+      // position once it has a measurable size
+      requestAnimationFrame(() => positionAt(p.x, p.y));
+    }
+  } catch {}
+  let start = null;
+  let moved = false;
+  reveal.addEventListener('pointerdown', (e) => {
+    const r = reveal.getBoundingClientRect();
+    start = { px: e.clientX, py: e.clientY, ox: r.left, oy: r.top };
+    moved = false;
+    try { reveal.setPointerCapture(e.pointerId); } catch {}
+  });
+  reveal.addEventListener('pointermove', (e) => {
+    if (!start) return;
+    const dx = e.clientX - start.px;
+    const dy = e.clientY - start.py;
+    if (!moved && Math.hypot(dx, dy) < 4) return;
+    moved = true;
+    reveal.classList.add('dragging');
+    positionAt(start.ox + dx, start.oy + dy);
+  });
+  const end = (e) => {
+    if (!start) return;
+    try { reveal.releasePointerCapture(e.pointerId); } catch {}
+    reveal.classList.remove('dragging');
+    if (moved) {
+      const r = reveal.getBoundingClientRect();
+      try {
+        localStorage.setItem(TOOLBAR_REVEAL_POS_KEY,
+          JSON.stringify({ x: Math.round(r.left), y: Math.round(r.top) }));
+      } catch {}
+    }
+    start = null;
+  };
+  reveal.addEventListener('pointerup', end);
+  reveal.addEventListener('pointercancel', end);
+  // Suppress the reveal click when the pointerup ended a drag.
+  reveal.addEventListener('click', (e) => {
+    if (moved) { e.stopImmediatePropagation(); e.preventDefault(); }
+  }, true);
 }
 
 /** Highlight companion toolbar pill from current route (127.0.0.1 pages). */

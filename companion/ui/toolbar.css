@@ -157,6 +157,21 @@ html[data-theme="dark"] {
   height: 15px;
 }
 
+#grok-toolbar-reveal .grok-reveal-grip {
+  width: 13px;
+  opacity: 0.5;
+  margin-right: -1px;
+}
+
+#grok-toolbar-reveal:hover .grok-reveal-grip {
+  opacity: 0.8;
+}
+
+#grok-toolbar-reveal.dragging {
+  cursor: grabbing;
+  background: var(--toolbar-glass-hover);
+}
+
 /* Shared icon sizing */
 .grok-toolbar .gi {
   width: 15px;

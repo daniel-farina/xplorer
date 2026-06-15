@@ -242,7 +242,48 @@ std::string BuildInjectScript(const std::string& active_mode) {
   // the companion pages render the SAME bar. (Baked in C++ rather than fetched
   // because third-party CSP blocks a cross-origin fetch to the loopback gateway.)
   var BAR_HTML=HTML,HIDE_KEY='xplorer_toolbar_hidden';
-  var REVEAL_SVG='<svg class="gi" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 9.5 L22.5 22.5 M22.5 9.5 L9.5 22.5"></path></svg><svg class="gi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>';
+  var REVEAL_SVG='<svg class="gi grok-reveal-grip" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><circle cx="9" cy="6" r="1.6"></circle><circle cx="15" cy="6" r="1.6"></circle><circle cx="9" cy="12" r="1.6"></circle><circle cx="15" cy="12" r="1.6"></circle><circle cx="9" cy="18" r="1.6"></circle><circle cx="15" cy="18" r="1.6"></circle></svg><svg class="gi" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 9.5 L22.5 22.5 M22.5 9.5 L9.5 22.5"></path></svg><svg class="gi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>';
+  var REVEAL_POS_KEY="xplorer_toolbar_reveal_pos";
+  function makeRevealDraggable(reveal){
+    if(reveal.dataset.dragWired)return;
+    reveal.dataset.dragWired="1";
+    reveal.style.touchAction="none";
+    function clamp(v,max){return Math.max(0,Math.min(v,max));}
+    function positionAt(x,y){
+      var r=reveal.getBoundingClientRect();
+      reveal.style.left=clamp(x,window.innerWidth-r.width)+"px";
+      reveal.style.top=clamp(y,window.innerHeight-r.height)+"px";
+      reveal.style.right="auto";
+    }
+    try{var p=JSON.parse(localStorage.getItem(REVEAL_POS_KEY)||"null");
+      if(p&&typeof p.x==="number"){requestAnimationFrame(function(){positionAt(p.x,p.y);});}
+    }catch(e){}
+    var start=null,moved=false;
+    reveal.addEventListener("pointerdown",function(e){
+      var r=reveal.getBoundingClientRect();
+      start={px:e.clientX,py:e.clientY,ox:r.left,oy:r.top};moved=false;
+      try{reveal.setPointerCapture(e.pointerId);}catch(x){}
+    });
+    reveal.addEventListener("pointermove",function(e){
+      if(!start)return;
+      var dx=e.clientX-start.px,dy=e.clientY-start.py;
+      if(!moved&&Math.sqrt(dx*dx+dy*dy)<4)return;
+      moved=true;reveal.classList.add("dragging");positionAt(start.ox+dx,start.oy+dy);
+    });
+    function end(e){
+      if(!start)return;
+      try{reveal.releasePointerCapture(e.pointerId);}catch(x){}
+      reveal.classList.remove("dragging");
+      if(moved){var r=reveal.getBoundingClientRect();
+        try{localStorage.setItem(REVEAL_POS_KEY,JSON.stringify({x:Math.round(r.left),y:Math.round(r.top)}));}catch(x){}}
+      start=null;
+    }
+    reveal.addEventListener("pointerup",end);
+    reveal.addEventListener("pointercancel",end);
+    reveal.addEventListener("click",function(e){
+      if(moved){e.stopImmediatePropagation();e.preventDefault();}
+    },true);
+  }
   %s
   function isXHost(host){
     return host==='x.com'||host.endsWith('.x.com')||
@@ -325,10 +366,11 @@ std::string BuildInjectScript(const std::string& active_mode) {
     if(!reveal){
       reveal=document.createElement('button');
       reveal.id='grok-toolbar-reveal';reveal.type='button';
-      reveal.title='Show toolbar';reveal.setAttribute('aria-label','Show toolbar');
+      reveal.title='Show toolbar (drag the grip to move)';reveal.setAttribute('aria-label','Show toolbar');
       reveal.innerHTML=REVEAL_SVG;
       (document.body||document.documentElement).appendChild(reveal);
     }
+    makeRevealDraggable(reveal);
     function apply(hidden){
       bar.classList.toggle('grok-toolbar-hidden',hidden);
       reveal.classList.toggle('show',hidden);
