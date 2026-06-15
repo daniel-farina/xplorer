@@ -7,6 +7,7 @@
 
 #include <cstring>
 
+#include <deque>
 #include <map>
 #include <set>
 #include <utility>
@@ -30,6 +31,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/synchronization/lock.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/task/thread_pool.h"
 #include "base/time/time.h"
@@ -104,6 +106,72 @@ base::FilePath ResolveGrokBinary() {
 }
 
 namespace {
+// In-memory ring of recent gateway events, surfaced by GET /api/logs + /logs.
+struct GatewayLogRing {
+  base::Lock lock;
+  std::deque<base::DictValue> events;
+};
+GatewayLogRing& LogRing() {
+  static base::NoDestructor<GatewayLogRing> ring;
+  return *ring;
+}
+constexpr size_t kMaxLogEvents = 500;
+}  // namespace
+
+void RecordGatewayLog(const std::string& level,
+                      const std::string& source,
+                      const std::string& app_id,
+                      const std::string& event,
+                      const std::string& message,
+                      int exit_code,
+                      const std::string& detail) {
+  base::DictValue e;
+  // Microseconds since the Windows epoch (same format as registry timestamps);
+  // the UI converts to Unix ms. Uses only long-stable base APIs.
+  e.Set("ts_us", static_cast<double>(
+                     base::Time::Now().ToDeltaSinceWindowsEpoch().InMicroseconds()));
+  e.Set("level", level);
+  e.Set("source", source);
+  e.Set("event", event);
+  e.Set("message", message);
+  if (!app_id.empty())
+    e.Set("app_id", app_id);
+  if (exit_code >= 0)
+    e.Set("exit_code", exit_code);
+  if (!detail.empty())
+    e.Set("detail", detail);
+  GatewayLogRing& ring = LogRing();
+  base::AutoLock auto_lock(ring.lock);
+  ring.events.push_back(std::move(e));
+  while (ring.events.size() > kMaxLogEvents)
+    ring.events.pop_front();
+}
+
+namespace {
+// Snapshot the ring (newest last) applying optional source/app filters + limit.
+base::ListValue SnapshotGatewayLogs(const std::string& source_filter,
+                                    const std::string& app_filter,
+                                    size_t limit) {
+  base::ListValue out;
+  GatewayLogRing& ring = LogRing();
+  base::AutoLock auto_lock(ring.lock);
+  for (const auto& e : ring.events) {
+    if (!source_filter.empty()) {
+      const std::string* s = e.FindString("source");
+      if (!s || *s != source_filter)
+        continue;
+    }
+    if (!app_filter.empty()) {
+      const std::string* a = e.FindString("app_id");
+      if (!a || *a != app_filter)
+        continue;
+    }
+    out.Append(e.Clone());
+  }
+  while (limit > 0 && out.size() > limit)
+    out.erase(out.begin());
+  return out;
+}
 
 base::FilePath UiDir() {
   const char* env = getenv("XPLORER_COMPANION_UI");
@@ -1069,23 +1137,52 @@ void PumpGrokStream(net::HttpServer* server,
     return;
   }
 
+  const std::string log_source =
+      kind == GrokStreamKind::kAppBuild
+          ? "build"
+          : (kind == GrokStreamKind::kSearch ? "search" : "chat");
+
   base::LaunchOptions options;
   // Only stream stdout (streaming-json). Merging stderr injects ANSI logs like
-  // "[2m2026-..." that break NDJSON parsing in the companion UI.
+  // "[2m2026-..." that break NDJSON parsing in the companion UI. Capture stderr
+  // to a temp file instead so the real failure reason (otherwise discarded) is
+  // recoverable for the error event + /api/logs.
   options.fds_to_remap.emplace_back(pipe_fds[1], STDOUT_FILENO);
+  base::FilePath stderr_path;
+  base::File stderr_file;
+  if (base::CreateTemporaryFile(&stderr_path)) {
+    stderr_file.Initialize(
+        stderr_path, base::File::FLAG_OPEN | base::File::FLAG_WRITE);
+  }
+  if (stderr_file.IsValid()) {
+    options.fds_to_remap.emplace_back(stderr_file.GetPlatformFile(),
+                                      STDERR_FILENO);
+  }
   base::Process process = base::LaunchProcess(cmd, options);
   close(pipe_fds[1]);
+  stderr_file.Close();  // child holds its own copy; we read by path on exit.
 
   if (!process.IsValid()) {
     close(pipe_fds[0]);
+    if (!stderr_path.empty())
+      base::DeleteFile(stderr_path);
+    std::string launch_msg =
+        "failed to launch grok at " + cmd.GetProgram().MaybeAsASCII();
+    RecordGatewayLog("error", log_source, app_id, "launch_fail", launch_msg, -1,
+                     "");
     io_task_runner->PostTask(
         FROM_HERE,
         base::BindOnce(
             &SendStreamError, server, connection_id,
-            "failed to launch grok at " + cmd.GetProgram().MaybeAsASCII() +
+            launch_msg +
                 " — run `grok login` or set GROK_BIN in ~/.xplorer/companion.json"));
     return;
   }
+
+  RecordGatewayLog("info", log_source, app_id, "start",
+                   log_source == "build" ? "app build started"
+                                         : "grok run started",
+                   -1, "");
 
   io_task_runner->PostTask(
       FROM_HERE,
@@ -1138,15 +1235,40 @@ void PumpGrokStream(net::HttpServer* server,
   int exit_code = -1;
   process.WaitForExit(&exit_code);
 
+  // Recover the otherwise-discarded stderr so failures show a real reason.
+  std::string stderr_tail;
+  if (!stderr_path.empty()) {
+    std::string stderr_all;
+    if (base::ReadFileToString(stderr_path, &stderr_all)) {
+      stderr_all = StripAnsiEscapes(stderr_all);
+      base::TrimWhitespaceASCII(stderr_all, base::TRIM_ALL, &stderr_all);
+      stderr_tail = stderr_all.size() > 4096
+                        ? stderr_all.substr(stderr_all.size() - 4096)
+                        : stderr_all;
+    }
+    base::DeleteFile(stderr_path);
+  }
+
+  RecordGatewayLog(
+      exit_code == 0 ? "info" : "error", log_source, app_id,
+      exit_code == 0 ? "finish" : "failed",
+      exit_code == 0
+          ? (log_source == "build" ? "app build finished" : "grok run finished")
+          : ("grok failed (exit " + base::NumberToString(exit_code) + ")"),
+      exit_code, exit_code == 0 ? std::string() : stderr_tail);
+
   if (exit_code != 0) {
     if (!app_id.empty()) {
       OnAppBuildStreamFinished(app_id, conv_id, exit_code, session_id,
-                               full_text);
+                               full_text, stderr_tail);
     }
     base::DictValue err;
     err.Set("type", "error");
-    err.Set("error", "grok failed (exit " + base::NumberToString(exit_code) +
-                          ")");
+    std::string err_msg =
+        "grok failed (exit " + base::NumberToString(exit_code) + ")";
+    if (!stderr_tail.empty())
+      err_msg += ": " + stderr_tail;
+    err.Set("error", err_msg);
     std::string err_line;
     base::JSONWriter::Write(err, &err_line);
     err_line.push_back('\n');
@@ -1185,7 +1307,7 @@ void PumpGrokStream(net::HttpServer* server,
       SaveChatAssistantReply(conv_id, full_text, session_id);
     if (!app_id.empty())
       OnAppBuildStreamFinished(app_id, conv_id, exit_code, session_id,
-                               full_text);
+                               full_text, stderr_tail);
   }
   std::string result_line;
   base::JSONWriter::Write(result_event, &result_line);
@@ -1753,6 +1875,10 @@ bool GrokNative::TryHandleRequest(
     return ServeUiFile(server, connection_id, "app.html");
   }
 
+  if (info.method == "GET" && (path == "/logs" || path == "/logs/")) {
+    return ServeUiFile(server, connection_id, "logs.html");
+  }
+
   if (info.method == "GET" &&
       (path == "/switch-home" || base::StartsWith(path, "/switch-home?"))) {
     const std::map<std::string, std::string> params = QueryParams(info.path);
@@ -1801,6 +1927,27 @@ bool GrokNative::TryHandleRequest(
     d.Set("model", model);
     d.Set("model_label", ModelDisplayName(model));
     d.Set("models", ListGrokModels());
+    SendJson(server, connection_id, net::HTTP_OK, std::move(d));
+    return true;
+  }
+
+  if (info.method == "GET" && path == "/api/logs") {
+    const std::map<std::string, std::string> params = QueryParams(info.path);
+    std::string source_filter;
+    std::string app_filter;
+    size_t limit = 0;  // 0 = no cap (ring already bounded)
+    if (auto it = params.find("source"); it != params.end())
+      source_filter = it->second;
+    if (auto it = params.find("app"); it != params.end())
+      app_filter = it->second;
+    if (auto it = params.find("limit"); it != params.end()) {
+      int parsed = 0;
+      if (base::StringToInt(it->second, &parsed) && parsed > 0)
+        limit = static_cast<size_t>(parsed);
+    }
+    base::DictValue d;
+    d.Set("ok", true);
+    d.Set("events", SnapshotGatewayLogs(source_filter, app_filter, limit));
     SendJson(server, connection_id, net::HTTP_OK, std::move(d));
     return true;
   }

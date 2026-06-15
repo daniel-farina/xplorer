@@ -30,7 +30,8 @@ void OnAppBuildStreamFinished(const std::string& app_id,
                               const std::string& conv_id,
                               int exit_code,
                               const std::string& session_id,
-                              const std::string& full_text);
+                              const std::string& full_text,
+                              const std::string& detail);
 
 }  // namespace agent_gateway
 

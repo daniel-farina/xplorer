@@ -24,6 +24,18 @@ std::string BuildPageGrokWebPrompt(const std::string& text);
 std::string GetGrokWebPendingPrompt(const std::string& id);
 void ConsumeGrokWebPendingPrompt(const std::string& id);
 
+// Appends a structured event to the in-memory gateway log ring (thread-safe;
+// callable from any thread). Surfaced via GET /api/logs and the /logs page.
+// |level|: "info"|"warn"|"error". |source|: "build"|"runtime"|"api".
+// |app_id|/|detail| may be empty; |exit_code| < 0 means "not applicable".
+void RecordGatewayLog(const std::string& level,
+                      const std::string& source,
+                      const std::string& app_id,
+                      const std::string& event,
+                      const std::string& message,
+                      int exit_code,
+                      const std::string& detail);
+
 base::DictValue LoadCompanionSessions();
 void SaveCompanionSessions(const base::DictValue& data);
 std::string ResolveConfiguredModel(const std::string* model_override);

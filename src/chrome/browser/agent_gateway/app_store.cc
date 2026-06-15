@@ -405,8 +405,11 @@ bool LaunchAppRuntimeServer(const std::string& app_id,
   base::FilePath python = base::FilePath("/usr/bin/python3");
   if (!base::PathExists(python))
     python = base::FilePath("/usr/local/bin/python3");
-  if (!base::PathExists(python))
+  if (!base::PathExists(python)) {
+    RecordGatewayLog("error", "runtime", app_id, "launch_fail",
+                     "python3 not found — cannot host app runtime", -1, "");
     return false;
+  }
 
   base::CommandLine cmd(python);
   cmd.AppendArg("-m");
@@ -420,11 +423,20 @@ bool LaunchAppRuntimeServer(const std::string& app_id,
   base::LaunchOptions options;
   options.current_directory = app_path;
   base::Process process = base::LaunchProcess(cmd, options);
-  if (!process.IsValid())
+  if (!process.IsValid()) {
+    RecordGatewayLog("error", "runtime", app_id, "launch_fail",
+                     "failed to launch runtime server on port " +
+                         base::NumberToString(port),
+                     -1, "");
     return false;
+  }
   (*g_app_runtime_servers)[app_id] = {std::move(process), port};
   LOG(INFO) << "[apps] runtime server app=" << app_id << " port=" << port
             << " path=" << app_path.value();
+  RecordGatewayLog("info", "runtime", app_id, "server_start",
+                   "runtime server started on port " +
+                       base::NumberToString(port),
+                   -1, "");
   return true;
 }
 
@@ -701,7 +713,8 @@ void OnAppBuildStreamFinished(const std::string& app_id,
                               const std::string& conv_id,
                               int exit_code,
                               const std::string& session_id,
-                              const std::string& full_text) {
+                              const std::string& full_text,
+                              const std::string& detail) {
   g_active_app_builds->erase(app_id);
   base::DictValue registry = LoadRegistry();
   base::DictValue* app = FindAppDict(registry, app_id);
@@ -710,10 +723,13 @@ void OnAppBuildStreamFinished(const std::string& app_id,
   if (exit_code == 0) {
     SetAppField(*app, "status", kStatusReady);
     app->Set("last_error", "");
+    app->Set("last_error_detail", "");
   } else {
     SetAppField(*app, "status", kStatusError);
     app->Set("last_error",
              "grok build failed (exit " + base::NumberToString(exit_code) + ")");
+    // Real stderr reason (captured in PumpGrokStream) so the UI shows why.
+    app->Set("last_error_detail", detail);
   }
   if (!session_id.empty())
     app->Set("session_id", session_id);
@@ -1104,9 +1120,12 @@ bool TryHandleAppsRequest(
     std::string conv_id;
     if (const std::string* cid = app->FindString("conversation_id"))
       conv_id = *cid;
+    // Intentionally do NOT resume the saved grok session: one-shot `-p`
+    // (streaming-json) sessions are not persisted, so `-r <session_id>` fails
+    // with "Session does not exist" — which surfaced as "grok build failed" on
+    // every edit/resume. Running fresh with --cwd lets grok read and edit the
+    // app's current files, so edits apply correctly without the broken resume.
     std::string session_id;
-    if (const std::string* sid = app->FindString("session_id"))
-      session_id = *sid;
     std::string model = ResolveAppBuildModel(model_body);
     base::FilePath cwd = ResolveAppPath(*app);
     MarkAppBuilding(app_id);

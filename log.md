@@ -408,3 +408,38 @@ reproduced live).
 | rename stale-error badge | gated on status=error + labeled ✓ |
 | collapsed sidebar re-open handle | 32×64, fully on-screen ✓ |
 | preview iframe scrollbars themed | style injected into contentDocument ✓ |
+
+## Loop 18 (2026-06-15)
+
+### fix + feat: app edit/resume build failure, settings page, new /logs page
+- **Settings page (`settings.css`, committed 676fbed):** added the base `html.grok-build body`
+  rule (font/bg/color) that was missing — the page rendered in Times-serif on a transparent
+  bg, looking like broken JS/CSS though the JS ran fine.
+- **"Grok build failed" on edit/resume (`app_store.cc`):** ROOT CAUSE found by running the
+  exact grok command manually with stderr visible → `Couldn't create session: Session does
+  not exist` (exit 1). grok one-shot `-p` (streaming-json) sessions are NOT persisted, so the
+  edit path's `-r <saved session_id>` always failed (new apps worked because they had no `-r`).
+  Fix: stop resuming the saved session on edits — run fresh; `--cwd` gives grok the app's
+  current files so edits apply. Verified: editing the previously-failing tetrisv3 now streams
+  exit 0, status error→ready, and the real file edit landed.
+- **Build stderr was discarded (`grok_native.cc` PumpGrokStream):** only stdout was piped, so
+  failures were a black box. Now capture stderr to a temp file and surface it 3 ways: the chat
+  error bubble (`grok failed (exit N): <reason>`), the registry `last_error_detail`, and
+  `/api/logs`.
+- **New `/logs` page:** in-memory event ring + `RecordGatewayLog()` (thread-safe) in
+  `grok_native.cc`; records build start/finish (+exit+stderr) and runtime server start/fail.
+  `GET /api/logs?source=&app=&limit=` JSON contract; `/logs` route; themed, auto-refreshing,
+  filterable `logs.html`/`logs.css`/`logs.js` with expandable detail; **Logs** added to the
+  toolbar Grok Build menu (canonical `toolbar.html` + `common.js` fallback).
+- **Test:** native rebuild (apply→build→reinstall, clean relaunch). Verified LIVE: edit fix
+  (exit 0, file changed, status ready), `/api/logs` build events, `/logs` 200,
+  `companion_smoke_test.py` ALL OK.
+
+**Loop 18 test summary**
+| Check | Result |
+|-------|--------|
+| companion_smoke_test.py | ALL OK |
+| settings page base styles | white bg + apple-system font ✓ |
+| app edit/resume (was "Session does not exist") | exit 0, status ready, file edited ✓ |
+| build stderr surfaced (error bubble + last_error_detail) | captured ✓ |
+| /logs page + /api/logs | 200 + build start/finish events ✓ |

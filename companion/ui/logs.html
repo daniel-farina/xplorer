@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en" class="grok-build">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Logs — Xplorer</title>
+  <link rel="stylesheet" href="/theme.css">
+  <script>document.documentElement.setAttribute('data-theme',matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');</script>
+  <link rel="stylesheet" href="/toolbar.css">
+  <link rel="stylesheet" href="/logs.css">
+</head>
+<body data-grok-toolbar="auto">
+  <div id="grok-toolbar-mount"></div>
+  <main class="logs-page">
+    <header class="logs-head">
+      <div>
+        <h1>System logs</h1>
+        <p>Recent app build, runtime, and gateway events. Kept in memory (last 500); newest at the bottom.</p>
+      </div>
+      <div class="logs-controls">
+        <select id="log-source" title="Filter by source">
+          <option value="">All sources</option>
+          <option value="build">Build</option>
+          <option value="runtime">Runtime</option>
+          <option value="search">Search</option>
+          <option value="chat">Chat</option>
+        </select>
+        <label class="logs-auto"><input type="checkbox" id="log-auto" checked> Auto-refresh</label>
+        <button type="button" id="log-refresh" class="logs-btn">Refresh</button>
+      </div>
+    </header>
+
+    <section class="logs-table-wrap">
+      <table class="logs-table">
+        <thead>
+          <tr><th>Time</th><th>Level</th><th>Source</th><th>App</th><th>Event</th><th>Message</th></tr>
+        </thead>
+        <tbody id="logs-body"></tbody>
+      </table>
+      <p id="logs-empty" class="logs-empty" hidden>No log events yet. Build or open an app to generate some.</p>
+    </section>
+  </main>
+
+  <script src="/common.js"></script>
+  <script src="/logs.js"></script>
+</body>
+</html>
