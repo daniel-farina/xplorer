@@ -118,9 +118,14 @@ h1, h2, h3 { line-height: 1.07; letter-spacing: -0.022em; margin: 0; }
 /* ---------- Nav ---------- */
 .nav {
   position: sticky; top: 0; z-index: 50;
-  display: flex; align-items: center; justify-content: center;
+  display: flex; align-items: center; justify-content: space-between;
   max-width: var(--maxw); margin: 0 auto; padding: 16px 24px;
 }
+.nav__brand {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-size: 19px; font-weight: 650; letter-spacing: -0.02em; color: var(--text);
+}
+.nav__x { width: 22px; height: 22px; color: var(--text); flex: none; }
 .nav::after {
   content: ""; position: absolute; inset: 0; z-index: -1;
   background: var(--nav-bg);
@@ -169,29 +174,9 @@ h1, h2, h3 { line-height: 1.07; letter-spacing: -0.022em; margin: 0; }
 
 /* ---------- Hero ---------- */
 .hero {
-  max-width: var(--maxw); margin: 0 auto; padding: 64px 24px 36px; text-align: center;
+  max-width: var(--maxw); margin: 0 auto; padding: 88px 24px 36px; text-align: center;
 }
 .hero__inner { max-width: 820px; margin: 0 auto; }
-.hero__brand {
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
-  gap: 18px; margin-bottom: 32px;
-}
-.hero__logo {
-  width: 104px; height: 104px; object-fit: contain;
-  filter: drop-shadow(0 8px 22px var(--logo-drop));
-}
-.hero__brandname {
-  font-family: "Space Grotesk", -apple-system, "Inter", sans-serif;
-  font-size: 60px; font-weight: 700; letter-spacing: 0.004em; line-height: 1;
-  background: var(--wm-grad);
-  -webkit-background-clip: text; background-clip: text; color: transparent;
-  -webkit-text-stroke: 0.6px var(--wm-stroke);
-  text-shadow:
-    0 1px 0 var(--wm-hi),
-    0 -1px 0 var(--wm-lo),
-    0 3px 6px var(--wm-drop);
-  padding-bottom: 2px;
-}
 .badge {
   display: inline-flex; align-items: center; gap: 9px;
   padding: 6px 14px; border-radius: 999px; font-size: 13px; font-weight: 550;
@@ -380,7 +365,7 @@ h1, h2, h3 { line-height: 1.07; letter-spacing: -0.022em; margin: 0; }
   flex-wrap: wrap; border-top: 1px solid var(--line); color: var(--muted-2);
 }
 .footer__brand { display: flex; align-items: center; gap: 10px; font-weight: 700; color: var(--text); }
-.footer__logo { width: 22px; height: 22px; border-radius: 6px; }
+.footer__x { width: 20px; height: 20px; color: var(--text); }
 .footer__copy { font-size: 13.5px; }
 .footer__links { display: flex; gap: 22px; font-size: 14px; }
 .footer__links a:hover { color: var(--text); }

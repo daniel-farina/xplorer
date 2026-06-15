@@ -14,7 +14,7 @@
   <meta property="og:description" content="Search, chat, build apps, and control tabs — with Grok built into every page. Open source." />
   <meta property="og:type" content="website" />
 
-  <link rel="icon" type="image/png" href="assets/logo.png" />
+  <link rel="icon" type="image/svg+xml" href="assets/logo.svg" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
@@ -26,6 +26,10 @@
 
   <!-- Nav -->
   <header class="nav">
+    <a class="nav__brand" href="#top" aria-label="Xplorer home">
+      <svg class="nav__x" viewBox="0 0 32 32" aria-hidden="true"><path d="M9.5 9.5 L22.5 22.5 M22.5 9.5 L9.5 22.5" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round"/></svg>
+      <span>Xplorer</span>
+    </a>
     <nav class="nav__links">
       <a href="#features">Features</a>
       <a href="#showcase">Showcase</a>
@@ -48,11 +52,6 @@
   <!-- Hero -->
   <section class="hero">
     <div class="hero__inner">
-      <div class="hero__brand">
-        <!-- Replace assets/logo.png with your logo -->
-        <img src="assets/logo.png" alt="Xplorer logo" class="hero__logo" onerror="this.style.display='none'" />
-        <span class="hero__brandname">Xplorer</span>
-      </div>
       <div class="badge">
         <span class="badge__dot"></span>
         Open source · Grok-native
@@ -262,7 +261,7 @@ Agent API  <span class="c-str">http://127.0.0.1:9334</span>   <span class="c-com
   <!-- Footer -->
   <footer class="footer">
     <div class="footer__brand">
-      <img src="assets/logo.png" alt="" class="footer__logo" onerror="this.style.display='none'" />
+      <svg class="footer__x" viewBox="0 0 32 32" aria-hidden="true"><path d="M9.5 9.5 L22.5 22.5 M22.5 9.5 L9.5 22.5" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round"/></svg>
       <span>Xplorer</span>
     </div>
     <p class="footer__copy">The open-source, Grok-native browser. © 2026.</p>
