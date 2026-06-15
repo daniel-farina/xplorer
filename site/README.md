@@ -23,6 +23,10 @@ automatically (until then, styled placeholders show):
 | `assets/screenshot-build.png` | "Build apps by describing them" (builder + live preview) |
 | `assets/screenshot-grokit.png` | "The Grok it button" (FAB menu on a page) |
 | `assets/screenshot-toolbar.png` | "All of Grok in one toolbar" |
+| `assets/screenshot-newtab-1.png` | Customize — **Image #1** (new tab, custom light bg) |
+| `assets/screenshot-newtab-2.png` | Customize — **Image #2** (new tab, custom dark bg) |
+| `assets/screenshot-newtab-3.png` | Customize — **Image #3** (background picker panel) |
+| `assets/screenshot-newtab-4.png` | Customize — **Image #4** (drag & drop) |
 
 Until you drop these in, styled placeholders show in their place.
 
