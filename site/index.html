@@ -432,15 +432,107 @@ curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:9334/tabs
     })();
   </script>
   <script>
-    // Hero wordmark: animate in on load (setTimeout fallback so it never stays
-    // invisible if rAF is throttled in a backgrounded tab). Alignment is baked
-    // into the CSS variables on .hero__wordmark.
+    // Hero wordmark animates in on load. With ?align in the URL, an alignment
+    // tool appears to tune BOTH the hero wordmark and the nav logo (X+"plorer").
     (function () {
-      var wm = document.querySelector('.hero__wordmark');
-      if (!wm) return;
-      var reveal = function () { wm.classList.add('wm-in'); };
-      requestAnimationFrame(function () { requestAnimationFrame(reveal); });
-      setTimeout(reveal, 150);
+      var hero = document.querySelector('.hero__wordmark');
+      if (hero) {
+        var reveal = function () { hero.classList.add('wm-in'); };
+        requestAnimationFrame(function () { requestAnimationFrame(reveal); });
+        setTimeout(reveal, 150);
+      }
+      if (!/align/.test(location.search + location.hash)) return;
+
+      var KNOBS = [
+        { s: 'gap',       l: 'Gap',       min: -40, max: 40, step: 1,   u: 'px' },
+        { s: 'x-size',    l: 'X size',    min: 12,  max: 96, step: 1,   u: 'px' },
+        { s: 'x-dx',      l: 'X ← →',     min: -40, max: 40, step: 1,   u: 'px' },
+        { s: 'x-dy',      l: 'X ↑ ↓',     min: -40, max: 40, step: 1,   u: 'px' },
+        { s: 'word-size', l: 'word size', min: 12,  max: 96, step: 1,   u: 'px' },
+        { s: 'word-dx',   l: 'word ← →',  min: -40, max: 40, step: 1,   u: 'px' },
+        { s: 'word-dy',   l: 'word ↑ ↓',  min: -40, max: 40, step: 1,   u: 'px' },
+        { s: 'letter',    l: 'tracking',  min: -10, max: 10, step: 0.5, u: 'em', sc: 0.01 },
+      ];
+      var TARGETS = [
+        { name: 'Hero', sel: '.hero__wordmark', prefix: '--wm', key: 'xplorer-wm' },
+        { name: 'Nav',  sel: '.nav__brand',     prefix: '--nl', key: 'xplorer-nl' },
+      ];
+      var toVal = function (k, n) { return (k.sc ? n * k.sc : n) + k.u; };
+      function curVal(tg, k) {
+        if (tg.saved[k.s] != null) return tg.saved[k.s];
+        var n = parseFloat(getComputedStyle(tg.el).getPropertyValue(tg.prefix + '-' + k.s));
+        if (isNaN(n)) n = 0;
+        return k.sc ? Math.round(n / k.sc * 2) / 2 : Math.round(n);
+      }
+      TARGETS = TARGETS.filter(function (tg) {
+        tg.el = document.querySelector(tg.sel);
+        if (!tg.el) return false;
+        tg.saved = {};
+        try { tg.saved = JSON.parse(localStorage.getItem(tg.key) || '{}'); } catch (e) {}
+        KNOBS.forEach(function (k) {
+          if (tg.saved[k.s] != null) tg.el.style.setProperty(tg.prefix + '-' + k.s, toVal(k, tg.saved[k.s]));
+        });
+        return true;
+      });
+      if (!TARGETS.length) return;
+
+      var panel = document.createElement('div');
+      panel.className = 'wm-tool';
+      panel.innerHTML = '<h4>Logo alignment</h4><div class="wm-tool__targets"></div>' +
+        '<div class="wm-tool__rows"></div>' +
+        '<div class="wm-tool__btns"><button data-act="copy">Copy CSS</button><button data-act="reset">Reset</button></div>';
+      document.body.appendChild(panel);
+      var tabsEl = panel.querySelector('.wm-tool__targets');
+      var rowsEl = panel.querySelector('.wm-tool__rows');
+      var nav = document.querySelector('.nav__brand');
+      var active = TARGETS[0];
+
+      function syncReveal() { if (nav) nav.classList.toggle('wm-reveal', active.sel === '.nav__brand'); }
+      function renderRows() {
+        rowsEl.innerHTML = '';
+        KNOBS.forEach(function (k) {
+          var v = curVal(active, k);
+          var row = document.createElement('div');
+          row.className = 'wm-tool__row';
+          row.innerHTML = '<label>' + k.l + '</label>' +
+            '<input type="range" min="' + k.min + '" max="' + k.max + '" step="' + k.step + '" value="' + v + '">' +
+            '<output>' + v + '</output>';
+          var input = row.querySelector('input'), out = row.querySelector('output');
+          input.addEventListener('input', function () {
+            var n = parseFloat(input.value);
+            out.textContent = n;
+            active.saved[k.s] = n;
+            active.el.style.setProperty(active.prefix + '-' + k.s, toVal(k, n));
+            try { localStorage.setItem(active.key, JSON.stringify(active.saved)); } catch (e) {}
+          });
+          rowsEl.appendChild(row);
+        });
+      }
+      TARGETS.forEach(function (tg) {
+        var btn = document.createElement('button');
+        btn.textContent = tg.name;
+        if (tg === active) btn.className = 'is-active';
+        btn.addEventListener('click', function () {
+          active = tg;
+          tabsEl.querySelectorAll('button').forEach(function (b, i) { b.classList.toggle('is-active', TARGETS[i] === tg); });
+          syncReveal(); renderRows();
+        });
+        tabsEl.appendChild(btn);
+      });
+      syncReveal(); renderRows();
+
+      panel.querySelector('[data-act="copy"]').addEventListener('click', function (e) {
+        var css = active.sel + ' {\n' + KNOBS.map(function (k) {
+          return '  ' + active.prefix + '-' + k.s + ': ' + toVal(k, curVal(active, k)) + ';';
+        }).join('\n') + '\n}';
+        navigator.clipboard.writeText(css).then(function () {
+          e.target.textContent = 'Copied!'; setTimeout(function () { e.target.textContent = 'Copy CSS'; }, 1500);
+        }).catch(function () {});
+      });
+      panel.querySelector('[data-act="reset"]').addEventListener('click', function () {
+        try { localStorage.removeItem(active.key); } catch (e) {}
+        location.reload();
+      });
     })();
   </script>
 </body>

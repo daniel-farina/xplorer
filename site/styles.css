@@ -145,19 +145,31 @@ html.theme-animating * {
   max-width: var(--maxw); margin: 0 auto; padding: 14px 24px;
 }
 .nav__brand {
-  display: inline-flex; align-items: center; gap: 0;
-  font-size: 19px; letter-spacing: -0.02em; color: var(--text);
+  /* Tunable alignment knobs (shared with the align tool, prefix --nl). */
+  --nl-gap: 0px;
+  --nl-x-size: 22px;
+  --nl-x-dx: 4px; --nl-x-dy: 1px;
+  --nl-word-size: 20px;
+  --nl-word-dx: 0px; --nl-word-dy: 0px;
+  --nl-letter: -0.02em;
+  display: inline-flex; align-items: center; gap: var(--nl-gap);
+  font-size: var(--nl-word-size); letter-spacing: var(--nl-letter); color: var(--text);
 }
-.nav__x { width: 22px; height: 22px; color: var(--text); flex: none; }
+.nav__x {
+  width: var(--nl-x-size); height: var(--nl-x-size); color: var(--text); flex: none;
+  transform: translate(var(--nl-x-dx), var(--nl-x-dy));
+}
 /* X alone by default; "plorer" reveals on hover → reads "Xplorer" */
 .nav__word {
   font-family: "Space Grotesk", -apple-system, "Inter", sans-serif;
   font-weight: 600; letter-spacing: -0.01em;
   max-width: 0; opacity: 0; overflow: hidden; white-space: nowrap;
+  transform: translate(var(--nl-word-dx), var(--nl-word-dy));
   transition: max-width .28s ease, opacity .26s ease, margin-left .28s ease;
 }
 .nav__brand:hover .nav__word,
-.nav__brand:focus-visible .nav__word { max-width: 8ch; opacity: 1; margin-left: 1px; }
+.nav__brand:focus-visible .nav__word,
+.nav__brand.wm-reveal .nav__word { max-width: 8ch; opacity: 1; margin-left: 1px; }
 .nav::after {
   content: ""; position: absolute; inset: 0; z-index: -1;
   background: var(--nav-bg);
@@ -231,6 +243,29 @@ html.theme-animating * {
   transform: translate(var(--wm-x-dx), var(--wm-x-dy));
 }
 .hero__wordmark > span { display: inline-block; transform: translate(var(--wm-word-dx), var(--wm-word-dy)); }
+
+/* Alignment tool — only shown with ?align in the URL (kept for tuning). */
+.wm-tool {
+  position: fixed; bottom: 16px; left: 16px; z-index: 9999;
+  width: 250px; padding: 14px; border-radius: 14px;
+  background: var(--panel, #14161d); color: var(--text, #fff);
+  border: 1px solid var(--line, rgba(255,255,255,.15)); box-shadow: 0 10px 40px rgba(0,0,0,.4);
+  font: 12px/1.4 -apple-system, BlinkMacSystemFont, sans-serif;
+}
+.wm-tool h4 { margin: 0 0 10px; font-size: 13px; }
+.wm-tool__targets { display: flex; gap: 4px; margin-bottom: 10px; }
+.wm-tool__targets button {
+  flex: 1; padding: 5px; border-radius: 8px; cursor: pointer; font: inherit; font-size: 12px;
+  border: 1px solid var(--line, rgba(255,255,255,.2)); background: rgba(255,255,255,.04); color: var(--muted, #9aa);
+}
+.wm-tool__targets button.is-active { background: rgba(255,255,255,.14); color: var(--text, #fff); }
+.wm-tool__row { display: grid; grid-template-columns: 78px 1fr 44px; align-items: center; gap: 6px; margin-bottom: 7px; }
+.wm-tool__row label { color: var(--muted, #9aa); }
+.wm-tool__row input[type="range"] { width: 100%; }
+.wm-tool__row output { text-align: right; font-variant-numeric: tabular-nums; }
+.wm-tool__btns { display: flex; gap: 6px; margin-top: 10px; }
+.wm-tool__btns button { flex: 1; padding: 6px; border-radius: 8px; border: 1px solid var(--line, rgba(255,255,255,.2)); background: rgba(255,255,255,.06); color: inherit; cursor: pointer; font: inherit; }
+.wm-tool__btns button:hover { background: rgba(255,255,255,.14); }
 .badge {
   display: inline-flex; align-items: center; gap: 9px;
   padding: 6px 14px; border-radius: 999px; font-size: 13px; font-weight: 550;
