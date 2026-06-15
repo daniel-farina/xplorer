@@ -82,6 +82,10 @@ void RedirectLegacyNewTabIfNeeded(content::WebContents* contents);
 // Open Grok Search home (build or web) in the active tab.
 void OpenGrokSearchPage(BrowserWindowInterface* browser);
 
+// "Ask Grok about this page": navigates |web_contents| to Grok with a prompt
+// about the current page. Rewires Chrome's "Ask Google about this page" action.
+void AskGrokAboutPage(content::WebContents* web_contents);
+
 // Toggle the Grok side panel (chat UI). Called from the toolbar Grok button.
 void ToggleGrokSidePanel(BrowserWindowInterface* browser);
 

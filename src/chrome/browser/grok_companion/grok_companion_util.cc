@@ -14,7 +14,9 @@
 #include "base/json/json_writer.h"
 #include "base/json/json_reader.h"
 #include "base/path_service.h"
+#include "base/strings/escape.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/agent_gateway/agent_gateway.h"
 #include "chrome/browser/agent_gateway/xplorer_paths.h"
 #include "chrome/browser/profiles/profile.h"
@@ -243,6 +245,27 @@ void OpenGrokSearchPage(BrowserWindowInterface* browser) {
   content::NavigationController::LoadURLParams params(GetDefaultSearchHomeURL());
   params.transition_type = ui::PAGE_TRANSITION_TYPED;
   contents->GetController().LoadURLWithParams(params);
+}
+
+void AskGrokAboutPage(content::WebContents* web_contents) {
+  if (!web_contents)
+    return;
+  // Build a page-context prompt and hand it to the gateway /omnibox endpoint,
+  // which stores it as a pending grok-web prompt and 302s to grok.com where the
+  // injector auto-submits it. (Replaces Chrome's "Ask Google about this page".)
+  std::string prompt = "Tell me about this page";
+  std::u16string title = web_contents->GetTitle();
+  if (!title.empty())
+    prompt += ": " + base::UTF16ToUTF8(title);
+  GURL page = web_contents->GetLastCommittedURL();
+  if (page.is_valid() && page.SchemeIsHTTPOrHTTPS())
+    prompt += " " + page.spec();
+  GURL dest(std::string("http://") + kCompanionHost + ":" +
+            base::NumberToString(GatewayPort()) + "/omnibox?q=" +
+            base::EscapeQueryParamValue(prompt, /*use_plus=*/true));
+  content::NavigationController::LoadURLParams params(dest);
+  params.transition_type = ui::PAGE_TRANSITION_TYPED;
+  web_contents->GetController().LoadURLWithParams(params);
 }
 
 void ToggleGrokSidePanel(BrowserWindowInterface* browser) {

@@ -560,6 +560,57 @@ def main(src: Path):
         vum.write_text(vm2)
         print(f"  edited (maybe_unused): {vum}")
 
+    # --- "Ask Google about this page" -> "Ask Grok about this page" ---------
+    # Rebrand the Lens omnibox-action strings...
+    omn = src / "components/omnibox_strings.grdp"
+    og = omn.read_text()
+    if "Ask Grok about this page" not in og:
+        og = og.replace("Ask Google about this page", "Ask Grok about this page")
+        og = og.replace("ask Google about this page", "ask Grok about this page")
+        og = og.replace("Ask Google Lens about this page",
+                        "Ask Grok about this page")
+        og = og.replace("Ask Google Search about this page",
+                        "Ask Grok about this page")
+        omn.write_text(og)
+        print(f"  edited: {omn}")
+    # ...and rewire the action handler to open Grok instead of the Google Lens
+    # overlay (the action routes 100% through OpenLensOverlay).
+    acp = src / "chrome/browser/autocomplete/chrome_autocomplete_provider_client.cc"
+    ac = acp.read_text()
+    if "AskGrokAboutPage" not in ac:
+        ac = ac.replace(
+            '#include "chrome/browser/autocomplete/'
+            'chrome_autocomplete_provider_client.h"',
+            '#include "chrome/browser/autocomplete/'
+            'chrome_autocomplete_provider_client.h"\n'
+            '#include "chrome/browser/grok_companion/grok_companion_util.h"  '
+            '// AETHER', 1)
+        ac = ac.replace(
+            "void ChromeAutocompleteProviderClient::OpenLensOverlay(bool show) {\n"
+            "#if !BUILDFLAG(IS_ANDROID)\n"
+            "  if (auto* lens_search_controller =\n"
+            "          GetLensSearchController(GetWebContents(web_contents_getter_))) {\n"
+            "    if (show) {\n"
+            "      // Force showing the contextual search box in the Lens Overlay.\n"
+            "      lens_search_controller->OpenLensOverlay(\n"
+            "          lens::LensOverlayInvocationSource::kOmniboxPageAction, true);\n"
+            "    } else {\n"
+            "      // TODO(crbug.com/402497756): For prototyping, reusing the existing\n"
+            "      // omnibox entry point. However, for production, create a new invocation\n"
+            "      // source for this new entry point.\n"
+            "      lens_search_controller->StartContextualization(\n"
+            "          lens::LensOverlayInvocationSource::kOmnibox);\n"
+            "    }\n"
+            "  }\n"
+            "#endif  // !BUILDFLAG(IS_ANDROID)\n"
+            "}",
+            "void ChromeAutocompleteProviderClient::OpenLensOverlay(bool show) {\n"
+            "  // AETHER: \"Ask Grok about this page\" -> open Grok, not Google Lens.\n"
+            "  grok_companion::AskGrokAboutPage(GetWebContents(web_contents_getter_));\n"
+            "}")
+        acp.write_text(ac)
+        print(f"  edited: {acp}")
+
     print("Integration edits applied.")
 
 
