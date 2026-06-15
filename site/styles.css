@@ -244,8 +244,10 @@ html.theme-animating * {
   width: 100%;
   height: auto;
   display: block;
-  border-radius: 16px;
-  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.45);
+  /* The PNG is the browser window on a transparent canvas (rounded corners).
+     Use drop-shadow (follows the alpha shape) instead of border-radius +
+     box-shadow, which drew a rectangular "frame" around the transparent edges. */
+  filter: drop-shadow(0 24px 55px rgba(0, 0, 0, 0.4));
 }
 .hero__shot-img--dark { display: none; }
 :root[data-theme="dark"] .hero__shot-img--light { display: none; }
