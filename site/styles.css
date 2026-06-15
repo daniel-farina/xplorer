@@ -86,7 +86,7 @@ h1, h2, h3 { line-height: 1.1; letter-spacing: -0.02em; margin: 0; }
 }
 .btn--lg { padding: 16px 28px; font-size: 16px; }
 .btn--primary {
-  color: #fff;
+  color: #000;
   background: #ffffff;
   box-shadow: 0 12px 36px -10px rgba(255,255,255,0.25);
 }
