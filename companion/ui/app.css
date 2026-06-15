@@ -73,6 +73,70 @@ html.grok-build body.app-view-page {
   color: var(--button-text);
 }
 
+/* Compact secondary controls: small icon buttons + overflow menu. */
+.app-subtoolbar .app-tool-btn {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-secondary);
+  border-radius: 8px;
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+}
+.app-subtoolbar .app-tool-btn:hover { color: var(--accent); border-color: var(--accent); }
+.app-subtoolbar .app-tool-btn:disabled { opacity: 0.5; cursor: default; }
+.app-subtoolbar .app-tool-btn.refresh.spinning { animation: app-spin 0.6s linear infinite; }
+@keyframes app-spin { to { transform: rotate(360deg); } }
+
+.app-subtoolbar .apps-btn.ghost {
+  background: transparent;
+  color: var(--text-secondary);
+}
+.app-subtoolbar .apps-btn.ghost:hover { color: var(--accent); border-color: var(--accent); }
+
+.app-overflow { position: relative; }
+.app-overflow-menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 6px;
+  min-width: 184px;
+  padding: 4px;
+  z-index: 50;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--card-bg);
+  box-shadow: 0 8px 24px var(--shadow);
+  display: flex;
+  flex-direction: column;
+}
+.app-overflow-menu[hidden] { display: none; }
+.app-menu-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 7px 10px;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  text-decoration: none;
+}
+.app-menu-item:hover { background: var(--surface-elevated); color: var(--accent); }
+.app-menu-item.danger { color: #e23b3b; }
+.app-menu-item.danger:hover { background: rgba(226, 59, 59, 0.1); color: #e23b3b; }
+.app-menu-item[hidden] { display: none; }
+.app-menu-sep { height: 1px; margin: 4px 6px; background: var(--border); }
+
 .app-workspace {
   flex: 1;
   display: grid;

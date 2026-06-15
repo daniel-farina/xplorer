@@ -209,9 +209,18 @@ async function loadApp() {
     const cmd = app.cli_command || `grok --cwd ${app.path || '.'}`;
     navigator.clipboard.writeText(cmd).then(() => {
       $('#copy-cli').textContent = 'Copied!';
-      setTimeout(() => { $('#copy-cli').textContent = 'Copy CLI'; }, 1500);
+      setTimeout(() => { $('#copy-cli').textContent = 'Copy CLI command'; }, 1500);
     }).catch(() => prompt('Copy CLI command:', cmd));
   };
+  const refreshBtn = $('#refresh-preview');
+  if (refreshBtn) {
+    refreshBtn.onclick = async () => {
+      refreshBtn.classList.add('spinning');
+      refreshBtn.disabled = true;
+      try { await refreshApp(); await loadPreview(); }
+      finally { refreshBtn.classList.remove('spinning'); refreshBtn.disabled = false; }
+    };
+  }
   await loadConversation();
   await loadPreview();
 
@@ -513,8 +522,23 @@ $('#delete-app')?.addEventListener('click', async () => {
   }
 });
 
+function initOverflowMenu() {
+  const wrap = $('#app-overflow');
+  const btn = $('#app-overflow-btn');
+  const menu = $('#app-overflow-menu');
+  if (!wrap || !btn || !menu) return;
+  const close = () => { menu.hidden = true; btn.setAttribute('aria-expanded', 'false'); };
+  const open = () => { menu.hidden = false; btn.setAttribute('aria-expanded', 'true'); };
+  btn.onclick = (e) => { e.stopPropagation(); menu.hidden ? open() : close(); };
+  document.addEventListener('click', (e) => { if (!wrap.contains(e.target)) close(); });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
+  menu.querySelectorAll('.app-menu-item').forEach((el) =>
+    el.addEventListener('click', () => setTimeout(close, 0)));
+}
+
 mountGrokToolbar({ pageHome: 'build' });
 initChatToggle();
+initOverflowMenu();
 startThemeWatcher();
 loadApp().catch((e) => {
   alert(e.message);

@@ -345,7 +345,7 @@ html[data-theme="dark"] .app-status.error { color: #f28b82; }
 
 .app-actions {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: 1fr 1fr auto;   /* Build | Preview | ⋯ */
   gap: 6px;
   margin-top: auto;
 }
@@ -358,6 +358,76 @@ html[data-theme="dark"] .app-status.error { color: #f28b82; }
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+.app-menu-btn { width: 34px; padding: 7px 0; }
+
+/* --- Card thumbnail (live, scaled-down preview of the built app) --- */
+.app-thumb {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--surface-elevated);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.app-thumb-frame {
+  /* Render the app at desktop width, then scale down to fit the card. */
+  width: 1000px;
+  height: 625px;
+  border: 0;
+  transform: scale(0.34);
+  transform-origin: top left;
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;     /* clicks fall through to .app-thumb (data-open) */
+  background: #fff;
+}
+.app-thumb-overlay { position: absolute; inset: 0; }
+.app-thumb.is-placeholder { flex-direction: column; gap: 8px; color: var(--text-secondary); }
+.app-thumb-icon { width: 40px; height: 40px; border-radius: 10px; opacity: 0.9; }
+.app-thumb-hint { font-size: 11px; }
+.app-card:hover .app-thumb { border-color: var(--accent); }
+.app-card-headtext { min-width: 0; }
+.app-card-headtext h3 { margin: 0; font-size: 15px; line-height: 1.3; }
+
+/* --- ⋯ overflow menu --- */
+.app-menu { position: relative; }
+.app-menu-pop {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 6px);
+  z-index: 30;
+  min-width: 178px;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: var(--surface-elevated);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px var(--shadow);
+}
+.app-menu-pop button {
+  text-align: left;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  padding: 7px 10px;
+  border-radius: 7px;
+  cursor: pointer;
+}
+.app-menu-pop button:hover:not(:disabled) { background: var(--accent-soft); color: var(--accent); }
+.app-menu-pop button.danger { color: #e23b3b; }
+.app-menu-pop button.danger:hover { background: rgba(226, 59, 59, 0.1); }
+.app-menu-pop button:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .apps-empty {
   color: var(--text-secondary);

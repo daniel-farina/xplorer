@@ -10,6 +10,7 @@ const deleteSelectedBtn = $('#delete-selected-btn');
 const restartSelectedBtn = $('#restart-selected-btn');
 
 let lastApps = [];
+let lastRenderSig = '';
 let statusFilter = 'all';
 const filterBar = $('#apps-filter-bar');
 
@@ -141,40 +142,57 @@ function renderApps(data) {
     btn.classList.toggle('active', btn.dataset.filter === statusFilter);
   });
   updateFilterCounts(apps);
+  // Skip the grid rebuild when nothing visible changed — this preserves the
+  // live <iframe> thumbnails (rebuilding innerHTML every 2s would reload them).
+  // Never rebuild while a ⋯ menu is open (it would close it).
+  const sig = statusFilter + '|' + visible.map((a) =>
+    `${a.id}:${a.status}:${a.runtime_ready ? 1 : 0}:${a.runtime_alive ? 1 : 0}:${a.exportable ? 1 : 0}:${a.name || ''}`).join(',');
+  if (grid.querySelector('.app-menu-pop:not(.hidden)')) return;
+  if (sig === lastRenderSig && grid.childElementCount) return;
+  lastRenderSig = sig;
+  grid.innerHTML = '';
   for (const app of visible) {
     const card = document.createElement('article');
     card.className = 'app-card' + (app.status === 'building' ? ' building' : '');
+    const pUrl = previewUrl(app);
+    const canPreview = app.status === 'ready' && app.runtime_ready && pUrl;
+    const thumbReady = app.runtime_ready && pUrl;
     card.innerHTML = `
       <label class="app-select"><input type="checkbox" class="app-select-cb" data-id="${escapeHtml(app.id)}"></label>
+      <div class="app-thumb${thumbReady ? '' : ' is-placeholder'}" data-open="${escapeHtml(app.id)}" title="Open builder">
+        ${thumbReady
+          ? `<iframe class="app-thumb-frame" src="${escapeHtml(pUrl)}" loading="lazy" tabindex="-1" aria-hidden="true" scrolling="no" sandbox="allow-scripts allow-same-origin"></iframe><span class="app-thumb-overlay"></span>`
+          : `<img class="app-thumb-icon" src="/api/apps/${encodeURIComponent(app.id)}/icon" alt=""><span class="app-thumb-hint">${app.status === 'building' ? 'Building…' : 'Not built yet'}</span>`}
+      </div>
       <div class="app-card-head">
         <img class="app-icon" src="/api/apps/${encodeURIComponent(app.id)}/icon" alt="">
-        <div>
+        <div class="app-card-headtext">
           <h3>${escapeHtml(app.name || 'App')}</h3>
-          <p class="app-meta">${escapeHtml(app.path || '')}</p>
+          <div class="app-status ${escapeHtml(app.status || 'idle')}">
+            ${app.status === 'building' ? '<span class="pulse"></span>' : ''}
+            ${escapeHtml(statusLabel(app.status))}
+            ${app.runtime_alive ? '<span class="runtime-dot alive" title="Runtime server running">●</span>' : ''}
+            ${app.runtime_ready && !app.runtime_alive ? '<span class="runtime-dot idle" title="Built but runtime stopped">○</span>' : ''}
+          </div>
         </div>
-      </div>
-      <div class="app-status ${escapeHtml(app.status || 'idle')}">
-        ${app.status === 'building' ? '<span class="pulse"></span>' : ''}
-        ${escapeHtml(statusLabel(app.status))}
-        ${app.runtime_alive ? '<span class="runtime-dot alive" title="Runtime server running">●</span>' : ''}
-        ${app.runtime_ready && !app.runtime_alive ? '<span class="runtime-dot idle" title="Built but runtime stopped">○</span>' : ''}
       </div>
       ${app.status === 'error' && app.last_error ? '<p class="app-error">Last build failed: ' + escapeHtml(app.last_error) + '</p>' : ''}
       <div class="app-actions">
         <button type="button" class="apps-btn primary" data-open="${escapeHtml(app.id)}">Build</button>
-        ${app.status === 'ready' && app.runtime_ready && previewUrl(app)
-          ? `<button type="button" class="apps-btn" data-preview="${escapeHtml(previewUrl(app))}">Preview</button>`
-          : ''}
-        ${app.runtime_ready && !app.runtime_alive
-          ? `<button type="button" class="apps-btn" data-restart="${escapeHtml(app.id)}">Restart</button>`
-          : ''}
-        <button type="button" class="apps-btn" data-rename="${escapeHtml(app.id)}" data-name="${escapeHtml(app.name || 'App')}">Rename</button>
-        <button type="button" class="apps-btn" data-duplicate="${escapeHtml(app.id)}">Duplicate</button>
-        ${app.exportable
-          ? `<button type="button" class="apps-btn" data-export="${escapeHtml(app.id)}" data-name="${escapeHtml(app.name || 'App')}">Export</button>`
-          : '<button type="button" class="apps-btn" disabled title="App folder missing">Export</button>'}
-        <button type="button" class="apps-btn" data-modify="${escapeHtml(app.id)}">Modify</button>
-        <button type="button" class="apps-btn danger" data-delete="${escapeHtml(app.id)}" data-name="${escapeHtml(app.name || 'App')}">Delete</button>
+        <button type="button" class="apps-btn" data-preview="${escapeHtml(pUrl || '')}"${canPreview ? '' : ' disabled title="Build the app first"'}>Preview</button>
+        <div class="app-menu">
+          <button type="button" class="apps-btn app-menu-btn" data-menu="${escapeHtml(app.id)}" aria-haspopup="true" aria-expanded="false" title="More actions">⋯</button>
+          <div class="app-menu-pop hidden" role="menu">
+            ${app.runtime_ready && !app.runtime_alive ? `<button type="button" role="menuitem" data-restart="${escapeHtml(app.id)}">Restart runtime</button>` : ''}
+            <button type="button" role="menuitem" data-modify="${escapeHtml(app.id)}">Modify with Grok…</button>
+            <button type="button" role="menuitem" data-rename="${escapeHtml(app.id)}" data-name="${escapeHtml(app.name || 'App')}">Rename…</button>
+            <button type="button" role="menuitem" data-duplicate="${escapeHtml(app.id)}">Duplicate</button>
+            ${app.exportable
+              ? `<button type="button" role="menuitem" data-export="${escapeHtml(app.id)}" data-name="${escapeHtml(app.name || 'App')}">Export .zip</button>`
+              : '<button type="button" role="menuitem" disabled title="App folder missing">Export .zip</button>'}
+            <button type="button" role="menuitem" class="danger" data-delete="${escapeHtml(app.id)}" data-name="${escapeHtml(app.name || 'App')}">Delete</button>
+          </div>
+        </div>
       </div>`;
     grid.appendChild(card);
   }
@@ -288,6 +306,20 @@ function renderApps(data) {
         btn.disabled = false;
       }
     };
+  });
+  // ⋯ overflow menu: open the clicked card's menu, close others.
+  grid.querySelectorAll('[data-menu]').forEach((btn) => {
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      const pop = btn.parentElement.querySelector('.app-menu-pop');
+      const willOpen = pop.classList.contains('hidden');
+      grid.querySelectorAll('.app-menu-pop').forEach((p) => p.classList.add('hidden'));
+      grid.querySelectorAll('.app-menu-btn').forEach((b) => b.setAttribute('aria-expanded', 'false'));
+      if (willOpen) { pop.classList.remove('hidden'); btn.setAttribute('aria-expanded', 'true'); }
+    };
+  });
+  grid.querySelectorAll('.app-menu-pop [role="menuitem"]').forEach((mi) => {
+    mi.addEventListener('click', () => mi.closest('.app-menu-pop')?.classList.add('hidden'));
   });
 }
 
@@ -461,6 +493,14 @@ filterBar?.querySelectorAll('[data-filter]').forEach((btn) => {
     statusFilter = btn.dataset.filter || 'all';
     renderApps({ apps: lastApps });
   });
+});
+
+// Close any open ⋯ menu when clicking elsewhere (bound once).
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('.app-menu')) {
+    grid.querySelectorAll('.app-menu-pop').forEach((p) => p.classList.add('hidden'));
+    grid.querySelectorAll('.app-menu-btn').forEach((b) => b.setAttribute('aria-expanded', 'false'));
+  }
 });
 
 mountGrokToolbar({ pageHome: 'build' });

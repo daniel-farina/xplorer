@@ -18,11 +18,18 @@
     <span class="app-path" id="app-path" title=""></span>
     <span class="app-status idle" id="app-status">Idle</span>
     <span class="spacer"></span>
-    <a class="apps-btn" id="open-app-tab" href="#" target="_blank" rel="noopener noreferrer" title="Open app on localhost">Open tab</a>
-    <button type="button" class="apps-btn" id="export-app" title="Download app as zip" hidden>Export</button>
-    <button type="button" class="apps-btn" id="copy-cli" title="Copy grok resume command">Copy CLI</button>
-    <button type="button" class="apps-btn danger" id="delete-app" title="Delete this app">Delete</button>
-    <a class="apps-btn" id="back-gallery" href="/apps">Gallery</a>
+    <button type="button" class="app-tool-btn refresh" id="refresh-preview" title="Refresh preview (re-render the live app)" aria-label="Refresh preview">↻</button>
+    <div class="app-overflow" id="app-overflow">
+      <button type="button" class="app-tool-btn" id="app-overflow-btn" aria-haspopup="true" aria-expanded="false" title="More actions" aria-label="More actions">⋯</button>
+      <div class="app-overflow-menu" id="app-overflow-menu" role="menu" hidden>
+        <a class="app-menu-item" id="open-app-tab" href="#" target="_blank" rel="noopener noreferrer" role="menuitem">Open in tab</a>
+        <button type="button" class="app-menu-item" id="copy-cli" role="menuitem">Copy CLI command</button>
+        <button type="button" class="app-menu-item" id="export-app" role="menuitem" hidden>Export as zip</button>
+        <div class="app-menu-sep"></div>
+        <button type="button" class="app-menu-item danger" id="delete-app" role="menuitem">Delete app</button>
+      </div>
+    </div>
+    <a class="apps-btn ghost" id="back-gallery" href="/apps">Gallery</a>
   </div>
   <div class="app-workspace" id="app-workspace">
     <section class="app-preview" id="app-preview">

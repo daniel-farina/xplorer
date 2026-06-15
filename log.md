@@ -443,3 +443,40 @@ reproduced live).
 | app edit/resume (was "Session does not exist") | exit 0, status ready, file edited ✓ |
 | build stderr surfaced (error bubble + last_error_detail) | captured ✓ |
 | /logs page + /api/logs | 200 + build start/finish events ✓ |
+
+## Loop 19 (2026-06-15)
+
+### feat: toolbar pushes page content down; apps gallery + builder redesign
+- **Native overlay no longer covers page UI (`grok_web_bar.cc`):** the fixed bar now
+  offsets page content by its height. Was padding BOTH `<html>`+`<body>` (double gap);
+  now a single root offset, re-asserted on SPA route changes + the 400ms watchdog (sites
+  that strip our inline style no longer re-cover content). Adaptive: if a page's body still
+  sits under the bar (fixed/absolute app shell), fall back to `transform: translateY` on the
+  root, which offsets fixed descendants too. Verified: grokipedia + x.com content now starts
+  below the bar (was 31px under on x.com). (Edge case: x.com's single `position:fixed` logo
+  remains — inherent to an injected bar; a native chrome bar is the full fix.)
+- **Apps gallery (`apps.js`/`apps.css`) — designed by a background workflow:** each card now
+  shows a **live scaled-down `<iframe>` preview** of the built app (always current — no stale
+  screenshot, no tab-flash capture) with an icon/"Not built yet" placeholder; actions reduced
+  to **Build** + **Preview** + a **⋯ menu** (Restart/Modify/Rename/Duplicate/Export/Delete).
+  Added a render-signature guard so the 2s poll doesn't reload the iframes; ⋯ menus close on
+  outside-click and pause the poll while open.
+- **Opened builder (`app.html`/`app.css`/`app-view.js`):** the heavy actions
+  (Open-in-tab/Copy-CLI/Export/Delete) moved into a compact **⋯ overflow menu**; added a small
+  **↻ Refresh** (re-renders the live preview) and a low-emphasis Gallery link, keeping focus on
+  the preview + chat.
+- **Screenshot decision:** chose the live-iframe preview over the native raster-capture path —
+  the only capture mechanism foregrounds/flashes a tab (no headless path) and is fragile;
+  the iframe is always-current and needs no rebuild.
+- **Test:** native rebuild for the toolbar offset (apply→build→reinstall, clean relaunch);
+  apps UI is live. Verified via SDK eval: toolbar offset on grokipedia + x.com, gallery
+  thumbnail/menu, builder compact toolbar + overflow.
+
+**Loop 19 test summary**
+| Check | Result |
+|-------|--------|
+| toolbar offsets content (grokipedia/x.com) | bodyTop=barH, single offset ✓ |
+| offset re-asserted on SPA + watchdog | applyPadding on tick/route ✓ |
+| gallery: live iframe thumbnail | .app-thumb-frame renders ✓ |
+| gallery: Build + Preview + ⋯ menu (6 items) | actionCount=3, menu opens ✓ |
+| builder: ↻ refresh + ⋯ overflow (4 items) + Gallery | compact toolbar ✓ |
