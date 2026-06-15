@@ -291,15 +291,38 @@ std::string BuildInjectScript(const std::string& active_mode) {
     style.textContent=CSS;
     document.documentElement.appendChild(style);
   }
-  function setPad(px){
-    document.documentElement.style.setProperty('padding-top',px,'important');
-    if(document.body)document.body.style.setProperty('padding-top',px,'important');
+  function clearOffset(){
+    var s=document.documentElement.style;
+    s.removeProperty('padding-top');
+    s.removeProperty('scroll-padding-top');
+    s.removeProperty('transform');
+    s.removeProperty('transform-origin');
+    if(document.body)document.body.style.removeProperty('padding-top');
   }
   function isHidden(){try{return localStorage.getItem(HIDE_KEY)==='1';}catch(e){return false;}}
+  // Offset the page so the fixed bar never covers content. Normal pages: pad the
+  // root once (padding both <html>+<body> double-counted). Fixed/absolute app
+  // shells (x.com) ignore root padding, so detect that (content still under the
+  // bar) and translateY the root instead, which offsets fixed descendants too.
   function applyPadding(bar){
-    if(isHidden()){setPad('0px');return;}
-    var h=bar.getBoundingClientRect().height||44;
-    setPad(h+'px');
+    var s=document.documentElement.style;
+    if(isHidden()){clearOffset();return;}
+    var px=bar.getBoundingClientRect().height||44;
+    var pad=px+'px';
+    s.setProperty('scroll-padding-top',pad,'important');
+    if(s.transform&&s.transform!=='none'){
+      s.setProperty('transform','translateY('+pad+')','important');  // sticky mode
+      s.setProperty('transform-origin','0 0','important');
+      return;
+    }
+    s.setProperty('padding-top',pad,'important');
+    s.setProperty('box-sizing','border-box','important');
+    if(document.body)document.body.style.removeProperty('padding-top');
+    if(document.body&&document.body.getBoundingClientRect().top<px-4){
+      s.removeProperty('padding-top');
+      s.setProperty('transform','translateY('+pad+')','important');
+      s.setProperty('transform-origin','0 0','important');
+    }
   }
   function wireHideToggle(bar){
     var reveal=document.getElementById('grok-toolbar-reveal');
@@ -351,6 +374,8 @@ std::string BuildInjectScript(const std::string& active_mode) {
   }
   function onRouteChange(){
     applyActivePill();
+    var bar=document.getElementById(BAR_ID);
+    if(bar) applyPadding(bar);  // SPA route changes can reset our offset
   }
   function pageQuery(){
     try{
@@ -427,6 +452,10 @@ std::string BuildInjectScript(const std::string& active_mode) {
       else{
         var p=location.pathname+location.search+location.hash;
         if(p!==lastPath){lastPath=p;onRouteChange();}
+        // Re-assert the offset: some sites strip our inline style on re-render,
+        // which would let the fixed bar cover the page content again.
+        var bar=document.getElementById(BAR_ID);
+        if(bar) applyPadding(bar);
       }
     },400);
   }
