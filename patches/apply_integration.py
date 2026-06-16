@@ -22,10 +22,14 @@ def edit(path: Path, anchor: str, insertion: str, before: bool = False):
     if idx < 0:
         sys.exit(f"ANCHOR NOT FOUND in {path}: {anchor!r} — upstream moved; "
                  f"update apply_integration.py")
-    # When the insertion restates the anchor's first line, it is a rewritten
-    # version of the anchored block → replace the anchor with it. Otherwise the
-    # insertion is purely additive → splice it in before/after the anchor.
-    if anchor.strip().splitlines()[0] == insertion.strip().splitlines()[0]:
+    # When the insertion restates the anchor's first OR last line, it is a
+    # rewritten version of the anchored block → replace the anchor with it.
+    # Otherwise the insertion is purely additive → splice it before/after the
+    # anchor. (Matching the last line catches rewrites whose opening line
+    # changes but which end on the same statement, e.g. a trailing `return`.)
+    a_lines = anchor.strip().splitlines()
+    i_lines = insertion.strip().splitlines()
+    if a_lines[0] == i_lines[0] or a_lines[-1] == i_lines[-1]:
         new_text = text[:idx] + insertion + text[idx + len(anchor):]
     else:
         pos = idx if before else idx + len(anchor)
@@ -273,25 +277,10 @@ def main(src: Path):
         '  grok_companion::RegisterGrokSidePanel(browser);',
     )
 
-    # New tab page -> Grok search homepage.
-    search_cc = src / "chrome/browser/search/search.cc"
-    edit(
-        search_cc,
-        '    if (profile->IsOffTheRecord()) {\n'
-        '      return NewTabURLDetails(GURL(), NEW_TAB_URL_INCOGNITO);\n'
-        '    }',
-        '    if (profile->IsOffTheRecord()) {\n'
-        '      return NewTabURLDetails(GURL(), NEW_TAB_URL_INCOGNITO);\n'
-        '    }\n\n'
-        '    // XPLORER: Xplorer uses Grok search as the default new tab page.\n'
-        '    return NewTabURLDetails(grok_companion::GetStartupHomeURL(),\n'
-        '                            NEW_TAB_URL_VALID);',
-    )
-    edit(
-        search_cc,
-        '#include "chrome/browser/search/search.h"',
-        '\n#include "chrome/browser/grok_companion/grok_companion_util.h"  // XPLORER\n',
-    )
+    # New tab page -> Grok search homepage is handled by Browser::GetNewTabURL
+    # (below) + grok_companion's legacy-NTP redirect. We deliberately do NOT
+    # patch search.cc's GetNewTabPageURL: an unconditional early return there
+    # makes the rest of the function unreachable, which fails -Werror.
 
     # New tabs must navigate to the Grok home URL directly — not chrome://newtab
     # (injectors only run on http/https pages).

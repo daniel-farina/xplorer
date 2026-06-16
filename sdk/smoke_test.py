@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """End-to-end smoke test against a running Xplorer build.
 
-Usage: launch out/xplorer/Chromium.app, then `python3 smoke_test.py`.
+Usage: launch out/aether/Chromium.app, then `python3 smoke_test.py`.
 """
 import sys
 

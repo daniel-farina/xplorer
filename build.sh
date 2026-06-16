@@ -6,8 +6,8 @@ SRC="${1:-$XPLORER/../chromium/src}"
 export PATH="$XPLORER/../depot_tools:$PATH"
 
 cd "$SRC"
-mkdir -p out/xplorer
-cp "$XPLORER/build/args.gn" out/xplorer/args.gn
-gn gen out/xplorer
-autoninja -C out/xplorer chrome
-echo "Built: $SRC/out/xplorer/Chromium.app"
+mkdir -p out/aether
+cp "$XPLORER/build/args.gn" out/aether/args.gn
+gn gen out/aether
+autoninja -C out/aether chrome
+echo "Built: $SRC/out/aether/Chromium.app"

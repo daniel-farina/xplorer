@@ -161,7 +161,7 @@ Chromium checkout with `xplorer/` applied on top.
 
 ```sh
 ./xplorer/apply.sh   # copy src/, apply patches onto ../chromium/src
-./xplorer/build.sh   # gn gen out/xplorer && autoninja -C out/xplorer chrome
+./xplorer/build.sh   # gn gen out/aether && autoninja -C out/aether chrome
 ```
 
 Requires: macOS + Xcode, `depot_tools` on PATH, ~80 GB disk, and several hours for the

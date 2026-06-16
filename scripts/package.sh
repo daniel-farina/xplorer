@@ -3,7 +3,7 @@
 # Usage: ./scripts/package.sh [path-to-out-dir] [version]
 set -eu
 XPLORER="$(cd "$(dirname "$0")/.." && pwd)"
-OUT="${1:-$XPLORER/../chromium/src/out/xplorer}"
+OUT="${1:-$XPLORER/../chromium/src/out/aether}"
 VERSION="${2:-dev}"
 APP="$OUT/Xplorer.app"
 DIST="$XPLORER/dist"

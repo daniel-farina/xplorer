@@ -46,7 +46,7 @@ jobs:
         run: ./build.sh "$XPLORER_CHROMIUM_SRC"
 
       - name: Package (.zip + .dmg + checksums)
-        run: ./scripts/package.sh "$XPLORER_CHROMIUM_SRC/out/xplorer" "${{ steps.ver.outputs.v }}"
+        run: ./scripts/package.sh "$XPLORER_CHROMIUM_SRC/out/aether" "${{ steps.ver.outputs.v }}"
 
       - name: Publish release
         uses: softprops/action-gh-release@v2

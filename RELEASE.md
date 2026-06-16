@@ -63,24 +63,24 @@ The patcher is **idempotent** — safe to re-run; it skips edits already present
 
 ```sh
 ./xplorer/build.sh ./chromium/src
-# = gn gen out/xplorer (with xplorer/build/args.gn) + autoninja -C out/xplorer chrome
+# = gn gen out/aether (with xplorer/build/args.gn) + autoninja -C out/aether chrome
 ```
 
 `args.gn` highlights: `is_debug=false`, `is_component_build=false`,
 `symbol_level=0`, `is_chrome_branded=false`, `target_cpu="arm64"`, `use_lld=true`.
 
-The output bundle is `chromium/src/out/xplorer/XBrowser.app` (plus the
+The output bundle is `chromium/src/out/aether/XBrowser.app` (plus the
 `XBrowser Helper*.app` child-process bundles).
 
 ### Incremental rebuilds
 
-After editing source, just re-run `autoninja -C out/xplorer chrome`. Two notes:
+After editing source, just re-run `autoninja -C out/aether chrome`. Two notes:
 - The agent gateway and all UI code compile into **`XBrowser Framework.framework`**,
   not the launcher executable — so the `XBrowser.app/Contents/MacOS/XBrowser`
   binary's timestamp does NOT change on a rebuild. Check the *framework*
   timestamp to confirm a fresh build:
   ```sh
-  stat -f "%Sm" "out/xplorer/XBrowser.app/Contents/Frameworks/XBrowser Framework.framework/Versions/Current/XBrowser Framework"
+  stat -f "%Sm" "out/aether/XBrowser.app/Contents/Frameworks/XBrowser Framework.framework/Versions/Current/XBrowser Framework"
   ```
 - Editing a `.grd` (string) file triggers a resource regen — expected.
 
@@ -91,7 +91,7 @@ After editing source, just re-run `autoninja -C out/xplorer chrome`. Two notes:
 ```sh
 pkill -9 -f "XBrowser.app"            # kill any running instance first
 rm -rf /Applications/XBrowser.app
-ditto out/xplorer/XBrowser.app /Applications/XBrowser.app
+ditto out/aether/XBrowser.app /Applications/XBrowser.app
 xattr -dr com.apple.quarantine /Applications/XBrowser.app   # self-signed build
 open -a /Applications/XBrowser.app --args \
   --user-data-dir=/tmp/xb --no-first-run --password-store=basic
@@ -108,7 +108,7 @@ curl -s http://127.0.0.1:9334/        # gateway discovery endpoint
 ## 5. Package installers
 
 ```sh
-./xplorer/scripts/package.sh "$(pwd)/chromium/src/out/xplorer" v0.2.0
+./xplorer/scripts/package.sh "$(pwd)/chromium/src/out/aether" v0.2.0
 ```
 
 Produces in `xplorer/dist/`:

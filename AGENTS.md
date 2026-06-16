@@ -28,7 +28,7 @@ mkdir chromium && cd chromium && fetch --no-history chromium && cd ..
 git clone https://github.com/daniel-farina/xplorer.git
 ./xplorer/apply.sh ./chromium/src      # overlay XBrowser onto Chromium
 ./xplorer/build.sh ./chromium/src      # gn gen + autoninja  (the long step)
-open ./chromium/src/out/xplorer/XBrowser.app
+open ./chromium/src/out/aether/XBrowser.app
 ```
 
 ---
