@@ -1,21 +1,21 @@
 #!/bin/sh
-# Overlay Aether onto the Chromium checkout.
+# Overlay Xplorer onto the Chromium checkout.
 set -eu
-AETHER="$(cd "$(dirname "$0")" && pwd)"
-SRC="${1:-$AETHER/../chromium/src}"
+XPLORER="$(cd "$(dirname "$0")" && pwd)"
+SRC="${1:-$XPLORER/../chromium/src}"
 
 [ -d "$SRC/chrome" ] || { echo "Chromium src not found at $SRC" >&2; exit 1; }
 
 echo "Copying new source files..."
-cp -R "$AETHER/src/chrome" "$SRC/"
+cp -R "$XPLORER/src/chrome" "$SRC/"
 
-echo "Installing Aether app icon..."
-cp "$AETHER/branding/app.icns" "$SRC/chrome/app/theme/chromium/mac/app.icns"
+echo "Installing Xplorer app icon..."
+cp "$XPLORER/branding/app.icns" "$SRC/chrome/app/theme/chromium/mac/app.icns"
 
 echo "Installing Grok toolbar vector icon..."
-cp "$AETHER/branding/grok.icon" "$SRC/chrome/app/vector_icons/grok.icon"
+cp "$XPLORER/branding/grok.icon" "$SRC/chrome/app/vector_icons/grok.icon"
 
 echo "Applying integration edits..."
-python3 "$AETHER/patches/apply_integration.py" "$SRC"
+python3 "$XPLORER/patches/apply_integration.py" "$SRC"
 
 echo "Done. Next: ./build.sh"

@@ -26,9 +26,9 @@ git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git
 export PATH="$PWD/depot_tools:$PATH"
 mkdir chromium && cd chromium && fetch --no-history chromium && cd ..
 git clone https://github.com/daniel-farina/xplorer.git
-./aether/apply.sh ./chromium/src      # overlay XBrowser onto Chromium
-./aether/build.sh ./chromium/src      # gn gen + autoninja  (the long step)
-open ./chromium/src/out/aether/XBrowser.app
+./xplorer/apply.sh ./chromium/src      # overlay XBrowser onto Chromium
+./xplorer/build.sh ./chromium/src      # gn gen + autoninja  (the long step)
+open ./chromium/src/out/xplorer/XBrowser.app
 ```
 
 ---
@@ -45,72 +45,72 @@ automatically and listens on loopback:
 
 ### Connecting — start here
 
-**Read one fixed file: `~/.aether/gateway.json`.** XBrowser writes it at startup:
+**Read one fixed file: `~/.xplorer/gateway.json`.** XBrowser writes it at startup:
 
 ```json
 { "url": "http://127.0.0.1:9334", "token": "…", "cdp_url": "ws://127.0.0.1:9333" }
 ```
 
 Send the token as `Authorization: Bearer <token>` on every request. Do **not**
-hunt for the token under the profile dir — always read `~/.aether/gateway.json`.
+hunt for the token under the profile dir — always read `~/.xplorer/gateway.json`.
 (`GET /` is unauthenticated and tells you this; a missing/bad token returns
 **401** with a `fix` message, not a 404.)
 
 The **easiest** way to drive XBrowser is the bundled **MCP server** — your agent
-gets native `aether_*` tools and never touches curl/JSON. See "MCP" below.
+gets native `xplorer_*` tools and never touches curl/JSON. See "MCP" below.
 
 For headless / server use:
 ```sh
 XBrowser.app/Contents/MacOS/XBrowser --headless=new --disable-gpu \
-  --user-data-dir=/tmp/aether --no-first-run
+  --user-data-dir=/tmp/xplorer --no-first-run
 ```
 
 ---
 
 ## MCP (recommended for agents)
 
-`sdk/aether_mcp.py` is a zero-dependency MCP server (stdio, Python 3.9+, stdlib
+`sdk/xplorer_mcp.py` is a zero-dependency MCP server (stdio, Python 3.9+, stdlib
 only — nothing to `pip install`). Register it once and your agent gets native
-tools: `aether_tabs`, `aether_new_tab`, `aether_navigate`, `aether_read_text`,
-`aether_observe`, `aether_click`, `aether_type`, `aether_press`,
-`aether_screenshot`, `aether_eval`. It auto-discovers the running browser via
-`~/.aether/gateway.json`, so there is no token or port to configure.
+tools: `xplorer_tabs`, `xplorer_new_tab`, `xplorer_navigate`, `xplorer_read_text`,
+`xplorer_observe`, `xplorer_click`, `xplorer_type`, `xplorer_press`,
+`xplorer_screenshot`, `xplorer_eval`. It auto-discovers the running browser via
+`~/.xplorer/gateway.json`, so there is no token or port to configure.
 
 First, note the absolute path to the server (substitute below):
 
 ```sh
-AETHER_MCP="$(cd "$(dirname "$(git rev-parse --show-toplevel)")"; pwd)/aether/sdk/aether_mcp.py"
-# …or just: /full/path/to/aether/sdk/aether_mcp.py
+XPLORER_MCP="$(cd "$(dirname "$(git rev-parse --show-toplevel)")"; pwd)/xplorer/sdk/xplorer_mcp.py"
+# …or just: /full/path/to/xplorer/sdk/xplorer_mcp.py
 ```
 
 ### Claude Code
 ```sh
-claude mcp add aether -- python3 /full/path/to/aether/sdk/aether_mcp.py
-claude mcp list           # verify it shows "aether"
+claude mcp add xplorer -- python3 /full/path/to/xplorer/sdk/xplorer_mcp.py
+claude mcp list           # verify it shows "xplorer"
 ```
 
 ### Cursor — `~/.cursor/mcp.json` (or a project `.cursor/mcp.json`)
 ```json
 { "mcpServers": {
-    "aether": { "command": "python3",
-                "args": ["/full/path/to/aether/sdk/aether_mcp.py"] } } }
+    "xplorer": { "command": "python3",
+                "args": ["/full/path/to/xplorer/sdk/xplorer_mcp.py"] } } }
 ```
 
 ### Grok CLI — add to its MCP config (`~/.grok/mcp.json` or via its MCP add command)
 ```json
 { "mcpServers": {
-    "aether": { "command": "python3",
-                "args": ["/full/path/to/aether/sdk/aether_mcp.py"] } } }
+    "xplorer": { "command": "python3",
+                "args": ["/full/path/to/xplorer/sdk/xplorer_mcp.py"] } } }
 ```
 
 ### Claude Desktop — `~/Library/Application Support/Claude/claude_desktop_config.json`
 ```json
 { "mcpServers": {
-    "aether": { "command": "python3",
-                "args": ["/full/path/to/aether/sdk/aether_mcp.py"] } } }
+    "xplorer": { "command": "python3",
+                "args": ["/full/path/to/xplorer/sdk/xplorer_mcp.py"] } } }
 ```
 
-Any other MCP client: run `python3 /full/path/to/aether/sdk/aether_mcp.py` as a
+Any other MCP client: run `python3 /full/path/to/xplorer/sdk/xplorer_mcp.py` as a
 stdio server.
 
 **Verify** (no client needed) — this lists the tools straight from the server:
@@ -119,18 +119,18 @@ printf '%s\n' \
  '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' \
  '{"jsonrpc":"2.0","method":"notifications/initialized"}' \
  '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' \
- | python3 /full/path/to/aether/sdk/aether_mcp.py
+ | python3 /full/path/to/xplorer/sdk/xplorer_mcp.py
 ```
 
-Once registered, the typical loop is `aether_navigate` → `aether_observe` (get
-element `ref`s) → `aether_click` / `aether_type` / `aether_press` →
-`aether_read_text`. No CSS selectors or shell escaping required. (Start XBrowser
+Once registered, the typical loop is `xplorer_navigate` → `xplorer_observe` (get
+element `ref`s) → `xplorer_click` / `xplorer_type` / `xplorer_press` →
+`xplorer_read_text`. No CSS selectors or shell escaping required. (Start XBrowser
 first, or the tools return "XBrowser is not running".)
 
 ## Drive it (Python SDK)
 
 ```python
-from aether_sdk import Browser
+from xplorer_sdk import Browser
 from agent_context import Page
 
 b = Browser()                      # connects to 127.0.0.1:9334
@@ -181,8 +181,8 @@ X-Agent-Model: Grok          # the model — shown on the badge
 ```
 
 Without them the badge still appears but reads "🤖 AI agent". Live counters are
-also at `GET /stats`. (Via the MCP server, set `AETHER_AGENT_ID` /
-`AETHER_AGENT_MODEL` in the server's `env` and it sends these for you.)
+also at `GET /stats`. (Via the MCP server, set `XPLORER_AGENT_ID` /
+`XPLORER_AGENT_MODEL` in the server's `env` and it sends these for you.)
 
 ### Live action highlighting
 

@@ -1,4 +1,4 @@
-// Copyright 2026 The Aether Authors.
+// Copyright 2026 The Xplorer Authors.
 // Use of this source code is governed by a BSD-style license.
 
 #ifndef CHROME_BROWSER_GROK_COMPANION_GROK_WEB_BAR_H_

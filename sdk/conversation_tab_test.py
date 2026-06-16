@@ -11,7 +11,7 @@ import sys
 import urllib.request
 
 BASE = "http://127.0.0.1:9334"
-MCP = ["python3", __file__.replace("conversation_tab_test.py", "aether_mcp.py")]
+MCP = ["python3", __file__.replace("conversation_tab_test.py", "xplorer_mcp.py")]
 
 
 def api(method: str, path: str, body=None):
@@ -47,7 +47,7 @@ def mcp_group_tool_present() -> bool:
 
 
 def main() -> int:
-    assert mcp_group_tool_present(), "xbrowser_group_tabs missing from aether MCP"
+    assert mcp_group_tool_present(), "xbrowser_group_tabs missing from xplorer MCP"
     print("mcp xbrowser_group_tabs: OK")
 
     # Native one-shot API (no grok agent loop).

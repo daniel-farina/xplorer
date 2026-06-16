@@ -1,4 +1,4 @@
-// Copyright 2026 The Aether Authors.
+// Copyright 2026 The Xplorer Authors.
 // Use of this source code is governed by a BSD-style license.
 
 #include "chrome/browser/grok_companion/grok_fab.h"
@@ -221,7 +221,7 @@ std::string BuildFabInjectScript() {
     try{console.log.apply(console,['[xplorer-fab]'].concat(Array.prototype.slice.call(arguments)));}catch(e){}
   }
   function extractPage(){
-    var kill='script,style,noscript,svg,nav,footer,aside,iframe,#xplorer-grok-bar,#xplorer-grok-wrap,#xplorer-grok-fab,#xplorer-grok-menu,[data-aether-hud]';
+    var kill='script,style,noscript,svg,nav,footer,aside,iframe,#xplorer-grok-bar,#xplorer-grok-wrap,#xplorer-grok-fab,#xplorer-grok-menu,[data-xplorer-hud]';
     var selText=(window.getSelection&&window.getSelection().toString()||'').replace(/\s+/g,' ').trim();
     if(selText.length>80){
       xlog('extract: user selection',selText.length,'chars');

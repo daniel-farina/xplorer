@@ -23,14 +23,14 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 PORT = 9345
-AETHER_DIR = pathlib.Path.home() / ".xplorer"
-SESSIONS_FILE = AETHER_DIR / "companion_sessions.json"
+XPLORER_DIR = pathlib.Path.home() / ".xplorer"
+SESSIONS_FILE = XPLORER_DIR / "companion_sessions.json"
 GROK_BIN = os.environ.get("GROK_BIN", shutil.which("grok") or "grok")
 SDK_DIR = pathlib.Path(__file__).resolve().parent
 UI_DIR = SDK_DIR.parent / "companion" / "ui"
 
 SYSTEM_RULES = """You are Grok, the native AI companion built into Xplorer.
-You can control the browser through MCP tools (aether_* for pages, xbrowser_*
+You can control the browser through MCP tools (xplorer_* for pages, xbrowser_*
 for bookmarks, history, tabs, groups, splits, and theme). Be proactive: organize
 tabs, manage bookmarks, search history, and help the user browse efficiently.
 When you act on the browser, briefly explain what you did."""
@@ -43,25 +43,25 @@ def load_sessions() -> dict:
 
 
 def save_sessions(data: dict) -> None:
-    AETHER_DIR.mkdir(parents=True, exist_ok=True)
+    XPLORER_DIR.mkdir(parents=True, exist_ok=True)
     SESSIONS_FILE.write_text(json.dumps(data, indent=2))
 
 
 def write_companion_json() -> None:
-    AETHER_DIR.mkdir(parents=True, exist_ok=True)
+    XPLORER_DIR.mkdir(parents=True, exist_ok=True)
     payload = {
         "url": f"http://127.0.0.1:{PORT}",
         "title": "Grok",
         "model": "grok-build",
     }
-    gw = AETHER_DIR / "gateway.json"
+    gw = XPLORER_DIR / "gateway.json"
     if gw.exists():
         payload["gateway"] = json.loads(gw.read_text())
-    (AETHER_DIR / "companion.json").write_text(json.dumps(payload, indent=2))
+    (XPLORER_DIR / "companion.json").write_text(json.dumps(payload, indent=2))
 
 
 def gateway_status() -> dict:
-    gw = AETHER_DIR / "gateway.json"
+    gw = XPLORER_DIR / "gateway.json"
     if not gw.exists():
         return {"running": False}
     try:
@@ -157,8 +157,8 @@ def grok_chat(message: str, session_id: str | None) -> dict:
     if session_id:
         cmd.extend(["-r", session_id])
     env = os.environ.copy()
-    env["AETHER_AGENT_ID"] = "grok-companion"
-    env["AETHER_AGENT_MODEL"] = "Grok"
+    env["XPLORER_AGENT_ID"] = "grok-companion"
+    env["XPLORER_AGENT_MODEL"] = "Grok"
     proc = subprocess.run(cmd, capture_output=True, text=True, env=env, timeout=600)
     if proc.returncode != 0:
         err = proc.stderr.strip() or proc.stdout.strip() or "grok failed"

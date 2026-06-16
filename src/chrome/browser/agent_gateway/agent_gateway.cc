@@ -1,4 +1,4 @@
-// Copyright 2026 The Aether Authors.
+// Copyright 2026 The Xplorer Authors.
 // Use of this source code is governed by a BSD-style license.
 
 #include "chrome/browser/agent_gateway/agent_gateway.h"
@@ -88,7 +88,7 @@ void AgentGateway::StartServerOnIOThread(int port) {
                                                        net::NetLogSource());
   if (socket->ListenWithAddressAndPort("127.0.0.1", port, kBacklog) !=
       net::OK) {
-    // Port taken (another Aether instance): fall back to ephemeral.
+    // Port taken (another Xplorer instance): fall back to ephemeral.
     socket->ListenWithAddressAndPort("127.0.0.1", 0, kBacklog);
   }
   net::IPEndPoint addr;
@@ -580,18 +580,18 @@ namespace {
 
 // A self-contained, idempotent HUD injected into any tab an agent controls.
 // Renders a colorful animated pixel badge ("controlled by <model>") top-right
-// and a live metrics strip along the bottom. Marked data-aether-hud so the
+// and a live metrics strip along the bottom. Marked data-xplorer-hud so the
 // gateway's own text extraction / observe skip it. Re-running just refreshes
 // the stats (passed as a JSON object literal) — the animation keeps running.
 std::string BuildHudJs(const std::string& stats_json) {
   return R"JS((function(S){
   // Ensure the highlight visualizer exists (also defined by click/read evals).
-  if(!window.__aetherHL){
-    const HC=document.createElement('div');HC.setAttribute('data-aether-hud','1');
+  if(!window.__xplorerHL){
+    const HC=document.createElement('div');HC.setAttribute('data-xplorer-hud','1');
     HC.style.cssText='all:initial;position:fixed;inset:0;pointer-events:none;z-index:2147483646';
     (document.documentElement||document.body).appendChild(HC);
     const COL={click:'#ff3da6',type:'#3da6ff',read:'#36e07f',scan:'#67e8ff',link:'#ffd23d'};
-    window.__aetherHL=(x,y,w,h,kind)=>{try{if(localStorage.getItem('__aether_hl')==='off')return;}catch(e){}
+    window.__xplorerHL=(x,y,w,h,kind)=>{try{if(localStorage.getItem('__xplorer_hl')==='off')return;}catch(e){}
       if(w<=0||h<=0)return;const c=COL[kind]||'#fff';const b=document.createElement('div');
       b.style.cssText='position:fixed;left:'+x+'px;top:'+y+'px;width:'+w+'px;height:'+h+'px;'+
         'border:2px solid '+c+';border-radius:4px;box-sizing:border-box;box-shadow:0 0 12px '+c+';'+
@@ -599,11 +599,11 @@ std::string BuildHudJs(const std::string& stats_json) {
       HC.appendChild(b);setTimeout(()=>{b.style.opacity='0';},kind==='scan'?450:600);
       setTimeout(()=>{b.remove();},1300);};
   }
-  const ID='__aether_hud';
+  const ID='__xplorer_hud';
   let host=document.getElementById(ID);
   if(!host){
     host=document.createElement('div');
-    host.id=ID; host.setAttribute('data-aether-hud','1');
+    host.id=ID; host.setAttribute('data-xplorer-hud','1');
     host.style.cssText='all:initial;position:fixed;inset:0;pointer-events:none;z-index:2147483647;';
     (document.documentElement||document.body).appendChild(host);
     const root=host.attachShadow?host.attachShadow({mode:'closed'}):host;
@@ -640,11 +640,11 @@ std::string BuildHudJs(const std::string& stats_json) {
     host.__root=root;
     // Settings toggle: highlights on/off (on by default), stored per-site.
     const setBtn=root.querySelector('.set');
-    const sync=()=>{let off=false;try{off=localStorage.getItem('__aether_hl')==='off';}catch(e){}
+    const sync=()=>{let off=false;try{off=localStorage.getItem('__xplorer_hl')==='off';}catch(e){}
       setBtn.textContent=off?'✦ highlights off':'✦ highlights on';
       setBtn.style.opacity=off?'.55':'1';};
-    setBtn.addEventListener('click',()=>{try{const off=localStorage.getItem('__aether_hl')==='off';
-      localStorage.setItem('__aether_hl',off?'on':'off');}catch(e){}sync();});
+    setBtn.addEventListener('click',()=>{try{const off=localStorage.getItem('__xplorer_hl')==='off';
+      localStorage.setItem('__xplorer_hl',off?'on':'off');}catch(e){}sync();});
     sync();
     // colorful pixel animation
     const cv=root.querySelector('canvas'),ctx=cv.getContext('2d'),N=11,P=2;
@@ -675,7 +675,7 @@ std::string BuildHudJs(const std::string& stats_json) {
     (S.agent?'  ·  '+S.agent:'');
   const kb=n=>n.toFixed(n<10?2:0);
   root.querySelector('.bar').innerHTML=
-    '<b>AETHER</b> <span class="spark">▮ live</span>'+
+    '<b>XPLORER</b> <span class="spark">▮ live</span>'+
     '<span><b>calls</b> <span class="v">'+S.requests+'</span></span>'+
     '<span><b>↓</b> <span class="v">'+kb(S.kb_in)+'KB</span></span>'+
     '<span><b>↑</b> <span class="v">'+kb(S.kb_out)+'KB</span></span>'+

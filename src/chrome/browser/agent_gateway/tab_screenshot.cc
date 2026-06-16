@@ -1,4 +1,4 @@
-// Copyright 2026 The Aether Authors.
+// Copyright 2026 The Xplorer Authors.
 // Tab screenshot: native view snapshot with compositor fallback.
 
 #include "chrome/browser/agent_gateway/tab_screenshot.h"

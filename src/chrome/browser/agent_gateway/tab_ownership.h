@@ -1,4 +1,4 @@
-// Copyright 2026 The Aether Authors.
+// Copyright 2026 The Xplorer Authors.
 // Use of this source code is governed by a BSD-style license.
 
 #ifndef CHROME_BROWSER_AGENT_GATEWAY_TAB_OWNERSHIP_H_
@@ -17,7 +17,7 @@ namespace agent_gateway {
 // Per-tab metadata that an agent can own. Stored as user-data on the
 // WebContents, so it travels with the tab for the tab's whole lifetime and
 // survives tab reordering, unlike the session_id:index handle. This is how
-// Aether answers "which agent owns this tab?".
+// Xplorer answers "which agent owns this tab?".
 class TabOwnership : public base::SupportsUserData::Data {
  public:
   static const void* const kKey;

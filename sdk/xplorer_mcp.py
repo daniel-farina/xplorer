@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Aether MCP server — exposes the browser to any MCP-capable agent (Claude,
+"""Xplorer MCP server — exposes the browser to any MCP-capable agent (Claude,
 Grok, Cursor, …) as native tools, so the agent never hand-rolls curl/JSON.
 
 Transport: stdio, newline-delimited JSON-RPC 2.0 (the MCP stdio standard).
@@ -8,8 +8,8 @@ Zero dependencies — stdlib only.
 Register it (example, Claude Code / Cursor mcp config):
     {
       "mcpServers": {
-        "aether": { "command": "python3",
-                    "args": ["/path/to/aether/sdk/aether_mcp.py"] }
+        "xplorer": { "command": "python3",
+                    "args": ["/path/to/xplorer/sdk/xplorer_mcp.py"] }
       }
     }
 
@@ -29,7 +29,7 @@ PROTO = "2024-11-05"
 def gateway():
     """Read the fixed discovery file the browser writes at startup."""
     home = pathlib.Path.home()
-    for name in (".xplorer", ".xbrowser", ".aether"):
+    for name in (".xplorer", ".xbrowser", ".xplorer"):
         p = home / name / "gateway.json"
         if p.exists():
             return json.loads(p.read_text())
@@ -47,9 +47,9 @@ def api(method, path, body=None):
                  "Content-Type": "application/json",
                  # Identify the agent so the in-tab HUD shows who/which model
                  # is driving. Configure via env in your MCP server entry:
-                 #   "env": {"AETHER_AGENT_MODEL": "Grok", "AETHER_AGENT_ID": "grok-cli"}
-                 "X-Agent-Id": os.environ.get("AETHER_AGENT_ID", "mcp"),
-                 "X-Agent-Model": os.environ.get("AETHER_AGENT_MODEL",
+                 #   "env": {"XPLORER_AGENT_MODEL": "Grok", "XPLORER_AGENT_ID": "grok-cli"}
+                 "X-Agent-Id": os.environ.get("XPLORER_AGENT_ID", "mcp"),
+                 "X-Agent-Model": os.environ.get("XPLORER_AGENT_MODEL",
                                                   "AI agent")})
     with urllib.request.urlopen(req, timeout=60) as r:
         return json.load(r)
@@ -109,8 +109,8 @@ def t_observe(a):
           "if(!nm)continue;e.setAttribute('data-aref',n);"
           # Visualize what the agent is looking at: outline each element
           # (links in gold, everything else cyan) if highlighting is on.
-          "if(window.__aetherHL){const r=e.getBoundingClientRect();"
-          "window.__aetherHL(r.x,r.y,r.width,r.height,"
+          "if(window.__xplorerHL){const r=e.getBoundingClientRect();"
+          "window.__xplorerHL(r.x,r.y,r.width,r.height,"
           "(role==='link'||e.tagName==='A')?'link':'scan');}"
           "out.push({ref:n++,role:role,name:nm});if(out.length>=LIM)break;}"
           "return JSON.stringify(out);})()")
@@ -236,47 +236,47 @@ def text(s):
 
 TAB = {"type": "string", "description": "tab id (sessionId:index)"}
 TOOLS = {
-    "aether_tabs": ("List open browser tabs with context (url, title, owner, "
+    "xplorer_tabs": ("List open browser tabs with context (url, title, owner, "
                     "active, loading).", {"type": "object", "properties": {}},
                     t_tabs),
-    "aether_new_tab": ("Open a NEW tab (optionally owned/labelled).",
+    "xplorer_new_tab": ("Open a NEW tab (optionally owned/labelled).",
                        {"type": "object", "properties": {
                            "url": {"type": "string"},
                            "owner": {"type": "string"},
                            "label": {"type": "string"}}}, t_new_tab),
-    "aether_navigate": ("Navigate a tab to a URL (waits for load).",
+    "xplorer_navigate": ("Navigate a tab to a URL (waits for load).",
                         {"type": "object", "properties": {
                             "url": {"type": "string"}, "tab": TAB},
                          "required": ["url"]}, t_navigate),
-    "aether_read_text": ("Read clean readability text of a tab's page.",
+    "xplorer_read_text": ("Read clean readability text of a tab's page.",
                          {"type": "object", "properties": {"tab": TAB}},
                          t_read_text),
-    "aether_observe": ("List interactive elements (role + name + ref) on the "
-                       "page. Use the ref with aether_click/aether_type. "
+    "xplorer_observe": ("List interactive elements (role + name + ref) on the "
+                       "page. Use the ref with xplorer_click/xplorer_type. "
                        "Optionally filter by role (e.g. 'gridcell','option').",
                        {"type": "object", "properties": {
                            "tab": TAB,
                            "role": {"type": "string",
                                     "description": "filter to this ARIA role"},
                            "limit": {"type": "integer"}}}, t_observe),
-    "aether_click": ("Click an element by ref (from aether_observe) or CSS "
+    "xplorer_click": ("Click an element by ref (from xplorer_observe) or CSS "
                      "selector.", {"type": "object", "properties": {
                          "ref": {"type": "integer"},
                          "selector": {"type": "string"}, "tab": TAB}}, t_click),
-    "aether_type": ("Type text into an element by ref or selector (real "
+    "xplorer_type": ("Type text into an element by ref or selector (real "
                     "keystrokes).", {"type": "object", "properties": {
                         "ref": {"type": "integer"},
                         "selector": {"type": "string"},
                         "text": {"type": "string"}, "tab": TAB},
                      "required": ["text"]}, t_type),
-    "aether_press": ("Press a key (Enter, ArrowDown, Tab, Escape, …) on the "
+    "xplorer_press": ("Press a key (Enter, ArrowDown, Tab, Escape, …) on the "
                      "focused element.", {"type": "object", "properties": {
                          "key": {"type": "string"}, "tab": TAB},
                       "required": ["key"]}, t_press),
-    "aether_screenshot": ("Screenshot a tab's viewport (works on hidden tabs).",
+    "xplorer_screenshot": ("Screenshot a tab's viewport (works on hidden tabs).",
                           {"type": "object", "properties": {"tab": TAB}},
                           t_screenshot),
-    "aether_eval": ("Evaluate a JS expression in the page and return the value.",
+    "xplorer_eval": ("Evaluate a JS expression in the page and return the value.",
                     {"type": "object", "properties": {
                         "expression": {"type": "string"}, "tab": TAB},
                      "required": ["expression"]}, t_eval),
@@ -361,7 +361,7 @@ def main():
         if m == "initialize":
             reply(id, {"protocolVersion": PROTO,
                        "capabilities": {"tools": {}},
-                       "serverInfo": {"name": "aether", "version": "0.3.0"}})
+                       "serverInfo": {"name": "xplorer", "version": "0.3.0"}})
         elif m == "notifications/initialized":
             pass  # no response to notifications
         elif m == "tools/list":

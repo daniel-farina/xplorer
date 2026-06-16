@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Prove Aether lets an agent drive many tabs in parallel while the browser
+"""Prove Xplorer lets an agent drive many tabs in parallel while the browser
 is NOT the active app. Pure gateway calls; no window focus required."""
 import concurrent.futures as cf
 import time
 
-from aether_sdk import Browser
+from xplorer_sdk import Browser
 
 SITES = [
     "https://example.com",
@@ -33,7 +33,7 @@ def main():
         time.sleep(0.3)
     tabs = [t["id"] for t in b.tabs()][base:base + len(SITES)]
 
-    # Now drive all tabs CONCURRENTLY while Aether is in the background.
+    # Now drive all tabs CONCURRENTLY while Xplorer is in the background.
     t0 = time.time()
     with cf.ThreadPoolExecutor(max_workers=len(SITES)) as ex:
         results = list(ex.map(drive, zip(tabs, SITES)))
@@ -41,7 +41,7 @@ def main():
     for site, tab, title, words in results:
         print(f"[tab {tab}] {title[:46]:46}  {words:>6} words  <- {site}")
     print(f"\n{len(SITES)} tabs navigated + scraped concurrently in {dt:.1f}s "
-          f"while Aether was NOT the active app")
+          f"while Xplorer was NOT the active app")
 
 
 if __name__ == "__main__":

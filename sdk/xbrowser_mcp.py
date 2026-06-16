@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
-"""Xplorer MCP alias — same tools as aether_mcp.py (page + browser-level)."""
+"""Xplorer MCP alias — same tools as xplorer_mcp.py (page + browser-level)."""
 import importlib.util
 import pathlib
 import sys
 
 _DIR = pathlib.Path(__file__).resolve().parent
-_spec = importlib.util.spec_from_file_location("aether_mcp", _DIR / "aether_mcp.py")
-_aether = importlib.util.module_from_spec(_spec)
-_spec.loader.exec_module(_aether)
+_spec = importlib.util.spec_from_file_location("xplorer_mcp", _DIR / "xplorer_mcp.py")
+_xplorer = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(_xplorer)
 
-TOOLS = _aether.TOOLS
-PROTO = _aether.PROTO
-reply = _aether.reply
+TOOLS = _xplorer.TOOLS
+PROTO = _xplorer.PROTO
+reply = _xplorer.reply
 
 
 def main():

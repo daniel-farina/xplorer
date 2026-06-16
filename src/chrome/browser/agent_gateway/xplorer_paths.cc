@@ -1,4 +1,4 @@
-// Copyright 2026 The Aether Authors.
+// Copyright 2026 The Xplorer Authors.
 // Use of this source code is governed by a BSD-style license.
 
 #include "chrome/browser/agent_gateway/xplorer_paths.h"
@@ -14,7 +14,7 @@ namespace xplorer_paths {
 namespace {
 
 constexpr char kGrokSettingsFile[] = "grok_settings.json";
-constexpr char kLegacyDirs[][10] = {".xbrowser", ".aether"};
+constexpr char kLegacyDirs[][10] = {".xbrowser", ".xplorer"};
 
 }  // namespace
 

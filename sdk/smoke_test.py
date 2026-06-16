@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""End-to-end smoke test against a running Aether build.
+"""End-to-end smoke test against a running Xplorer build.
 
-Usage: launch out/aether/Chromium.app, then `python3 smoke_test.py`.
+Usage: launch out/xplorer/Chromium.app, then `python3 smoke_test.py`.
 """
 import sys
 
-from aether_sdk import Browser
+from xplorer_sdk import Browser
 
 
 def main() -> int:

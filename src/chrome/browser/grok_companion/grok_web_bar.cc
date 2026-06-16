@@ -1,4 +1,4 @@
-// Copyright 2026 The Aether Authors.
+// Copyright 2026 The Xplorer Authors.
 // Use of this source code is governed by a BSD-style license.
 
 #include "chrome/browser/grok_companion/grok_web_bar.h"
@@ -71,10 +71,10 @@ base::FilePath CompanionUiDir() {
   if (!base::PathService::Get(base::DIR_HOME, &home))
     return base::FilePath();
   static constexpr const char* kCandidates[] = {
-      "cli_experiment/aether/companion/ui",
+      "cli_experiment/xplorer/companion/ui",
       ".xplorer/companion/ui",
       ".xbrowser/companion/ui",
-      ".aether/companion/ui",
+      ".xplorer/companion/ui",
   };
   for (const char* rel : kCandidates) {
     base::FilePath candidate = home.AppendASCII(rel);

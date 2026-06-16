@@ -1,4 +1,4 @@
-// Copyright 2026 The Aether Authors.
+// Copyright 2026 The Xplorer Authors.
 // Use of this source code is governed by a BSD-style license.
 
 #include "chrome/browser/agent_gateway/app_store.h"
@@ -278,7 +278,7 @@ void MigrateAppPaths(base::DictValue& registry) {
       continue;
     std::string updated = *path;
     static constexpr const char* kLegacySegments[] = {
-        "/.aether/", "/.xbrowser/"};
+        "/.xplorer/", "/.xbrowser/"};
     for (const char* legacy : kLegacySegments) {
       size_t pos = 0;
       while ((pos = updated.find(legacy, pos)) != std::string::npos) {

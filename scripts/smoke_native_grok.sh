@@ -58,7 +58,7 @@ echo "stream: $(head -1 /tmp/xb_stream.txt | cut -c1-80)..."
 # Screenshot API — ensure a normal https tab exists first (NTP/search can fail).
 if [[ "${SKIP_SCREENSHOT:-0}" != "1" ]]; then
   TOKEN=$(python3 -c "import json, pathlib; home=pathlib.Path.home();
-for d in ('.xplorer','.xbrowser','.aether'):
+for d in ('.xplorer','.xbrowser','.xplorer'):
  p=home/d/'gateway.json'
  if p.exists(): print(json.load(open(p))['token']); break" 2>/dev/null || true)
   if [[ -n "${TOKEN:-}" ]]; then

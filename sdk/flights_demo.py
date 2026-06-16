@@ -8,7 +8,7 @@ target names ('Where from?', 'Los Angeles', a date), i.e. the task itself.
 import sys
 import time
 
-from aether_sdk import Browser
+from xplorer_sdk import Browser
 from agent_context import Page
 
 

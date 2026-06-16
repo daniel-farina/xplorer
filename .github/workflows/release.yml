@@ -1,17 +1,17 @@
 name: Release
 
-# Build Aether and attach installers to a GitHub Release.
+# Build Xplorer and attach installers to a GitHub Release.
 #
 # IMPORTANT: Chromium does NOT build on GitHub-hosted runners — they cap at
 # ~14 GB disk and a 6 h job limit, while a Chromium checkout+build needs
 # ~100 GB and several hours. This workflow therefore targets a SELF-HOSTED
-# macOS runner labelled `aether-builder` that already has depot_tools and a
-# synced Chromium checkout at $AETHER_CHROMIUM_SRC.
+# macOS runner labelled `xplorer-builder` that already has depot_tools and a
+# synced Chromium checkout at $XPLORER_CHROMIUM_SRC.
 #
 # To set one up:
 #   1. On a Mac with Xcode + ~150 GB free, fetch Chromium once (see AGENTS.md).
 #   2. Settings ▸ Actions ▸ Runners ▸ New self-hosted runner, add label
-#      `aether-builder`, and export AETHER_CHROMIUM_SRC=/path/to/chromium/src.
+#      `xplorer-builder`, and export XPLORER_CHROMIUM_SRC=/path/to/chromium/src.
 #
 # Tagging `v*` (e.g. `git tag v0.1.0 && git push --tags`) runs it. You can also
 # trigger it manually from the Actions tab.
@@ -30,9 +30,9 @@ permissions:
 
 jobs:
   build-macos:
-    runs-on: [self-hosted, macos, aether-builder]
+    runs-on: [self-hosted, macos, xplorer-builder]
     steps:
-      - name: Checkout Aether overlay
+      - name: Checkout Xplorer overlay
         uses: actions/checkout@v4
 
       - name: Resolve version
@@ -40,25 +40,25 @@ jobs:
         run: echo "v=${GITHUB_REF_NAME:-${{ github.event.inputs.version }}}" >> "$GITHUB_OUTPUT"
 
       - name: Apply overlay onto the prepared Chromium checkout
-        run: ./apply.sh "$AETHER_CHROMIUM_SRC"
+        run: ./apply.sh "$XPLORER_CHROMIUM_SRC"
 
       - name: Build
-        run: ./build.sh "$AETHER_CHROMIUM_SRC"
+        run: ./build.sh "$XPLORER_CHROMIUM_SRC"
 
       - name: Package (.zip + .dmg + checksums)
-        run: ./scripts/package.sh "$AETHER_CHROMIUM_SRC/out/aether" "${{ steps.ver.outputs.v }}"
+        run: ./scripts/package.sh "$XPLORER_CHROMIUM_SRC/out/xplorer" "${{ steps.ver.outputs.v }}"
 
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.ver.outputs.v }}
-          name: Aether ${{ steps.ver.outputs.v }}
+          name: Xplorer ${{ steps.ver.outputs.v }}
           files: |
-            dist/Aether-macos-*.zip
-            dist/Aether-macos-*.dmg
-            dist/Aether-macos-*.sha256.txt
+            dist/Xplorer-macos-*.zip
+            dist/Xplorer-macos-*.dmg
+            dist/Xplorer-macos-*.sha256.txt
           body: |
-            Aether ${{ steps.ver.outputs.v }} — AI-native Chromium fork.
-            Install: open the DMG and drag Aether to Applications, then
-            `xattr -dr com.apple.quarantine /Applications/Aether.app`.
+            Xplorer ${{ steps.ver.outputs.v }} — AI-native Chromium fork.
+            Install: open the DMG and drag Xplorer to Applications, then
+            `xattr -dr com.apple.quarantine /Applications/Xplorer.app`.
             See AGENTS.md for connecting agents.

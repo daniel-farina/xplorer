@@ -1,4 +1,4 @@
-// Copyright 2026 The Aether Authors.
+// Copyright 2026 The Xplorer Authors.
 // Use of this source code is governed by a BSD-style license.
 
 #ifndef CHROME_BROWSER_AGENT_GATEWAY_AGENT_GATEWAY_H_
@@ -21,7 +21,7 @@ namespace agent_gateway {
 
 class AgentSession;
 
-// AgentGateway is Aether's AI-native control plane. It is created once by
+// AgentGateway is Xplorer's AI-native control plane. It is created once by
 // ChromeBrowserMainParts after profile init and lives for the lifetime of
 // the browser process. It runs a localhost HTTP/WebSocket server (default
 // port 9334) offering high-level, single-round-trip primitives for agents:

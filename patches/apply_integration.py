@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Applies Aether's integration edits to a Chromium checkout.
+"""Applies Xplorer's integration edits to a Chromium checkout.
 
 Idempotent: each edit checks for its marker before inserting. Anchors on
 long-lived symbols (PreMainMessageLoopRun, chrome/browser deps block) so it
@@ -9,21 +9,28 @@ import re
 import sys
 from pathlib import Path
 
-MARKER = "// AETHER"
+MARKER = "// XPLORER"
 
 
 def edit(path: Path, anchor: str, insertion: str, before: bool = False):
     text = path.read_text()
-    # Idempotency: skip if the insertion's first non-empty line already exists.
-    if insertion.strip().splitlines()[0] in text:
+    # Idempotency: skip if the full insertion is already present verbatim.
+    if insertion in text:
         print(f"  skip (already applied): {path}")
         return
     idx = text.find(anchor)
     if idx < 0:
         sys.exit(f"ANCHOR NOT FOUND in {path}: {anchor!r} — upstream moved; "
                  f"update apply_integration.py")
-    pos = idx if before else idx + len(anchor)
-    path.write_text(text[:pos] + insertion + text[pos:])
+    # When the insertion restates the anchor's first line, it is a rewritten
+    # version of the anchored block → replace the anchor with it. Otherwise the
+    # insertion is purely additive → splice it in before/after the anchor.
+    if anchor.strip().splitlines()[0] == insertion.strip().splitlines()[0]:
+        new_text = text[:idx] + insertion + text[idx + len(anchor):]
+    else:
+        pos = idx if before else idx + len(anchor)
+        new_text = text[:pos] + insertion + text[pos:]
+    path.write_text(new_text)
     print(f"  edited: {path}")
 
 
@@ -53,10 +60,10 @@ def main(src: Path):
     edit(
         browser_gn,
         "public_deps = [\n    # WARNING WARNING WARNING",
-        '\n    "//chrome/browser/agent_gateway",  # AETHER',
+        '\n    "//chrome/browser/agent_gateway",  # XPLORER',
     )
 
-    # 3. Always start the CDP remote debugging server on 9333 — Aether treats
+    # 3. Always start the CDP remote debugging server on 9333 — Xplorer treats
     # agents as first-class, no --remote-debugging-port flag needed. With no
     # switch present, default the port and let the existing policy-checked
     # startup path in GetInstance() do the rest.
@@ -71,7 +78,7 @@ def main(src: Path):
 
     # 3b. AI-native runtime defaults: stop the browser from throttling or
     # suspending backgrounded/occluded tabs so an agent can drive many tabs at
-    # full speed while Aether is inactive, and capture hidden windows. Injected
+    # full speed while Xplorer is inactive, and capture hidden windows. Injected
     # at the earliest startup hook (before FeatureList / GPU).
     cmd_delegate = src / "chrome/app/chrome_main_delegate.cc"
     edit(
@@ -130,8 +137,8 @@ def main(src: Path):
     # 5. Link Grok companion (side panel + AI Mode redirect).
     edit(
         browser_gn,
-        '\n    "//chrome/browser/agent_gateway",  # AETHER',
-        '\n    "//chrome/browser/grok_companion",  # AETHER',
+        '\n    "//chrome/browser/agent_gateway",  # XPLORER',
+        '\n    "//chrome/browser/grok_companion",  # XPLORER',
     )
 
     # AI Mode omnibox chip -> open native Grok Search page (not Google AI Mode).
@@ -148,7 +155,7 @@ def main(src: Path):
         '}',
         'void AiModePageActionIconView::OnExecuting(\n'
         '    PageActionIconView::ExecuteSource source) {\n'
-        '  // AETHER: Grok chip opens native Grok Search.\n'
+        '  // XPLORER: Grok chip opens native Grok Search.\n'
         '  grok_companion::OpenGrokSearchPage(browser_);\n'
         '}',
     )
@@ -173,7 +180,7 @@ def main(src: Path):
     edit(
         ai_mode_icon,
         '#include "chrome/browser/ui/views/page_action/page_action_icon_view.h"',
-        '\n#include "chrome/browser/grok_companion/grok_companion_util.h"  // AETHER\n',
+        '\n#include "chrome/browser/grok_companion/grok_companion_util.h"  // XPLORER\n',
     )
     # Redirect OpenAiMode (command callback) to Grok Search.
     ai_mode_ctrl = src / "chrome/browser/ui/omnibox/ai_mode_page_action_controller.cc"
@@ -188,7 +195,7 @@ def main(src: Path):
         'void AiModePageActionController::OpenAiMode(\n'
         '    OmniboxController& omnibox_controller,\n'
         '    bool via_keyboard) {\n'
-        '  // AETHER: never open Google AI Mode — use native Grok Search.\n'
+        '  // XPLORER: never open Google AI Mode — use native Grok Search.\n'
         '  OmniboxClient* client = omnibox_controller.client();\n'
         '  if (!client || !client->IsChromeOmniboxClient()) {\n'
         '    return;\n'
@@ -203,9 +210,9 @@ def main(src: Path):
         ai_mode_ctrl,
         '#include "chrome/browser/ui/omnibox/ai_mode_page_action_controller.h"',
         '#include "chrome/browser/ui/omnibox/ai_mode_page_action_controller.h"\n'
-        '#include "chrome/browser/grok_companion/grok_companion_util.h"  // AETHER\n'
-        '#include "chrome/browser/ui/browser.h"  // AETHER\n'
-        '#include "chrome/browser/ui/omnibox/chrome_omnibox_client.h"  // AETHER\n',
+        '#include "chrome/browser/grok_companion/grok_companion_util.h"  // XPLORER\n'
+        '#include "chrome/browser/ui/browser.h"  // XPLORER\n'
+        '#include "chrome/browser/ui/omnibox/chrome_omnibox_client.h"  // XPLORER\n',
     )
     edit(
         ai_mode_ctrl,
@@ -215,7 +222,7 @@ def main(src: Path):
         'bool AiModePageActionController::ShouldShowPageAction(\n'
         '    Profile* profile,\n'
         '    LocationBarView& location_bar_view) {\n'
-        '  // AETHER: always show Grok entrypoint in Xplorer.\n'
+        '  // XPLORER: always show Grok entrypoint in Xplorer.\n'
         '  if (profile && profile->IsRegularProfile()) {\n'
         '    return true;\n'
         '  }',
@@ -227,15 +234,15 @@ def main(src: Path):
     edit(
         browser_features,
         '#include "chrome/browser/ui/views/side_panel/side_panel_coordinator.h"\n',
-        '#include "chrome/browser/grok_companion/grok_fab.h"  // AETHER\n'
-        '#include "chrome/browser/grok_companion/grok_web_bar.h"  // AETHER\n',
+        '#include "chrome/browser/grok_companion/grok_fab.h"  // XPLORER\n'
+        '#include "chrome/browser/grok_companion/grok_web_bar.h"  // XPLORER\n',
         before=True,
     )
     edit(
         browser_features,
         '  // TODO(crbug.com/346148093): Move SidePanelCoordinator construction to\n'
         '  // Init.',
-        '  // AETHER: grok.com/grokipedia toolbar before side panel init (NTP race).\n'
+        '  // XPLORER: grok.com/grokipedia toolbar before side panel init (NTP race).\n'
         '  grok_companion::RegisterGrokWebBar(browser);\n'
         '  grok_companion::RegisterGrokFab(browser);\n\n'
         '  // TODO(crbug.com/346148093): Move SidePanelCoordinator construction to\n'
@@ -248,9 +255,9 @@ def main(src: Path):
     edit(
         side_panel_helper,
         '#include "chrome/browser/ui/views/side_panel/reading_list/reading_list_side_panel_coordinator.h"',
-        '\n#include "chrome/browser/grok_companion/grok_companion_util.h"  // AETHER\n'
-        '#include "chrome/browser/grok_companion/grok_fab.h"  // AETHER\n'
-        '#include "chrome/browser/grok_companion/grok_web_bar.h"  // AETHER\n',
+        '\n#include "chrome/browser/grok_companion/grok_companion_util.h"  // XPLORER\n'
+        '#include "chrome/browser/grok_companion/grok_fab.h"  // XPLORER\n'
+        '#include "chrome/browser/grok_companion/grok_web_bar.h"  // XPLORER\n',
     )
     edit(
         side_panel_helper,
@@ -260,7 +267,7 @@ def main(src: Path):
         '  // Add bookmarks.\n'
         '  BookmarksSidePanelCoordinator::From(browser)->CreateAndRegisterEntry(\n'
         '      window_registry);\n\n'
-        '  // AETHER: Grok AI companion side panel + grok.com toolbar overlay.\n'
+        '  // XPLORER: Grok AI companion side panel + grok.com toolbar overlay.\n'
         '  grok_companion::RegisterGrokWebBar(browser);\n'
         '  grok_companion::RegisterGrokFab(browser);\n'
         '  grok_companion::RegisterGrokSidePanel(browser);',
@@ -276,14 +283,14 @@ def main(src: Path):
         '    if (profile->IsOffTheRecord()) {\n'
         '      return NewTabURLDetails(GURL(), NEW_TAB_URL_INCOGNITO);\n'
         '    }\n\n'
-        '    // AETHER: Xplorer uses Grok search as the default new tab page.\n'
+        '    // XPLORER: Xplorer uses Grok search as the default new tab page.\n'
         '    return NewTabURLDetails(grok_companion::GetStartupHomeURL(),\n'
         '                            NEW_TAB_URL_VALID);',
     )
     edit(
         search_cc,
         '#include "chrome/browser/search/search.h"',
-        '\n#include "chrome/browser/grok_companion/grok_companion_util.h"  // AETHER\n',
+        '\n#include "chrome/browser/grok_companion/grok_companion_util.h"  // XPLORER\n',
     )
 
     # New tabs must navigate to the Grok home URL directly — not chrome://newtab
@@ -292,7 +299,7 @@ def main(src: Path):
     edit(
         browser_cc,
         '#include "chrome/browser/ui/browser.h"',
-        '\n#include "chrome/browser/grok_companion/grok_companion_util.h"  // AETHER\n',
+        '\n#include "chrome/browser/grok_companion/grok_companion_util.h"  // XPLORER\n',
     )
     edit(
         browser_cc,
@@ -307,7 +314,7 @@ def main(src: Path):
         '          web_app::AppBrowserController::From(this)) {\n'
         '    return app_browser_controller->GetAppNewTabUrl();\n'
         '  }\n'
-        '  // AETHER: open Grok home directly so page injectors can attach.\n'
+        '  // XPLORER: open Grok home directly so page injectors can attach.\n'
         '  return grok_companion::GetStartupHomeURL();\n}',
     )
 
@@ -316,14 +323,14 @@ def main(src: Path):
     edit(
         tab_restore_client,
         '#include "chrome/browser/sessions/chrome_tab_restore_service_client.h"',
-        '\n#include "chrome/browser/grok_companion/grok_companion_util.h"  // AETHER\n',
+        '\n#include "chrome/browser/grok_companion/grok_companion_util.h"  // XPLORER\n',
     )
     edit(
         tab_restore_client,
         'GURL ChromeTabRestoreServiceClient::GetNewTabURL() {\n'
         '  return chrome::ChromeUINewTabURLAsGURL();\n}',
         'GURL ChromeTabRestoreServiceClient::GetNewTabURL() {\n'
-        '  // AETHER: match Browser::GetNewTabURL().\n'
+        '  // XPLORER: match Browser::GetNewTabURL().\n'
         '  return grok_companion::GetStartupHomeURL();\n}',
     )
 
@@ -362,13 +369,13 @@ def main(src: Path):
     edit(
         tab_helpers,
         '#include "chrome/browser/ui/tab_helpers.h"',
-        '\n#include "chrome/browser/grok_companion/grok_fab.h"  // AETHER\n'
-        '#include "chrome/browser/grok_companion/grok_web_bar.h"  // AETHER\n',
+        '\n#include "chrome/browser/grok_companion/grok_fab.h"  // XPLORER\n'
+        '#include "chrome/browser/grok_companion/grok_web_bar.h"  // XPLORER\n',
     )
     edit(
         tab_helpers,
         '  // --- Section 1: Common tab helpers ---',
-        '  // AETHER: Grok toolbar + floating page button on every regular tab.\n'
+        '  // XPLORER: Grok toolbar + floating page button on every regular tab.\n'
         '  if (profile && profile->IsRegularProfile()) {\n'
         '    grok_companion::AttachGrokWebBarInjector(web_contents);\n'
         '    grok_companion::AttachGrokFabInjector(web_contents);\n'
@@ -379,7 +386,7 @@ def main(src: Path):
     # Toolbar Grok button (opens local search page; Grok logo icon).
     toolbar = src / "chrome/browser/ui/views/toolbar/toolbar_view.cc"
     grok_btn_block = (
-        '  // AETHER: Grok companion toolbar button.\n'
+        '  // XPLORER: Grok companion toolbar button.\n'
         '  {\n'
         '    auto grok_btn = std::make_unique<ToolbarButton>(base::BindRepeating(\n'
         '        [](Browser* b) {\n'
@@ -399,7 +406,7 @@ def main(src: Path):
         if "ToggleGrokSidePanel" in toolbar.read_text():
             edit(
                 toolbar,
-                '  // AETHER: Grok companion toolbar button.\n'
+                '  // XPLORER: Grok companion toolbar button.\n'
                 '  {\n'
                 '    auto grok_btn = std::make_unique<ToolbarButton>(base::BindRepeating(\n'
                 '        [](Browser* b) {\n'
@@ -418,11 +425,11 @@ def main(src: Path):
             )
             edit(
                 toolbar,
-                '#include "chrome/browser/grok_companion/grok_companion_util.h"  // AETHER\n'
+                '#include "chrome/browser/grok_companion/grok_companion_util.h"  // XPLORER\n'
                 '#include "components/vector_icons/vector_icons.h"\n'
                 '#include "chrome/browser/ui/views/toolbar/toolbar_button.h"\n',
-                '#include "chrome/browser/grok_companion/grok_companion_util.h"  // AETHER\n'
-                '#include "chrome/app/vector_icons/vector_icons.h"  // AETHER\n'
+                '#include "chrome/browser/grok_companion/grok_companion_util.h"  // XPLORER\n'
+                '#include "chrome/app/vector_icons/vector_icons.h"  // XPLORER\n'
                 '#include "chrome/browser/ui/views/toolbar/toolbar_button.h"\n',
             )
         elif "GetGrokToolbarIcon" in toolbar.read_text():
@@ -438,8 +445,8 @@ def main(src: Path):
             )
             edit(
                 toolbar,
-                '#include "chrome/browser/grok_companion/grok_toolbar_icon.h"  // AETHER\n',
-                '#include "chrome/app/vector_icons/vector_icons.h"  // AETHER\n',
+                '#include "chrome/browser/grok_companion/grok_toolbar_icon.h"  // XPLORER\n',
+                '#include "chrome/app/vector_icons/vector_icons.h"  // XPLORER\n',
             )
         else:
             edit(
@@ -451,8 +458,8 @@ def main(src: Path):
             edit(
                 toolbar,
                 '#include "chrome/browser/ui/views/toolbar/toolbar_view.h"',
-                '\n#include "chrome/browser/grok_companion/grok_companion_util.h"  // AETHER\n'
-                '#include "chrome/app/vector_icons/vector_icons.h"  // AETHER\n'
+                '\n#include "chrome/browser/grok_companion/grok_companion_util.h"  // XPLORER\n'
+                '#include "chrome/app/vector_icons/vector_icons.h"  // XPLORER\n'
                 '#include "chrome/browser/ui/views/toolbar/toolbar_button.h"\n',
             )
     # Grok logo vector icon for toolbar button.
@@ -542,7 +549,7 @@ def main(src: Path):
             "  }",
             "  void CheckForUpdate(StatusCallback status_callback,\n"
             "                      PromoteCallback promote_callback) override {\n"
-            "    // AETHER: Xplorer has no Google updater; skip the broken\n"
+            "    // XPLORER: Xplorer has no Google updater; skip the broken\n"
             "    // Keystone check (which reported \"error code 0\") and report\n"
             "    // up to date instead.\n"
             "    status_callback.Run(VersionUpdater::Status::UPDATED, 0, false,\n"
@@ -584,7 +591,7 @@ def main(src: Path):
             '#include "chrome/browser/autocomplete/'
             'chrome_autocomplete_provider_client.h"\n'
             '#include "chrome/browser/grok_companion/grok_companion_util.h"  '
-            '// AETHER', 1)
+            '// XPLORER', 1)
         ac = ac.replace(
             "void ChromeAutocompleteProviderClient::OpenLensOverlay(bool show) {\n"
             "#if !BUILDFLAG(IS_ANDROID)\n"
@@ -605,7 +612,7 @@ def main(src: Path):
             "#endif  // !BUILDFLAG(IS_ANDROID)\n"
             "}",
             "void ChromeAutocompleteProviderClient::OpenLensOverlay(bool show) {\n"
-            "  // AETHER: \"Ask Grok about this page\" -> open Grok, not Google Lens.\n"
+            "  // XPLORER: \"Ask Grok about this page\" -> open Grok, not Google Lens.\n"
             "  grok_companion::AskGrokAboutPage(GetWebContents(web_contents_getter_));\n"
             "}")
         acp.write_text(ac)

@@ -9,7 +9,7 @@ Two endpoints, both loopback-only, both live the moment the browser starts:
 
 **Auth:** `Authorization: Bearer <token>` where the token is in
 `<profile dir>/agent_token` (e.g. `~/Library/Application Support/Chromium/agent_token`)
-or `$AETHER_TOKEN`. The server binds 127.0.0.1 only; the token defends
+or `$XPLORER_TOKEN`. The server binds 127.0.0.1 only; the token defends
 against cross-origin/localhost-probing attacks from web pages.
 
 ## HTTP routes

@@ -1,8 +1,8 @@
-"""Aether agent SDK — minimal Python client for the AgentGateway.
+"""Xplorer agent SDK — minimal Python client for the AgentGateway.
 
 Zero dependencies beyond the stdlib. Any agent (or LLM tool-use loop) can:
 
-    from aether_sdk import Browser
+    from xplorer_sdk import Browser
     b = Browser()
     tab = b.tabs()[0]
     b.navigate(tab, "https://example.com")
@@ -24,7 +24,7 @@ class Browser:
                 pathlib.Path.home()
                 / "Library/Application Support/Chromium/agent_token"
             )
-            token = os.environ.get("AETHER_TOKEN") or token_file.read_text().strip()
+            token = os.environ.get("XPLORER_TOKEN") or token_file.read_text().strip()
         self.token = token
 
     def _req(self, method: str, path: str, body: dict | None = None) -> dict:

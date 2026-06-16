@@ -111,7 +111,7 @@ See above. Verified: search page serves mode pills + results section (curl).
 
 ### Commit 03071b1 — feat(apps) native
 - `exportable` bool on each app in `/api/apps` (folder exists on disk)
-- `MigrateAppPaths()` rewrites `/.aether/` and `/.xbrowser/` → `/.xplorer/`
+- `MigrateAppPaths()` rewrites `/.xplorer/` and `/.xbrowser/` → `/.xplorer/`
 - Smoke test: no-redirect check for switch-home
 - **Test:** Build 41s ✓ | reinstall ✓ | `companion_smoke_test.py` ALL OK ✓ | migration: paths now under `~/.xplorer/apps/` ✓
 
@@ -120,7 +120,7 @@ See above. Verified: search page serves mode pills + results section (curl).
 |-------|--------|
 | companion_smoke_test.py | ALL OK (export zip included) |
 | exportable API field | present on all apps with folders ✓ |
-| Path migration | `.aether` → `.xplorer` in registry ✓ |
+| Path migration | `.xplorer` → `.xplorer` in registry ✓ |
 | Code blocks in renderMarkdown | placeholder + pre/code path ✓ |
 
 ## Loop 6 (2026-06-14 ~06:35)
@@ -314,7 +314,7 @@ User ran `/loop 15m improve our browser…`. Background conductor task `task-BFB
 - **Chat:** Esc (on filter input or document when filter active) clears `convFilterQuery`, resets the `#conv-filter` input, and re-renders the conversation list.
 - **Apps:** Filter tabs now include "Idle" (added to `apps.html` buttons + `FILTER_LABELS` in `apps.js`); idle status was already computed in counts/status logic.
 - **Settings:** New "Chrome" card on `/settings` with `<a href="chrome://settings">` link (relies on Chromium's native chrome:// handler for full browser prefs).
-- **Test:** `python3 sdk/companion_smoke_test.py` → ALL OK (serves fresh JS/HTML with new code paths; enhanced asserts for initSearchModel, Escape, idle filter, chrome:// link). UI files loaded live from `~/cli_experiment/aether/companion/ui` (UiDir lookup, no native rebuild or reinstall required). Verified via curl + smoke. Revert not needed (smoke green).
+- **Test:** `python3 sdk/companion_smoke_test.py` → ALL OK (serves fresh JS/HTML with new code paths; enhanced asserts for initSearchModel, Escape, idle filter, chrome:// link). UI files loaded live from `~/cli_experiment/xplorer/companion/ui` (UiDir lookup, no native rebuild or reinstall required). Verified via curl + smoke. Revert not needed (smoke green).
 
 **Loop 15 test summary**
 | Check | Result |

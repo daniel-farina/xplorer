@@ -2,11 +2,11 @@
 # Package a built Xplorer.app into distributable .zip + .dmg with checksums.
 # Usage: ./scripts/package.sh [path-to-out-dir] [version]
 set -eu
-AETHER="$(cd "$(dirname "$0")/.." && pwd)"
-OUT="${1:-$AETHER/../chromium/src/out/aether}"
+XPLORER="$(cd "$(dirname "$0")/.." && pwd)"
+OUT="${1:-$XPLORER/../chromium/src/out/xplorer}"
 VERSION="${2:-dev}"
 APP="$OUT/Xplorer.app"
-DIST="$AETHER/dist"
+DIST="$XPLORER/dist"
 ARCH="$(uname -m)"           # arm64 or x86_64
 NAME="Xplorer-macos-$ARCH"
 

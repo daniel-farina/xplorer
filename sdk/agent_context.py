@@ -1,4 +1,4 @@
-"""Generic perceive->act layer for Aether — works on ANY website.
+"""Generic perceive->act layer for Xplorer — works on ANY website.
 
 The agent does not need hardcoded CSS selectors per site. It:
   1. observe(tab)  -> a compact list of interactive elements with their
@@ -15,7 +15,7 @@ from __future__ import annotations
 import re
 import time
 
-from aether_sdk import Browser
+from xplorer_sdk import Browser
 
 # JS that scans the DOM for actionable elements and computes an accessible
 # name for each (aria-label > associated <label> > placeholder > text). Every

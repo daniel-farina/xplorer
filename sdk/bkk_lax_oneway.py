@@ -5,7 +5,7 @@ import sys
 import time
 from datetime import date, timedelta
 
-from aether_sdk import Browser
+from xplorer_sdk import Browser
 from agent_context import Page
 
 

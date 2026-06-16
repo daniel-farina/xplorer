@@ -42,7 +42,6 @@
       <a href="#features">Features</a>
       <a href="#showcase">Showcase</a>
       <a href="#customize">Customize</a>
-      <a href="#soon">Coming soon</a>
       <a href="#agents">For Agents</a>
       <a href="#download">Download</a>
       <a class="nav__gh" href="https://github.com/daniel-farina/xplorer" target="_blank" rel="noopener">
@@ -302,9 +301,9 @@ POST /tabs/{id}/eval     {expression} -&gt; run JS, awaits promises
 
 # 3. Raw CDP — ws://127.0.0.1:9333   # point Playwright / Puppeteer here, no flags.
 
-# 4. MCP (recommended): register sdk/aether_mcp.py (stdio, stdlib-only) and your
-#    agent gets native tools — aether_tabs, aether_navigate, aether_read_text,
-#    aether_click, aether_type, aether_press, aether_screenshot, aether_eval.
+# 4. MCP (recommended): register sdk/xplorer_mcp.py (stdio, stdlib-only) and your
+#    agent gets native tools — xplorer_tabs, xplorer_navigate, xplorer_read_text,
+#    xplorer_click, xplorer_type, xplorer_press, xplorer_screenshot, xplorer_eval.
 #    It auto-discovers the running browser via ~/.xplorer/gateway.json.
 
 # Agents drive tabs while Xplorer is in the background; hidden tabs stay live.
@@ -441,6 +440,54 @@ curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:9334/tabs
         requestAnimationFrame(function () { requestAnimationFrame(reveal); });
         setTimeout(reveal, 150);
       }
+
+      // Header logo: auto-play the same left-to-right "plorer" reveal on load
+      // (no hover needed), then settle back to the compact X. Hover/focus
+      // reveal keeps working regardless.
+      var brand = document.querySelector('.nav__brand');
+      if (brand) {
+        setTimeout(function () { brand.classList.add('nav-intro'); }, 450);
+        setTimeout(function () { brand.classList.remove('nav-intro'); }, 2550);
+      }
+
+      // Scroll-reveal: fade + rise each section block as it enters the viewport.
+      // Grouped selectors get a per-row stagger so grids cascade in.
+      (function () {
+        var GROUPS = [
+          { sel: '.section__head' },
+          { sel: '#features .card', stagger: true },
+          { sel: '.showcase__row', stagger: true },
+          { sel: '#customize .shot-card', stagger: true },
+          { sel: '.soon__inner' },
+          { sel: '#agent-codeblock' },
+          { sel: '#agents .feat-row__item', stagger: true },
+          { sel: '.cta__inner' },
+          { sel: '.footer' }
+        ];
+        var all = [];
+        GROUPS.forEach(function (g) {
+          [].forEach.call(document.querySelectorAll(g.sel), function (el) {
+            el.classList.add('reveal');
+            if (g.stagger) {
+              var i = 0, p = el.previousElementSibling;
+              while (p) { if (p.matches(g.sel)) i++; p = p.previousElementSibling; }
+              el.style.transitionDelay = Math.min(i * 80, 320) + 'ms';
+            }
+            all.push(el);
+          });
+        });
+        if (!('IntersectionObserver' in window)) {
+          all.forEach(function (el) { el.classList.add('is-visible'); });
+          return;
+        }
+        var io = new IntersectionObserver(function (entries) {
+          entries.forEach(function (e) {
+            if (e.isIntersecting) { e.target.classList.add('is-visible'); io.unobserve(e.target); }
+          });
+        }, { threshold: 0.12, rootMargin: '0px 0px -8% 0px' });
+        all.forEach(function (el) { io.observe(el); });
+      })();
+
       if (!/align/.test(location.search + location.hash)) return;
 
       var KNOBS = [

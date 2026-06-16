@@ -24,6 +24,10 @@ html.grok-build body {
   opacity: 0; transition: opacity .5s ease;
 }
 .nt-bg.is-ready { opacity: 1; }
+/* animated star-field canvas — sits just above .nt-bg, below the scrim */
+.nt-stars {
+  position: fixed; inset: 0; z-index: -2; pointer-events: none; display: none;
+}
 /* readability scrim over the photo — theme-aware, modest */
 .nt-scrim {
   position: fixed; inset: 0; z-index: -1; pointer-events: none;
@@ -32,6 +36,13 @@ html.grok-build body {
 }
 html[data-theme="light"] .nt-scrim { background: rgba(255,255,255,0.34); }
 html[data-theme="dark"]  .nt-scrim { background: rgba(0,0,0,0.40); }
+/* Non-photo backgrounds are already flat/readable — drop the scrim; stars keep
+   a faint dim so foreground text stays legible without washing them out. */
+html[data-bg-type="default"]  .nt-scrim,
+html[data-bg-type="solid"]    .nt-scrim,
+html[data-bg-type="gradient"] .nt-scrim { background: transparent; }
+html[data-bg-type="stars"]    .nt-scrim { background: rgba(0,0,0,0.12); }
+html[data-theme="light"][data-bg-type="stars"] .nt-scrim { background: rgba(255,255,255,0.10); }
 
 /* ---------- Background gear + picker panel ---------- */
 .nt-bg-gear {
@@ -51,6 +62,7 @@ html[data-theme="dark"]  .nt-scrim { background: rgba(0,0,0,0.40); }
 .nt-bg-panel {
   position: fixed; right: 18px; bottom: 68px; z-index: 31;
   width: 340px; max-width: calc(100vw - 36px);
+  max-height: calc(100vh - 96px); overflow-y: auto;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 16px;
@@ -100,6 +112,63 @@ html[data-theme="dark"]  .nt-scrim { background: rgba(0,0,0,0.40); }
 .nt-drop__text { font-size: 12px; color: var(--text-secondary); line-height: 1.4; }
 .nt-drop__text b { color: var(--text); font-weight: 600; }
 .nt-drop input[type="file"] { display: none; }
+.nt-drop.is-active { border-style: solid; border-color: var(--accent); background: var(--accent-soft); }
+
+/* ---- Background-type selector (chips) ---- */
+.nt-types { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.nt-type {
+  flex: 1 1 auto; padding: 5px 8px; border-radius: 8px; cursor: pointer;
+  font: inherit; font-size: 12px; font-weight: 500;
+  border: 1px solid var(--border); background: var(--surface-elevated); color: var(--text-secondary);
+  transition: color .12s, border-color .12s, background .12s;
+}
+.nt-type:hover { color: var(--text); border-color: var(--accent); }
+.nt-type.is-active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+/* ---- Per-type control area ---- */
+.nt-ctl { min-height: 4px; }
+.nt-ctl__note { font-size: 12px; color: var(--text-secondary); line-height: 1.45; margin: 2px 0 0; }
+.nt-ctl__row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.nt-ctl__val { font-size: 12px; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+
+.nt-color {
+  width: 38px; height: 30px; flex: none; padding: 0; cursor: pointer;
+  border: 1px solid var(--border); border-radius: 8px; background: none;
+}
+.nt-color::-webkit-color-swatch-wrapper { padding: 3px; }
+.nt-color::-webkit-color-swatch { border: none; border-radius: 5px; }
+.nt-color::-moz-color-swatch { border: none; border-radius: 5px; }
+.nt-angle { flex: 1; accent-color: var(--accent); }
+
+.nt-swatches, .nt-grads { display: flex; flex-wrap: wrap; gap: 7px; }
+.nt-swatch {
+  width: 26px; height: 26px; border-radius: 7px; cursor: pointer; padding: 0;
+  border: 1px solid var(--border); box-shadow: inset 0 0 0 1px rgba(0,0,0,.04);
+}
+.nt-swatch:hover { transform: scale(1.08); }
+.nt-swatch.is-active { outline: 2px solid var(--accent); outline-offset: 1px; }
+.nt-grad-inputs { gap: 8px; }
+.nt-grad {
+  width: 44px; height: 26px; border-radius: 7px; cursor: pointer; padding: 0;
+  border: 1px solid var(--border);
+}
+.nt-grad:hover { transform: scale(1.06); border-color: var(--accent); }
+
+/* ---- Image type: preset option + custom upload side by side ---- */
+.nt-img-opts { display: flex; gap: 10px; align-items: stretch; }
+.nt-img-opt {
+  position: relative; width: 96px; flex: none; min-height: 64px; cursor: pointer; padding: 0;
+  border: 1.5px solid var(--border); border-radius: 12px; overflow: hidden;
+  background-size: cover; background-position: center; color: #fff;
+}
+.nt-img-opt span {
+  position: absolute; left: 0; right: 0; bottom: 0; padding: 3px 6px;
+  font-size: 11px; font-weight: 600; text-align: center;
+  background: linear-gradient(transparent, rgba(0,0,0,.55)); text-shadow: 0 1px 2px rgba(0,0,0,.5);
+}
+.nt-img-opt:hover { border-color: var(--accent); }
+.nt-img-opt.is-active { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+.nt-img-opts .nt-drop { flex: 1; }
 
 .main {
   max-width: 720px;

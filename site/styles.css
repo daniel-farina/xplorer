@@ -169,7 +169,8 @@ html.theme-animating * {
 }
 .nav__brand:hover .nav__word,
 .nav__brand:focus-visible .nav__word,
-.nav__brand.wm-reveal .nav__word { max-width: 8ch; opacity: 1; margin-left: 1px; }
+.nav__brand.wm-reveal .nav__word,
+.nav__brand.nav-intro .nav__word { max-width: 8ch; opacity: 1; margin-left: 1px; }
 .nav::after {
   content: ""; position: absolute; inset: 0; z-index: -1;
   background: var(--nav-bg);
@@ -508,3 +509,7 @@ html.theme-animating * {
 .footer__copy { font-size: 13.5px; }
 .footer__links { display: flex; gap: 22px; font-size: 14px; }
 .footer__links a:hover { color: var(--text); }
+
+/* ---------- Scroll-reveal (applied by JS; no-JS shows content normally) ---------- */
+.reveal { opacity: 0; transform: translateY(20px); transition: opacity .6s ease, transform .7s cubic-bezier(.2, .7, .2, 1); }
+.reveal.is-visible { opacity: 1; transform: none; }

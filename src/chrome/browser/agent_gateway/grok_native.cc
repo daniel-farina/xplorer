@@ -1,4 +1,4 @@
-// Copyright 2026 The Aether Authors.
+// Copyright 2026 The Xplorer Authors.
 // Use of this source code is governed by a BSD-style license.
 
 #include "chrome/browser/agent_gateway/grok_native.h"
@@ -184,10 +184,10 @@ base::FilePath UiDir() {
   if (!base::PathService::Get(base::DIR_HOME, &home))
     return base::FilePath();
   static constexpr const char* kCandidates[] = {
-      "cli_experiment/aether/companion/ui",
+      "cli_experiment/xplorer/companion/ui",
       ".xplorer/companion/ui",
       ".xbrowser/companion/ui",
-      ".aether/companion/ui",
+      ".xplorer/companion/ui",
   };
   for (const char* rel : kCandidates) {
     base::FilePath candidate = home.AppendASCII(rel);
@@ -327,10 +327,10 @@ constexpr char kBrowserChatRules[] =
     "instructions the user must follow themselves. "
     "To organize tabs in one step, call xbrowser_organize_tabs (or "
     "POST /api/browser/organize-tabs on the companion). "
-    "For custom grouping: aether_tabs then xbrowser_group_tabs. "
+    "For custom grouping: xplorer_tabs then xbrowser_group_tabs. "
     "Use xbrowser_activate_tab / xbrowser_close_tab for focus and close. "
     "Bookmarks: xbrowser_bookmarks, xbrowser_add_bookmark, "
-    "xbrowser_remove_bookmark. Navigation: aether_navigate or aether_new_tab.";
+    "xbrowser_remove_bookmark. Navigation: xplorer_navigate or xplorer_new_tab.";
 
 base::FilePath SettingsFile() {
   return xplorer_paths::Resolve("grok_settings.json");

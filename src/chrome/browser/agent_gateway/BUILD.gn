@@ -1,4 +1,4 @@
-# Copyright 2026 The Aether Authors.
+# Copyright 2026 The Xplorer Authors.
 
 source_set("agent_gateway") {
   sources = [
