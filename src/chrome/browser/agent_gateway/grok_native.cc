@@ -180,6 +180,19 @@ base::FilePath UiDir() {
     env = getenv("XBROWSER_COMPANION_UI");
   if (env && *env)
     return base::FilePath(env);
+  // Packaged app: the UI ships inside the bundle so the gateway is
+  // self-contained on any machine. The gateway runs in the browser process, so
+  // DIR_EXE is Xplorer.app/Contents/MacOS — the UI sits at ../Resources/...
+  // Without this, a downloaded app has no UI on disk and every UI navigation
+  // (e.g. /search) falls through to the auth-required path -> 401.
+  base::FilePath exe_dir;
+  if (base::PathService::Get(base::DIR_EXE, &exe_dir)) {
+    base::FilePath bundled =
+        exe_dir.DirName().AppendASCII("Resources").AppendASCII("companion").AppendASCII("ui");
+    if (base::DirectoryExists(bundled))
+      return bundled;
+  }
+  // Dev checkouts: serve straight from the repo / well-known home dirs.
   base::FilePath home;
   if (!base::PathService::Get(base::DIR_HOME, &home))
     return base::FilePath();
@@ -187,7 +200,6 @@ base::FilePath UiDir() {
       "cli_experiment/xplorer/companion/ui",
       ".xplorer/companion/ui",
       ".xbrowser/companion/ui",
-      ".xplorer/companion/ui",
   };
   for (const char* rel : kCandidates) {
     base::FilePath candidate = home.AppendASCII(rel);

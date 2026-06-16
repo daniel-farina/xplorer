@@ -23,6 +23,22 @@ ENT_DIR="$(cd "$(dirname "$0")" && pwd)/entitlements"
 [ -d "$APP" ] || { echo "No app bundle at $APP" >&2; exit 1; }
 command -v xcrun >/dev/null || { echo "xcrun (Xcode CLT) required" >&2; exit 1; }
 
+# Bundle the companion UI INTO the app so the gateway is self-contained on any
+# machine. The build does not include it, and UiDir() resolves it from
+# Contents/Resources/companion/ui. This MUST run before signing so the files
+# are covered by the signature (adding them after would invalidate it). Without
+# it, a downloaded app has no UI on disk and /search etc. 401 with
+# "missing or invalid bearer token".
+UI_SRC="$(cd "$(dirname "$0")/.." && pwd)/companion/ui"
+if [ -d "$UI_SRC" ]; then
+  echo "==> Bundling companion UI into $APP/Contents/Resources/companion/ui"
+  rm -rf "$APP/Contents/Resources/companion"
+  mkdir -p "$APP/Contents/Resources/companion"
+  cp -R "$UI_SRC" "$APP/Contents/Resources/companion/ui"
+else
+  echo "WARNING: companion UI not found at $UI_SRC — app will not be self-contained" >&2
+fi
+
 echo "==> Signing $APP with: $IDENTITY"
 
 # Pick the right entitlements per bundle, mirroring Chromium's own signing.
