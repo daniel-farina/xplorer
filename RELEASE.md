@@ -58,10 +58,12 @@ churn better than context diffs).
    components) into the tree.
 2. Installs the **`.icns`** app icon (`xplorer/branding/app.icns` →
    `chrome/app/theme/chromium/mac/app.icns`).
-3. Regenerates the **asset-catalog** app icon: writes our icon at every size
-   (16–1024) into `chrome/app/theme/chromium/mac/Assets.xcassets/AppIcon.appiconset`.
-   This is **required** — see the icon gotcha below; replacing only `app.icns`
-   is not enough on modern macOS.
+3. Installs the **asset-catalog** app icon — the one macOS actually shows. It
+   regenerates the `AppIcon.appiconset` PNGs from our icon AND recompiles
+   `chrome/app/theme/chromium/mac/Assets.car` with `actool`, overwriting the
+   prebuilt file. Both steps are **required** — see the icon gotcha below;
+   replacing only `app.icns` (or only the appiconset) leaves the stock Chromium
+   icon showing.
 4. Runs `xplorer/patches/apply_integration.py` to wire the gateway into
    `chrome_browser_main.cc` + `chrome/browser/BUILD.gn`, default CDP on :9333,
    set the AI-native runtime flags, register the Grok toolbar icon, and apply
@@ -101,10 +103,11 @@ After editing source, just re-run `autoninja -C out/aether chrome`. Notes:
   stat -f "%Sm" "out/aether/Xplorer.app/Contents/Frameworks/Xplorer Framework.framework/Versions/Current/Xplorer Framework"
   ```
 - Editing a `.grd` (string) file triggers a resource regen — expected.
-- Changing the **app icon** PNGs does *not* always re-trigger the `actool`
-  asset-catalog compile incrementally. If the icon looks stale, confirm
-  `out/aether/Xplorer.app/Contents/Resources/Assets.car` has a fresh mtime; if
-  not, a clean build (wipe `out/aether`) regenerates it reliably.
+- The build does **not** run `actool` on the appiconset — it copies the
+  prebuilt `chrome/app/theme/chromium/mac/Assets.car` (see icon gotcha). So
+  changing the appiconset PNGs has no effect unless `apply.sh` also recompiles
+  that `Assets.car` (it does). After a rebuild, sanity-check the bundle icon by
+  rendition size, not just mtime (commands in the icon gotcha).
 
 ---
 
@@ -181,10 +184,16 @@ xcrun notarytool store-credentials "xplorer-notary" \
 ```
 
 `sign_and_notarize.sh`:
+0. Copies `companion/ui` into `Contents/Resources/companion/ui` **before
+   signing** so the app is self-contained (see the companion-UI gotcha).
 1. Deep-signs **every Mach-O** in the bundle, inside-out, with the Developer ID
-   cert + hardened runtime (`--options runtime`) + secure timestamp, reusing
-   each binary's embedded entitlements. This includes the **bare framework
-   helpers with no extension** — `chrome_crashpad_handler`, `app_mode_loader`,
+   cert + hardened runtime (`--options runtime`) + secure timestamp, applying
+   the right entitlements **per part** (vendored under `scripts/entitlements/`):
+   the renderer + GPU helpers get `com.apple.security.cs.allow-jit` (V8 crashes
+   without it under hardened runtime → every page "Can't open this page / Error
+   code 5"); the main app gets the device/personal-info entitlements; everything
+   else gets hardened runtime only. This includes the **bare framework helpers
+   with no extension** — `chrome_crashpad_handler`, `app_mode_loader`,
    `web_app_shortcut_copier` — which a naive `*.dylib`/`*.app`-only sweep misses
    (and whose omission makes notarization fail "Invalid").
 2. `codesign --verify --deep --strict` + `spctl`.
@@ -232,22 +241,50 @@ gh release view v0.5.0 --json url,assets -q '.url, (.assets[]|"  \(.name)  \(.si
 
 ## Gotchas (learned the hard way)
 
-- **The app icon must be set in the asset catalog, not just `app.icns`.**
-  Chromium's `Info.plist` declares both `CFBundleIconFile` (`app.icns`) **and**
-  `CFBundleIconName` (`AppIcon`, compiled into `Contents/Resources/Assets.car`).
-  Modern macOS **prefers the asset catalog**, so replacing only `app.icns` left
-  the stock Chromium icon showing — even on a clean machine with no icon cache.
-  `apply.sh` now regenerates the `AppIcon.appiconset` PNGs from
-  `branding/app.icns` too (§2). Verify the built icon:
+- **The app icon: the build SHIPS A PREBUILT `Assets.car` — it does NOT run
+  `actool`.** This one cost hours. Chromium's `Info.plist` declares both
+  `CFBundleIconFile` (`app.icns`) and `CFBundleIconName` (`AppIcon` in
+  `Contents/Resources/Assets.car`), and modern macOS **prefers the asset
+  catalog**. The trap: `chrome/BUILD.gn`'s `chrome_asset_catalog` is a
+  `bundle_data` whose source is a **prebuilt, checked-in file** —
+  `sources = [ "app/theme/<branding>/mac/Assets.car" ]`. It is copied verbatim;
+  **the `AppIcon.appiconset` is never compiled by the build.** So editing
+  `app.icns` *and* editing the appiconset PNGs both do nothing on their own —
+  the prebuilt `Assets.car` (Chromium's blue icon) is what ships. `apply.sh` now
+  regenerates the appiconset PNGs **and recompiles `Assets.car` with `actool`,
+  overwriting the prebuilt file** (§2).
+  **Verify the COMPILED output, not the source** (the lesson — source PNGs being
+  right proves nothing). Compare rendition byte sizes: our simple X is tiny,
+  Chromium's colorful icon is ~10–30× larger:
   ```sh
-  sips -s format png chrome/app/theme/chromium/mac/Assets.xcassets/AppIcon.appiconset/appicon_512.png --out /tmp/i.png
+  xcrun assetutil --info out/aether/Xplorer.app/Contents/Resources/Assets.car \
+    | python3 -c "import sys,json;[print(r['PixelWidth'],r['SizeOnDisk']) for r in json.load(sys.stdin) if r.get('Name')=='AppIcon' and r.get('AssetType')=='Icon Image']"
+  # 512px ~6 KB = our X ✓   |   512px ~190 KB = still Chromium ✗
   ```
+  (`qlmanage`/`NSWorkspace` icon rendering are unreliable headless — they
+  produced empty/garbage output even for Safari — so don't trust a "rendered"
+  thumbnail; trust the rendition sizes.)
 
 - **Distribution requires sign + notarize (§6).** Ad-hoc/linker-signed builds
   open locally (after `xattr -dr com.apple.quarantine`) but are rejected as
   "damaged" when downloaded to another Mac. The fix is Developer ID signing +
   Apple notarization + stapling — not yet wired into `package.sh`/CI, so run
   `scripts/sign_and_notarize.sh` manually each release.
+
+- **The companion UI must be bundled into the app.** The gateway serves the UI
+  (the `/search` new tab, the injected toolbar on grok.com/x.com/grokipedia,
+  the apps pages) from files on disk via `UiDir()` / `CompanionUiDir()`. Those
+  resolvers check the bundle (`Contents/Resources/companion/ui`) first, then dev
+  paths (`~/cli_experiment/xplorer/companion/ui`, `~/.xplorer/...`). On the build
+  machine the dev paths exist so everything works; on **any other Mac they don't**
+  — and the build does not bundle the UI. Symptoms when it's missing: `/search`
+  returns the gateway's 401 `missing or invalid bearer token` as a page, and the
+  injected toolbar logo on third-party sites renders **oversized/unstyled**
+  (falls back to minimal hardcoded CSS). `sign_and_notarize.sh` copies
+  `companion/ui` into the bundle before signing. NOTE: there are **two** copies
+  of the resolver (`grok_native.cc::UiDir` and `grok_web_bar.cc::CompanionUiDir`)
+  — keep them in sync. TODO: have the build bundle the UI via `bundle_data` and
+  unify the resolver so self-containment doesn't depend on the signing script.
 
 - **The macOS icon cache is sticky (local only).** After changing the icon, your
   *own* Dock may keep the old one even when the bundle is correct (this is

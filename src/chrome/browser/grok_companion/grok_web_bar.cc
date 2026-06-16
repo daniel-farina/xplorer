@@ -67,6 +67,20 @@ base::FilePath CompanionUiDir() {
     env = getenv("XBROWSER_COMPANION_UI");
   if (env && *env)
     return base::FilePath(env);
+  // Packaged app: the UI ships inside the bundle (Contents/Resources/companion/
+  // ui), resolved from the browser process's DIR_EXE (Contents/MacOS). Without
+  // this, a downloaded app can't find toolbar.css/.html, so the overlay on
+  // grok.com / x.com / grokipedia falls back to minimal CSS and the logo
+  // renders unstyled/oversized. Keep in sync with grok_native.cc UiDir().
+  base::FilePath exe_dir;
+  if (base::PathService::Get(base::DIR_EXE, &exe_dir)) {
+    base::FilePath bundled = exe_dir.DirName()
+                                 .AppendASCII("Resources")
+                                 .AppendASCII("companion")
+                                 .AppendASCII("ui");
+    if (base::DirectoryExists(bundled))
+      return bundled;
+  }
   base::FilePath home;
   if (!base::PathService::Get(base::DIR_HOME, &home))
     return base::FilePath();
@@ -74,7 +88,6 @@ base::FilePath CompanionUiDir() {
       "cli_experiment/xplorer/companion/ui",
       ".xplorer/companion/ui",
       ".xbrowser/companion/ui",
-      ".xplorer/companion/ui",
   };
   for (const char* rel : kCandidates) {
     base::FilePath candidate = home.AppendASCII(rel);
