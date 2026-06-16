@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="branding/xplorer-mark-512.png" alt="Xplorer" width="92" height="92">
+  <img src="branding/xplorer-mark-512.png" alt="Xplorer" width="88" height="88">
 </p>
 
 <h1 align="center">Xplorer</h1>
@@ -7,177 +7,283 @@
 <p align="center"><b>The browser with Grok in every tab.</b></p>
 
 <p align="center">
-  Search, chat, build apps, and control tabs — with Grok built into every page.<br>
+  Search, chat, build apps, and drive the web — with Grok built into every page.<br>
   No extensions, no copy‑paste. Just ask.
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/macOS-Apple%20Silicon-000000?logo=apple&logoColor=white" alt="macOS Apple Silicon">
+  <a href="https://github.com/daniel-farina/xplorer/releases"><img src="https://img.shields.io/github/v/release/daniel-farina/xplorer?color=2563eb" alt="Latest release"></a>
+  <a href="https://daniel-farina.github.io/xplorer/"><img src="https://img.shields.io/badge/website-xplorer-2563eb" alt="Website"></a>
 </p>
 
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="site/assets/screenshot-hero-dark.png">
-    <img src="site/assets/screenshot-hero-light.png" alt="Xplorer showing Grok Search on a new tab" width="820">
+    <img src="site/assets/screenshot-hero-light.png" alt="Xplorer showing Grok Search on a new tab" width="860">
   </picture>
 </p>
 
-Xplorer is a **full web browser** — a fork of Chromium (the real thing: Blink, V8,
-the multiprocess sandbox, the whole content layer) modified at the C++ source level
-to be **AI‑native**. Every site works, every extension runs, with the sandboxing you
-expect. Grok is added at the core, not bolted on as a tab. macOS (Apple Silicon).
+Xplorer is a **full web browser** — a fork of Chromium (the real thing: Blink, V8, the
+multiprocess sandbox, the whole content layer) modified at the C++ source level to be
+**AI‑native**. Every site works, every extension runs, with the sandboxing you expect.
+Grok is woven in at the core, not bolted on as a sidebar. And the same engine that puts
+Grok in your tabs exposes a clean local API, so **any agent can drive the browser** — no
+launch flags, no setup dance.
+
+> **Platform:** macOS (Apple Silicon). [Download the latest release](https://github.com/daniel-farina/xplorer/releases) or [build from source](#develop-locally).
+
+---
+
+## Contents
+
+- [Features](#features)
+- [How it works](#how-it-works)
+- [Architecture](#architecture)
+- [For agents & developers](#for-agents--developers)
+- [Install](#install)
+- [Develop locally](#develop-locally)
+- [Project layout](#project-layout)
+- [Contributing](#contributing)
+- [License](#license)
 
 ---
 
 ## Features
 
-> Real, shipping features — not a chat box in a sidebar.
+Real, shipping features — not a chat box in a sidebar.
 
-- ✦ **The "Grok it" button** — a floating Grok button on every page. Summarize the long
-  read, fact‑check the claims ("Is this true?"), explain it, or analyze it — your page is
-  handed to Grok with one click.
-- ⚒ **Grok Build** — describe an app in plain words and Grok writes it, then runs it live
-  in a tab. Watch it build, then keep iterating just by chatting — "make the header
-  sticky," and it does.
-- ▦ **Apps & conversations** — every build gets its own folder and a dedicated
-  conversation. Browse the gallery, filter by status, rename, duplicate, export to a zip,
-  or relaunch — your apps and chats stay organized.
-- ⌕ **Grok Search home** — new tabs open Grok Search. Type a query and it runs on grok.com
-  with full context — Web and Imagine modes built in. Make the backdrop yours: a solid
-  color, gradient, animated star field, or your own image per light/dark mode.
-- ⊞ **One bar for all of Grok** — a unified toolbar across Grok Build, Grok Web, Imagine,
+- **The "Grok it" button** — a floating Grok button on every page. Summarize the long
+  read, fact‑check a claim ("Is this true?"), explain it, or analyze it — the page is
+  handed to Grok in one click.
+- **Grok Build** — describe an app in plain words and Grok writes it, then runs it live in
+  a tab. Watch it build, then keep iterating just by chatting ("make the header sticky")
+  — it edits the app in place, beside a live preview.
+- **Apps & conversations** — every build gets its own folder and a dedicated conversation.
+  Browse the gallery, filter by status, rename, duplicate, export to a zip, or relaunch —
+  your apps and chats stay organized.
+- **Grok Search home** — new tabs open Grok Search (Web and Imagine modes built in). Make
+  the backdrop yours per light/dark mode: a solid color, a gradient, an animated star
+  field, the built‑in landscape, or your own image by drag‑and‑drop.
+- **One bar for all of Grok** — a unified toolbar across Grok Build, Grok Web, Imagine,
   Groki, and X — on Xplorer's own pages and as an overlay on grok.com, x.com, and
   Grokipedia.
-- ⚡ **Agent‑ready & MCP** — Xplorer ships as an MCP server with an always‑on local
-  gateway, so agents like Grok, Claude, and Cursor can drive the browser natively — tabs,
-  navigation, clicks, screenshots.
+- **Agent‑ready & MCP** — an always‑on local gateway and a bundled MCP server, so agents
+  like Grok, Claude, and Cursor can drive the browser natively: tabs, navigation, clicks,
+  text extraction, screenshots.
 
-### Build apps by describing them
-
-Type what you want on the Apps page and Grok writes the files for you — you watch it think
-and build in real time, with the finished app running live in a preview beside the chat.
-Don't like something? Just tell Grok, and it edits the app in place.
-
-<p align="center"><img src="site/assets/screenshot-build.png" alt="Grok Build — describe an app and watch it build live" width="820"></p>
-
-### One toolbar for all of Grok
-
-<p align="center"><img src="site/assets/screenshot-toolbar.png" alt="The unified Grok toolbar" width="820"></p>
-
-### Your new tab, your backdrop
-
-Every new tab opens Grok Search. Pick a background per light/dark mode — a color, gradient,
-animated stars, the built‑in landscape, or your own image by drag‑and‑drop — and Xplorer
-remembers it, switching automatically with your theme.
-
-<p align="center"><img src="site/assets/screenshot-newtab-3.png" alt="The per-mode new-tab background picker" width="820"></p>
+See it in motion on the [website](https://daniel-farina.github.io/xplorer/).
 
 ---
 
-## Built for agents, too
-
-Xplorer runs an **always‑on local gateway** and ships as an **MCP server** — so any agent
-can drive it, with no launch flags and no setup dance.
-
-### Why
+## How it works
 
 Stock Chrome only exposes the Chrome DevTools Protocol (CDP) when launched with
-`--remote-debugging-port`, and treats automation as a second‑class debug mode: a
-`navigator.webdriver` flag, an "automation" banner, and a brittle CDP session dance before
-you can do anything. Agents deserve better — a browser that is controllable natively, fast,
-private, and always ready. And people deserve Grok woven into browsing, not stapled on in a
-sidebar. Xplorer is both at once.
+`--remote-debugging-port`, and treats automation as a second‑class debug mode — a
+`navigator.webdriver` flag, an "automation" banner, and a brittle session dance before you
+can do anything. Agents deserve better, and people deserve Grok woven into browsing rather
+than stapled on. Xplorer is both at once, achieved with a small set of source‑level
+additions to Chromium:
 
-### How
-
-Xplorer bakes agent access into the browser process itself:
-
-1. **AgentGateway service** (`src/chrome/browser/agent_gateway/`) — a component compiled
-   into the browser process that starts automatically at profile load. It exposes:
-   - the full **CDP** over `ws://127.0.0.1:9333` (Playwright / Puppeteer compatible)
-   - a higher‑level **Agent API** on `http://127.0.0.1:9334` with the primitives agents
-     actually want — `navigate`, `text` (readability‑style extraction), `axtree`
-     (accessibility‑tree snapshot for grounding), `click`, `type`, `press`, `screenshot`,
-     `eval`, `tabs` — each one round trip instead of a CDP session dance.
+1. **AgentGateway** (`src/chrome/browser/agent_gateway/`) — a component compiled into the
+   browser process that starts automatically at profile load. It serves the full CDP on
+   `ws://127.0.0.1:9333` and a higher‑level HTTP **Agent API** on `http://127.0.0.1:9334`.
 2. **First‑class, not intruder** — no automation banner and no `navigator.webdriver`
    poisoning for gateway sessions. Agents drive tabs while Xplorer is in the background;
-   hidden tabs stay live.
+   hidden tabs stay live and screenshottable.
 3. **Local & private** — the gateway binds to `127.0.0.1` and is token‑gated. Discovery is
-   a single file, `~/.xplorer/gateway.json`.
-4. **Grok‑native UI** — a companion layer (toolbar, Grok Search new tab, the Apps builder)
-   is served from the local gateway and overlaid on Grok's own sites, and Grok is wired in
-   as the default search engine — all in the C++ layer.
+   a single file: `~/.xplorer/gateway.json`.
+4. **Grok‑native UI** (`src/chrome/browser/grok_companion/`) — the toolbar, the Grok Search
+   new tab, the Apps builder, the "Grok it" button, and the side panel. The UI is plain
+   HTML/CSS/JS served by the gateway and overlaid on Grok's own sites; Grok is wired in as
+   the default search engine.
 5. **Apps system** — "Grok Build" runs the `grok` CLI as a subprocess inside a per‑app
    folder; it writes static HTML/CSS/JS, and the gateway hosts the result at `/run/<id>/`.
    No bundler, no deploy step.
 
-See [`docs/AGENT_API.md`](docs/AGENT_API.md) for the full reference.
+---
 
-### Connect an agent
+## Architecture
 
-Discover the gateway, then talk to it (loopback‑only, token‑gated):
+Xplorer is an **overlay** on Chromium: Chromium is too large to vendor, so the repo is a
+thin layer (`src/` new files + `patches/` source edits + `companion/` UI) applied on top of
+an upstream checkout. Keeping the footprint small is deliberate — it's what makes a fork
+rebaseable against a codebase that ships every ~4 weeks.
 
-```jsonc
-// ~/.xplorer/gateway.json
-{ "url": "http://127.0.0.1:9334", "cdp_url": "ws://127.0.0.1:9333", "token": "…" }
-// Send  Authorization: Bearer <token>  on every request.
+```mermaid
+flowchart LR
+  subgraph clients["Clients"]
+    AG["Agents<br/>Grok · Claude · Cursor"]
+    PW["Playwright · Puppeteer"]
+    YOU["You (browsing)"]
+  end
+
+  subgraph proc["Xplorer — Chromium browser process"]
+    GW["AgentGateway<br/>Agent API :9334 · CDP :9333"]
+    GC["grok_companion<br/>toolbar · Grok‑it button · side panel · search home"]
+    APPS["Apps runtime<br/>grok CLI → /run/{id}/"]
+    TABS["Tabs · Blink · V8"]
+  end
+
+  UI["companion/ui<br/>(bundled HTML/CSS/JS)"]
+  DISC["~/.xplorer/gateway.json<br/>(url · token)"]
+
+  AG -- "MCP / HTTP + Bearer" --> GW
+  PW -- "raw CDP" --> GW
+  YOU --> GC
+  GW <--> TABS
+  GC --> TABS
+  GW --> APPS
+  GW -- serves --> UI
+  GC -- serves/overlays --> UI
+  GW -. writes .-> DISC
+  AG -. reads .-> DISC
 ```
 
-Python SDK (`sdk/xplorer_sdk.py`, stdlib‑only):
+---
+
+## For agents & developers
+
+The gateway is the integration surface. Discover it, then talk to it (loopback‑only,
+token‑gated):
+
+```jsonc
+// ~/.xplorer/gateway.json — written at startup
+{ "url": "http://127.0.0.1:9334", "cdp_url": "ws://127.0.0.1:9333", "token": "…" }
+// Send  Authorization: Bearer <token>  on every Agent API request.
+```
+
+**Python SDK** (`sdk/xplorer_sdk.py`, stdlib‑only, auto‑discovers the running browser):
 
 ```python
 from xplorer_sdk import Browser
 
-b = Browser()                       # auto-discovers the running browser
-tab = b.tabs()[0]["id"]             # tab ids look like "12:0"
+b = Browser()
+tab = b.tabs()[0]["id"]              # tab ids look like "12:0"
 b.navigate(tab, "https://example.com")
-print(b.text(tab))                  # clean, readable text — one round trip
+print(b.text(tab))                   # clean, readable text — one round trip
 b.click(tab, "a#more")
-tree = b.axtree(tab)                # accessibility tree for grounding
-shot = b.screenshot(tab)            # PNG bytes — works on background tabs
+tree = b.axtree(tab)                 # accessibility tree for grounding
+shot = b.screenshot(tab)             # PNG bytes — works on background tabs
 ```
 
-Quick check from a shell:
+**Shell:**
 
 ```sh
 TOKEN=$(python3 -c "import json,os;print(json.load(open(os.path.expanduser('~/.xplorer/gateway.json')))['token'])")
 curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:9334/tabs
 ```
 
-**MCP (recommended):** register `sdk/xplorer_mcp.py` (stdio, stdlib‑only) and your agent gets
-native browser tools — `xplorer_tabs`, `xplorer_navigate`, `xplorer_read_text`, `xplorer_click`,
-`xplorer_type`, `xplorer_press`, `xplorer_screenshot`, `xplorer_eval`. It auto‑discovers the
-running browser via `~/.xplorer/gateway.json`.
+**MCP (recommended):** register `sdk/xplorer_mcp.py` (stdio, stdlib‑only) and your agent
+gets native tools — `xplorer_tabs`, `xplorer_navigate`, `xplorer_read_text`,
+`xplorer_click`, `xplorer_type`, `xplorer_press`, `xplorer_screenshot`, `xplorer_eval`.
 
-**Raw CDP:** point Playwright / Puppeteer at `ws://127.0.0.1:9333` — no flags.
+**Raw CDP:** point Playwright or Puppeteer at `ws://127.0.0.1:9333` — no flags.
+
+Full endpoint reference: [`docs/AGENT_API.md`](docs/AGENT_API.md).
 
 ---
 
 ## Install
 
-Download the latest build for macOS (Apple Silicon) from
-[**Releases**](https://github.com/daniel-farina/xplorer/releases), or build from source.
+Download the latest signed, notarized build for macOS (Apple Silicon) from the
+[**Releases**](https://github.com/daniel-farina/xplorer/releases) page (`.dmg` or `.zip`),
+or [build it yourself](#develop-locally).
 
-## Build from source
+---
 
-This is an *overlay repo*: Chromium is too large to vendor, so Xplorer is an upstream
-Chromium checkout with `xplorer/` applied on top.
+## Develop locally
 
-```sh
-./xplorer/apply.sh   # copy src/, apply patches onto ../chromium/src
-./xplorer/build.sh   # gn gen out/aether && autoninja -C out/aether chrome
+Xplorer builds on top of a normal Chromium checkout that lives *next to* this repo:
+
+```
+chromium/src        # upstream Chromium (fetched separately)
+xplorer/            # this repo — applied on top
 ```
 
-Requires: macOS + Xcode, `depot_tools` on PATH, ~80 GB disk, and several hours for the
-first build.
+**Prerequisites (one‑time):** macOS + full Xcode on Apple Silicon, ~100 GB free disk, and
+`depot_tools` on your `PATH`.
 
-## Repo layout
+```sh
+# 1. depot_tools
+git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git
+export PATH="$PWD/depot_tools:$PATH"
+
+# 2. Chromium source (the long download), as a sibling of this repo
+mkdir chromium && cd chromium
+fetch --no-history chromium
+cd src && gclient runhooks && cd ../..
+
+# 3. this repo, beside chromium/
+git clone https://github.com/daniel-farina/xplorer.git
+```
+
+**Build:**
+
+```sh
+./xplorer/apply.sh    # copy src/ + companion UI + icons, apply source patches
+./xplorer/build.sh    # gn gen out/aether  +  autoninja -C out/aether chrome
+```
+
+The first build takes a few hours (it compiles all of Chromium locally). After that,
+**incremental rebuilds are minutes** — edit a file and re‑run `autoninja -C out/aether chrome`.
+Companion UI files (`companion/ui/*.html|css|js`) are served live from disk, so UI tweaks
+don't even need a rebuild.
+
+Run it:
+
+```sh
+open ./chromium/src/out/aether/Xplorer.app
+cat ~/.xplorer/gateway.json     # confirm the gateway came up
+```
+
+Releasing (signing, notarization, packaging) is documented in
+[`RELEASE.md`](RELEASE.md).
+
+---
+
+## Project layout
 
 ```
 xplorer/
-  patches/    string-patches applied to the chromium tree
-  src/        new files copied verbatim into the tree (agent_gateway/, grok_companion/)
-  companion/  Grok-native UI served from the gateway (toolbar, search, apps)
-  sdk/        Python client SDK + MCP server for agents
-  docs/       agent API reference
-  site/       landing page
-  build/      release build configuration (args.gn)
-  apply.sh    copies src/, applies patches/
-  build.sh    gn gen + autoninja
+  src/         new C++ files copied into the Chromium tree
+               (agent_gateway/, grok_companion/)
+  patches/     idempotent, anchor‑based source patches (apply_integration.py)
+  companion/   Grok‑native UI served by the gateway (toolbar, search, apps)
+  sdk/         Python client SDK + MCP server for agents
+  docs/        Agent API reference
+  site/        landing page (published to GitHub Pages)
+  build/       release build configuration (args.gn)
+  branding/    app icon, vector marks
+  apply.sh     overlay onto ../chromium/src
+  build.sh     gn gen + autoninja
+  RELEASE.md   build / sign / notarize / publish runbook
 ```
+
+---
+
+## Contributing
+
+Contributions are welcome. A few things that keep this fork healthy:
+
+- **Keep the overlay thin.** Prefer adding code under `src/chrome/browser/agent_gateway/`
+  or `src/chrome/browser/grok_companion/` over editing Chromium files. Every edit to an
+  upstream file is something that must be re‑applied each time Chromium is re‑synced.
+- **Patch via anchors, not diffs.** Source edits live in `patches/apply_integration.py`,
+  which inserts/replaces relative to a unique anchor string and is idempotent (safe to
+  re‑run). If an anchor moves upstream, the patcher fails loudly — update the anchor.
+- **UI is just files.** The companion UI is plain HTML/CSS/JS in `companion/ui/`, served
+  live from disk in dev — no build step, fast iteration.
+- **Test the real thing.** After `apply.sh` + `build.sh`, exercise changes against the
+  running browser (the SDK in `sdk/` is handy for scripted checks).
+
+Open an issue to discuss larger changes first, and keep PRs focused.
+
+---
+
+## License
+
+Xplorer is a derivative of [Chromium](https://www.chromium.org/), which is distributed
+under a BSD‑3‑Clause license; Chromium's own license and third‑party notices continue to
+apply to the browser. Licensing for the Xplorer overlay in this repository is set by the
+project owner — see the repository for terms.
