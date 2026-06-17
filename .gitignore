@@ -5,3 +5,7 @@ dist/
 .DS_Store
 __pycache__/
 *.pyc
+
+# Secrets — never commit
+.env
+.env.*
