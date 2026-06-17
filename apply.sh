@@ -48,6 +48,32 @@ fi
 echo "Installing Grok toolbar vector icon..."
 cp "$XPLORER/branding/grok.icon" "$SRC/chrome/app/vector_icons/grok.icon"
 
+# Product logo shown on chrome://settings/help (About page). The About logo is
+# chrome://theme/current-channel-logo -> IDR_PRODUCT_LOGO_32, a chrome_scaled_image
+# whose REAL grit sources are the scaled theme dirs (default_100_percent =NxN,
+# default_200_percent =2Nx2N), NOT chrome/app/theme/chromium/. We overwrite all
+# three from the transparent Xplorer mark.
+echo "Installing Xplorer product logos..."
+LOGO_SRC="$XPLORER/branding/xplorer-mark-1024.png"
+if [ -f "$LOGO_SRC" ]; then
+  # Base theme dir (packaging / misc UI surfaces).
+  for sz in 16 24 32 48 64 128 256; do
+    sips -s format png -z "$sz" "$sz" "$LOGO_SRC" \
+      --out "$SRC/chrome/app/theme/chromium/product_logo_${sz}.png" >/dev/null 2>&1
+  done
+  # Scaled grit sources actually used by IDR_PRODUCT_LOGO_* (incl. the About
+  # page). 100% dir = NxN; 200% dir = 2Nx2N. Only 16 and 32 exist here.
+  for sz in 16 32; do
+    sips -s format png -z "$sz" "$sz" "$LOGO_SRC" \
+      --out "$SRC/chrome/app/theme/default_100_percent/chromium/product_logo_${sz}.png" >/dev/null 2>&1
+    sips -s format png -z "$((sz * 2))" "$((sz * 2))" "$LOGO_SRC" \
+      --out "$SRC/chrome/app/theme/default_200_percent/chromium/product_logo_${sz}.png" >/dev/null 2>&1
+  done
+  echo "  installed product logos (base + default_100/200_percent scaled dirs)"
+else
+  echo "  WARNING: $LOGO_SRC not found — product logos NOT updated" >&2
+fi
+
 echo "Applying integration edits..."
 python3 "$XPLORER/patches/apply_integration.py" "$SRC"
 

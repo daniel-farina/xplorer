@@ -2117,6 +2117,7 @@ bool GrokNative::TryHandleRequest(
     const std::string* model = body->FindString("model");
     const std::string* search_model = body->FindString("search_model");
     const std::string* home = body->FindString("search_home");
+    const base::DictValue* toolbar = body->FindDict("toolbar");
     std::optional<bool> welcome = body->FindBool("welcome_completed");
     bool updated = false;
     if (model && !model->empty()) {
@@ -2142,10 +2143,16 @@ bool GrokNative::TryHandleRequest(
       grok_companion::MarkWelcomeCompleted();
       updated = true;
     }
+    if (toolbar) {
+      base::DictValue settings = LoadSettings();
+      settings.Set("toolbar", toolbar->Clone());
+      SaveSettings(settings);
+      updated = true;
+    }
     if (!updated) {
       base::DictValue err;
       err.Set("error",
-              "provide model, search_model, search_home, and/or "
+              "provide model, search_model, search_home, toolbar, and/or "
               "welcome_completed");
       SendJson(server, connection_id, net::HTTP_BAD_REQUEST, std::move(err));
       return true;
@@ -2162,6 +2169,11 @@ bool GrokNative::TryHandleRequest(
     d.Set("grok_wiki_url", kGrokWikiHomeURL);
     d.Set("welcome_completed", grok_companion::HasCompletedWelcome());
     d.Set("product_name", grok_companion::kProductName);
+    // Reflect the stored toolbar config back so the editor can re-read it.
+    if (base::DictValue settings = LoadSettings();
+        const base::DictValue* stored = settings.FindDict("toolbar")) {
+      d.Set("toolbar", stored->Clone());
+    }
     EnrichSettingsResponse(&d, gateway_port);
     SendJson(server, connection_id, net::HTTP_OK, std::move(d));
     return true;

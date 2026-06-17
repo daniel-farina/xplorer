@@ -519,33 +519,210 @@ def main(src: Path):
         grdp.write_text(sg)
         print(f"  edited: {grdp}")
 
+    # --- About page version line: lead with the Xplorer version --------------
+    # The about/help line is the Chromium ENGINE version ("Version 151.0.7890.0
+    # (Developer Build) ..."). Prepend the Xplorer product version so users see
+    # OUR version first. NOTE: bump XPLORER_VERSION here per release (or wire it
+    # to the release version later).
+    XPLORER_VERSION = "0.6.2"
+    ss = src / "chrome/app/settings_strings.grdp"
+    sst = ss.read_text()
+    _ver_marker = "Xplorer " + XPLORER_VERSION + " · Chromium"
+    if _ver_marker not in sst:
+        # Bump-safe: matches a fresh checkout ("Version <ph>") OR an earlier
+        # patched version ("Xplorer 0.6.1 · Chromium <ph>") and rewrites it to
+        # the current version. (A plain string anchor breaks on version bumps
+        # because the prior patch already consumed "Version <ph>".)
+        sst, _n = re.subn(
+            r'(?:Version|Xplorer [0-9][0-9.]* · Chromium) '
+            r'(<ph name="PRODUCT_VERSION">)',
+            _ver_marker + r" \1",
+            sst, count=1)
+        if _n:
+            ss.write_text(sst)
+            print(f"  edited (about version -> Xplorer {XPLORER_VERSION}): {ss}")
+
+    # --- "Get help" links -> Xplorer GitHub (not Google support) -------------
+    uc = src / "chrome/common/url_constants.h"
+    uct = uc.read_text()
+    if "github.com/daniel-farina/xplorer" not in uct:
+        uct = uct.replace(
+            '"https://support.google.com/chrome?p=help&ctx=settings"',
+            '"https://github.com/daniel-farina/xplorer"')
+        uct = uct.replace(
+            '"https://support.google.com/chrome?p=help&ctx=menu"',
+            '"https://github.com/daniel-farina/xplorer"')
+        uc.write_text(uct)
+        print(f"  edited (help -> GitHub): {uc}")
+
+    # --- 3-dot menu + macOS menus: "About Chromium" -> "About Xplorer" -------
+    cs = src / "chrome/app/chromium_strings.grd"
+    cst = cs.read_text()
+    if "About &amp;Xplorer" not in cst:
+        # All 3 non-"for Testing" IDS_ABOUT bodies (use_titlecase, not-
+        # use_titlecase, is_chromeos). The "Google Chrome for Testing" lines
+        # are a different string and are intentionally left alone.
+        cst = cst.replace("About &amp;Chromium", "About &amp;Xplorer")
+        cs.write_text(cst)
+        print(f"  edited (About Xplorer menus): {cs}")
+
+    # macOS app-menu short name (IDS_APP_MENU_PRODUCT_NAME). Match the full
+    # message tag so only this one "Chromium" body is touched.
+    cst2 = cs.read_text()
+    _app_menu_old = (
+        '<message name="IDS_APP_MENU_PRODUCT_NAME" desc="The application\'s '
+        "short name, used for the Mac's application menu, activity monitor, "
+        "etc. This should be less than 16 characters. Example: Chrome, not "
+        'Google Chrome." translateable="false">\n'
+        "          Chromium\n"
+        "        </message>"
+    )
+    _app_menu_new = (
+        '<message name="IDS_APP_MENU_PRODUCT_NAME" desc="The application\'s '
+        "short name, used for the Mac's application menu, activity monitor, "
+        "etc. This should be less than 16 characters. Example: Chrome, not "
+        'Google Chrome." translateable="false">\n'
+        "          Xplorer\n"
+        "        </message>"
+    )
+    if _app_menu_new not in cst2 and _app_menu_old in cst2:
+        cst2 = cst2.replace(_app_menu_old, _app_menu_new)
+        cs.write_text(cst2)
+        print(f"  edited (app-menu product name): {cs}")
+
+    # macOS app menu "About Chromium" (IDS_ABOUT_MAC). Upstream uses a $1
+    # substitution of the product name, which is unpatched and would render
+    # "About Chromium". Pin it to a literal "About Xplorer".
+    gen = src / "chrome/app/generated_resources.grd"
+    gent = gen.read_text()
+    _about_mac_old = (
+        '<message name="IDS_ABOUT_MAC" desc="The Mac menu item to open the '
+        'about box.">\n'
+        '          About <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex>'
+        "</ph>\n"
+        "        </message>"
+    )
+    _about_mac_new = (
+        '<message name="IDS_ABOUT_MAC" desc="The Mac menu item to open the '
+        'about box." translateable="false">\n'
+        "          About Xplorer\n"
+        "        </message>"
+    )
+    if "About Xplorer" not in gent and _about_mac_old in gent:
+        gent = gent.replace(_about_mac_old, _about_mac_new)
+        gen.write_text(gent)
+        print(f"  edited (About Mac menu): {gen}")
+
+    # --- About page license line: subject word only -------------------------
+    # Keep the <ph>Chromium</ph> link text (correct attribution to the
+    # upstream Chromium project); only swap the leading subject word.
+    ccs = src / "components/components_chromium_strings.grd"
+    ccst = ccs.read_text()
+    if "Xplorer is made possible by the" not in ccst:
+        ccst = ccst.replace(
+            "Chromium is made possible by the",
+            "Xplorer is made possible by the")
+        ccs.write_text(ccst)
+        print(f"  edited (license line): {ccs}")
+
     # macOS: Xplorer ships no Google updater, so the about page's update check
     # failed with "error code 0". Report up-to-date instead. (Live GitHub
     # release check deferred until the repo is public.)
     vum = src / "chrome/browser/ui/webui/help/version_updater_mac.mm"
     vm = vum.read_text()
-    if "Xplorer has no Google updater" not in vm:
-        vm = vm.replace(
-            "  void CheckForUpdate(StatusCallback status_callback,\n"
-            "                      PromoteCallback promote_callback) override {\n"
-            "    updater::EnsureUpdater(\n"
-            "        base::TaskPriority::USER_VISIBLE,\n"
-            "        base::BindOnce(promote_callback, "
-            "PromotionState::PROMOTE_ENABLED),\n"
-            "        base::BindOnce(&updater::CheckForUpdate,\n"
-            "                       base::BindRepeating(&UpdateStatus, "
-            "status_callback)));\n"
-            "  }",
-            "  void CheckForUpdate(StatusCallback status_callback,\n"
-            "                      PromoteCallback promote_callback) override {\n"
-            "    // XPLORER: Xplorer has no Google updater; skip the broken\n"
-            "    // Keystone check (which reported \"error code 0\") and report\n"
-            "    // up to date instead.\n"
-            "    status_callback.Run(VersionUpdater::Status::UPDATED, 0, false,\n"
-            "                        false, std::string(), 0, std::u16string());\n"
-            "  }")
+    _upd_pristine = (
+        "  void CheckForUpdate(StatusCallback status_callback,\n"
+        "                      PromoteCallback promote_callback) override {\n"
+        "    updater::EnsureUpdater(\n"
+        "        base::TaskPriority::USER_VISIBLE,\n"
+        "        base::BindOnce(promote_callback, "
+        "PromotionState::PROMOTE_ENABLED),\n"
+        "        base::BindOnce(&updater::CheckForUpdate,\n"
+        "                       base::BindRepeating(&UpdateStatus, "
+        "status_callback)));\n"
+        "  }")
+    _upd_old = (
+        "  void CheckForUpdate(StatusCallback status_callback,\n"
+        "                      PromoteCallback promote_callback) override {\n"
+        "    // XPLORER: Xplorer has no Google updater; skip the broken\n"
+        "    // Keystone check (which reported \"error code 0\") and report\n"
+        "    // up to date instead.\n"
+        "    status_callback.Run(VersionUpdater::Status::UPDATED, 0, false,\n"
+        "                        false, std::string(), 0, std::u16string());\n"
+        "  }")
+    # Live-check the Xplorer GitHub releases for a newer version (check-only;
+    # no auto-download). Async NSURLSession; result posted back to the UI
+    # sequence. "Update available" -> FAILED status carries a message+link.
+    _upd_new = (
+        "  void CheckForUpdate(StatusCallback status_callback,\n"
+        "                      PromoteCallback promote_callback) override {\n"
+        "    status_callback.Run(VersionUpdater::Status::CHECKING, 0, false,\n"
+        "                        false, std::string(), 0, std::u16string());\n"
+        "    scoped_refptr<base::SequencedTaskRunner> runner =\n"
+        "        base::SequencedTaskRunner::GetCurrentDefault();\n"
+        "    StatusCallback cb = status_callback;\n"
+        "    NSURLSessionConfiguration* cfg =\n"
+        "        [NSURLSessionConfiguration ephemeralSessionConfiguration];\n"
+        "    cfg.timeoutIntervalForRequest = 10;\n"
+        "    NSURLSession* session =\n"
+        "        [NSURLSession sessionWithConfiguration:cfg];\n"
+        "    NSURL* url = [NSURL URLWithString:\n"
+        "        @\"https://api.github.com/repos/daniel-farina/xplorer/"
+        "releases/latest\"];\n"
+        "    NSURLSessionDataTask* task = [session dataTaskWithURL:url\n"
+        "        completionHandler:^(NSData* data, NSURLResponse* response,\n"
+        "                            NSError* error) {\n"
+        "          std::string latest;\n"
+        "          if (data && !error) {\n"
+        "            NSDictionary* json = [NSJSONSerialization\n"
+        "                JSONObjectWithData:data options:0 error:nil];\n"
+        "            if ([json isKindOfClass:[NSDictionary class]]) {\n"
+        "              NSString* tag = json[@\"tag_name\"];\n"
+        "              if ([tag isKindOfClass:[NSString class]]) {\n"
+        "                if ([tag hasPrefix:@\"v\"])\n"
+        "                  tag = [tag substringFromIndex:1];\n"
+        "                latest = base::SysNSStringToUTF8(tag);\n"
+        "              }\n"
+        "            }\n"
+        "          }\n"
+        "          VersionUpdater::Status status =\n"
+        "              VersionUpdater::Status::UPDATED;\n"
+        "          std::string out_version;\n"
+        "          std::u16string message;\n"
+        "          if (!latest.empty()) {\n"
+        '            base::Version cur("' + XPLORER_VERSION + '");\n'
+        "            base::Version newest(latest);\n"
+        "            if (cur.IsValid() && newest.IsValid() &&\n"
+        "                cur.CompareTo(newest) < 0) {\n"
+        "              status = VersionUpdater::Status::FAILED;\n"
+        "              out_version = latest;\n"
+        "              message = base::UTF8ToUTF16(\n"
+        '                  std::string("Xplorer v") + latest +\n'
+        '                  " is available -- download from "\n'
+        '                  "github.com/daniel-farina/xplorer/releases/latest");\n'
+        "            }\n"
+        "          }\n"
+        "          runner->PostTask(\n"
+        "              FROM_HERE, base::BindOnce(cb, status, 0, false, false,\n"
+        "                                        out_version, int64_t{0},\n"
+        "                                        message));\n"
+        "        }];\n"
+        "    [task resume];\n"
+        "  }")
+    if "releases/latest" not in vm:
+        if _upd_pristine in vm:
+            vm = vm.replace(_upd_pristine, _upd_new)
+        elif _upd_old in vm:
+            vm = vm.replace(_upd_old, _upd_new)
+        if '#include "base/strings/sys_string_conversions.h"' not in vm:
+            vm = vm.replace(
+                '#include "base/version.h"\n',
+                '#include "base/version.h"\n'
+                '#include "base/location.h"\n'
+                '#include "base/strings/sys_string_conversions.h"\n'
+                '#include "base/task/sequenced_task_runner.h"\n')
         vum.write_text(vm)
-        print(f"  edited: {vum}")
+        print(f"  edited (live update check): {vum}")
     # Our CheckForUpdate no longer calls the UpdateStatus helper, which now
     # trips -Werror,-Wunused-function. Mark it maybe_unused.
     vm2 = vum.read_text()

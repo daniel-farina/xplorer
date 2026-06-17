@@ -211,6 +211,22 @@ async function mountGrokToolbar({ pageHome, onSwitch } = {}) {
   } else {
     document.body.insertAdjacentHTML('afterbegin', html);
   }
+  // Apply config-driven customization BEFORE wiring. applyToolbarConfig may
+  // REBUILD the .grok-nav-pills DOM from the stored ordered array, so the pill
+  // wirings below (syncCompanionToolbarPill / initSearchHomeToggle /
+  // wireHideToggle) must target the rebuilt DOM. Companion origin is
+  // same-origin, so hrefs need no gateway prefix (''). If the fetch fails or
+  // there is no config, the static toolbar.html markup is left as-is (the
+  // default 5 pills — current behavior, no regression).
+  try {
+    const barEl = document.querySelector('header.grok-toolbar');
+    if (barEl && window.XplorerToolbar?.applyToolbarConfig) {
+      const settings = await fetchSettings();
+      if (settings?.toolbar) {
+        XplorerToolbar.applyToolbarConfig(barEl, settings.toolbar, '');
+      }
+    }
+  } catch { /* fetch failed → leave static markup, wire it as-is */ }
   syncCompanionToolbarPill();
   const path = (location.pathname || '').toLowerCase();
   const settingsBtn = document.querySelector('.grok-settings-btn');
