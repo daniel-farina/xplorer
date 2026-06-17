@@ -495,8 +495,21 @@ html.theme-animating * {
 }
 .cta__inner h2 { font-size: clamp(30px, 5vw, 52px); font-weight: 700; letter-spacing: -0.03em; }
 .cta__inner p { max-width: 540px; margin: 16px auto 0; color: var(--muted); font-size: 19px; }
-.cta__buttons { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; margin-top: 32px; }
+.download-grid {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px;
+  max-width: 640px; margin: 36px auto 0; text-align: left;
+}
+.download-card {
+  padding: 22px 20px; border-radius: 18px; border: 1px solid var(--line);
+  background: var(--bg);
+}
+.download-card h3 { font-size: 17px; font-weight: 700; letter-spacing: -0.02em; }
+.download-card__sub { margin-top: 4px; font: 500 12px "JetBrains Mono", monospace; color: var(--muted-2); }
+.download-card__buttons { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 16px; }
+.download-card .btn { padding: 11px 18px; font-size: 14px; }
+.cta__buttons { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; margin-top: 24px; }
 .cta__platforms { margin-top: 20px; font: 500 13px "JetBrains Mono", monospace; color: var(--muted-2); }
+@media (max-width: 640px) { .download-grid { grid-template-columns: 1fr; } }
 
 /* ---------- Footer ---------- */
 .footer {
