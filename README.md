@@ -41,7 +41,7 @@ launch flags, no setup dance.
 - [How it works](#how-it-works)
 - [Architecture](#architecture)
 - [For agents & developers](#for-agents--developers)
-- [Install](#install)
+- [Download](#download)
 - [Develop locally](#develop-locally)
 - [Project layout](#project-layout)
 - [Contributing](#contributing)
