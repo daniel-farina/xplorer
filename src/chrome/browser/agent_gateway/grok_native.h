@@ -17,6 +17,14 @@ namespace agent_gateway {
 // Resolves the grok CLI binary (GUI apps lack shell PATH).
 base::FilePath ResolveGrokBinary();
 
+// Resolves the companion UI directory (bundled Contents/Resources/companion/ui
+// first, then dev checkout paths). This is the SINGLE resolver shared with
+// grok_companion's native toolbar overlay so both surfaces always read the same
+// files. It lives here in agent_gateway because grok_companion depends on
+// agent_gateway, not vice-versa (putting it in grok_companion_util would create
+// a circular dependency).
+base::FilePath CompanionUiDir();
+
 // Native Grok companion: serves chat/search UI and proxies to the `grok` CLI.
 // Handled on the AgentGateway port (no separate Python process).
 // Grok Web handoff: pending prompts for grok.com auto-submit (browser-side).

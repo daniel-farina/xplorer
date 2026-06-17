@@ -1443,6 +1443,13 @@ void CaptureScreenshot(
 
 }  // namespace
 
+// Public wrapper around the internal UiDir() resolver so grok_companion's native
+// toolbar overlay (grok_web_bar.cc) shares the exact same resolution and we keep
+// a single source of truth for where the companion UI lives.
+base::FilePath CompanionUiDir() {
+  return UiDir();
+}
+
 struct GrokWebPendingEntry {
   std::string prompt;
   base::Time created;

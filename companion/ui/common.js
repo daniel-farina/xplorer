@@ -178,74 +178,21 @@ function companionBuildSubRoute(path) {
   return '';
 }
 
-/** Inline SVG icons (16px, stroke=currentColor) used across the toolbar. */
-const GROK_ICONS = {
-  xplorer: '<svg class="gi" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 9.5 L22.5 22.5 M22.5 9.5 L9.5 22.5"/></svg>',
-  chat: '<svg class="gi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.4 8.4 0 0 1-8.9 8.4 9 9 0 0 1-3.6-.7L3 21l1.8-4.5A8.4 8.4 0 0 1 12.6 3 8.4 8.4 0 0 1 21 11.5z"/></svg>',
-  build: '<svg class="gi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.3L3 18v3h3l6.4-6.3a4 4 0 0 0 5.3-5.4l-2.8 2.8-2-2 2.8-2.8z"/></svg>',
-  web: '<svg class="gi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18 14 14 0 0 1 0-18z"/></svg>',
-  groki: '<svg class="gi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5a2 2 0 0 1 2-2h13v18H6a2 2 0 0 1-2-2z"/><path d="M19 17H6a2 2 0 0 0-2 2"/></svg>',
-  x: '<svg class="gi" viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M18.2 2H21l-6.5 7.4L22 22h-6.2l-4.8-6.3L5.5 22H2.7l7-8L2 2h6.3l4.4 5.8zm-1 18h1.5L7.5 3.7H5.9z"/></svg>',
-  settings: '<svg class="gi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-1.8-.3 1.6 1.6 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.6 1.6 0 0 0-1-1.5 1.6 1.6 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0 .3-1.8 1.6 1.6 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.6 1.6 0 0 0 1.5-1 1.6 1.6 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 1.8.3H9a1.6 1.6 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.6 1.6 0 0 0 1 1.5 1.6 1.6 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8V9a1.6 1.6 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1z"/></svg>',
-  hide: '<svg class="gi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>',
-  reveal: '<svg class="gi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>',
-  logs: '<svg class="gi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16M4 10h16M4 15h10M4 20h7"/></svg>',
-  grip: '<svg class="gi grok-reveal-grip" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg>',
-};
-
-const TOOLBAR_HIDDEN_KEY = 'xplorer_toolbar_hidden';
-
-/** Uniform Xplorer topbar — single source of truth for all companion pages. */
-function grokToolbarHTML() {
-  return `<header class="grok-toolbar">
-    <a class="grok-logo" href="/search" title="Xplorer home" aria-label="Xplorer">${GROK_ICONS.xplorer}<span>plorer</span></a>
-    <div class="grok-toolbar-spacer"></div>
-    <div class="grok-toolbar-actions">
-      <div class="grok-nav-pills" id="home-toggle" title="Xplorer navigation">
-        <div class="grok-pill-wrap">
-          <a class="grok-pill" data-pill="xchat" href="https://x.com/i/chat" target="_blank" rel="noopener noreferrer">${GROK_ICONS.chat}<span>X Chat</span></a>
-          <div class="grok-pill-menu">
-            <a href="https://x.com/i/chat" target="_blank" rel="noopener noreferrer">${GROK_ICONS.chat}<span>Open X Chat</span></a>
-          </div>
-        </div>
-        <div class="grok-pill-wrap">
-          <a class="grok-pill" data-home="build" data-pill="build" href="/switch-home?mode=build">${GROK_ICONS.build}<span>Grok Build</span></a>
-          <div class="grok-pill-menu">
-            <a href="/" data-route="conversations">${GROK_ICONS.chat}<span>Conversations</span></a>
-            <a href="/apps" data-route="apps">${GROK_ICONS.build}<span>Apps</span></a>
-            <a href="/logs" data-route="logs">${GROK_ICONS.logs}<span>Logs</span></a>
-          </div>
-        </div>
-        <div class="grok-pill-wrap">
-          <a class="grok-pill" data-home="web" data-pill="web" href="/switch-home?mode=web">${GROK_ICONS.web}<span>Grok Web</span></a>
-          <div class="grok-pill-menu">
-            <a href="/search" data-route="search">${GROK_ICONS.web}<span>Search</span></a>
-            <a href="https://grok.com/imagine" target="_blank" rel="noopener noreferrer">${GROK_ICONS.xplorer}<span>Imagine</span></a>
-          </div>
-        </div>
-        <div class="grok-pill-wrap">
-          <a class="grok-pill" data-home="wiki" data-pill="wiki" href="/switch-home?mode=wiki">${GROK_ICONS.groki}<span>Groki</span></a>
-          <div class="grok-pill-menu">
-            <a href="https://grokipedia.com/" target="_blank" rel="noopener noreferrer">${GROK_ICONS.groki}<span>Grokipedia</span></a>
-          </div>
-        </div>
-        <div class="grok-pill-wrap">
-          <a class="grok-pill" data-pill="xcom" href="https://x.com/" target="_blank" rel="noopener noreferrer">${GROK_ICONS.x}<span>x.com</span></a>
-          <div class="grok-pill-menu">
-            <a href="https://x.com/" target="_blank" rel="noopener noreferrer">${GROK_ICONS.x}<span>Home</span></a>
-          </div>
-        </div>
-      </div>
-      <a href="/settings" class="grok-toolbar-btn grok-icon-btn grok-settings-btn" data-route="settings" title="Xplorer settings" aria-label="Settings">${GROK_ICONS.settings}</a>
-      <button type="button" class="grok-toolbar-btn grok-icon-btn grok-toolbar-hide" title="Hide toolbar" aria-label="Hide toolbar">${GROK_ICONS.hide}</button>
-    </div>
-  </header>`;
-}
+/** Canonical toolbar markup lives in /toolbar.html (fetched live) and the
+ *  shared behavior in /toolbar.js (window.XplorerToolbar). This is a minimal
+ *  emergency fallback, used only if the live /toolbar.html fetch fails. */
+const GROK_TOOLBAR_FALLBACK =
+  '<header class="grok-toolbar">' +
+  '<a class="grok-logo" href="/search" title="Xplorer home" aria-label="Xplorer">' +
+  '<svg class="gi" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 9.5 L22.5 22.5 M22.5 9.5 L9.5 22.5"/></svg>' +
+  '<span>plorer</span></a>' +
+  '<div class="grok-toolbar-spacer"></div>' +
+  '</header>';
 
 async function mountGrokToolbar({ pageHome, onSwitch } = {}) {
   // Canonical markup lives in /toolbar.html (the SINGLE source shared with the
-  // native overlay). Fetch it live; fall back to the inline grokToolbarHTML()
-  // copy only if the partial can't be loaded so the bar is never blank.
+  // native overlay). Fetch it live; fall back to a minimal stub only if the
+  // partial can't be loaded so the bar is never blank.
   let html;
   try {
     const res = await fetch('/toolbar.html', { cache: 'no-store' });
@@ -254,7 +201,7 @@ async function mountGrokToolbar({ pageHome, onSwitch } = {}) {
       if (inner) html = `<header class="grok-toolbar">${inner}</header>`;
     }
   } catch {}
-  if (!html) html = grokToolbarHTML();
+  if (!html) html = GROK_TOOLBAR_FALLBACK;
   const mount = document.getElementById('grok-toolbar-mount');
   const legacy = document.querySelector('header.grok-toolbar');
   if (mount) {
@@ -271,102 +218,13 @@ async function mountGrokToolbar({ pageHome, onSwitch } = {}) {
     settingsBtn.classList.toggle('active', path.startsWith('/settings'));
   }
   initSearchHomeToggle(document.getElementById('home-toggle'), { pageHome, onSwitch });
-  initToolbarHideToggle();
-}
-
-/** Hide/show the toolbar; persists state and drops a floating reveal handle. */
-function initToolbarHideToggle() {
-  const bar = document.querySelector('header.grok-toolbar, #xplorer-grok-bar.grok-toolbar');
-  if (!bar) return;
-  let reveal = document.getElementById('grok-toolbar-reveal');
-  if (!reveal) {
-    reveal = document.createElement('button');
-    reveal.id = 'grok-toolbar-reveal';
-    reveal.type = 'button';
-    reveal.title = 'Show toolbar (drag the grip to move)';
-    reveal.setAttribute('aria-label', 'Show toolbar');
-    reveal.innerHTML = `${GROK_ICONS.grip}${GROK_ICONS.xplorer}${GROK_ICONS.reveal}`;
-    document.body.appendChild(reveal);
-  }
-  makeRevealDraggable(reveal);
-  const apply = (hidden) => {
-    bar.classList.toggle('grok-toolbar-hidden', hidden);
-    reveal.classList.toggle('show', hidden);
-    try { localStorage.setItem(TOOLBAR_HIDDEN_KEY, hidden ? '1' : '0'); } catch {}
-  };
-  let stored = '0';
-  try { stored = localStorage.getItem(TOOLBAR_HIDDEN_KEY) || '0'; } catch {}
-  apply(stored === '1');
-  const hideBtn = bar.querySelector('.grok-toolbar-hide');
-  if (hideBtn && !hideBtn.dataset.wired) {
-    hideBtn.dataset.wired = '1';
-    hideBtn.addEventListener('click', () => apply(true));
-  }
-  if (!reveal.dataset.wired) {
-    reveal.dataset.wired = '1';
-    reveal.addEventListener('click', () => apply(false));
+  // Shared hide/show + draggable reveal handle (single source: toolbar.js).
+  if (window.XplorerToolbar) {
+    XplorerToolbar.wireHideToggle(
+      document.querySelector('header.grok-toolbar, #xplorer-grok-bar.grok-toolbar'));
   }
 }
 
-const TOOLBAR_REVEAL_POS_KEY = 'xplorer_toolbar_reveal_pos';
-
-/** Let the floating reveal pill be dragged out of the way; persists position.
- *  A real drag (>4px) repositions and suppresses the reveal click. */
-function makeRevealDraggable(reveal) {
-  if (reveal.dataset.dragWired) return;
-  reveal.dataset.dragWired = '1';
-  reveal.style.touchAction = 'none';
-  const clamp = (v, max) => Math.max(0, Math.min(v, max));
-  const positionAt = (x, y) => {
-    const r = reveal.getBoundingClientRect();
-    reveal.style.left = clamp(x, window.innerWidth - r.width) + 'px';
-    reveal.style.top = clamp(y, window.innerHeight - r.height) + 'px';
-    reveal.style.right = 'auto';
-  };
-  try {
-    const p = JSON.parse(localStorage.getItem(TOOLBAR_REVEAL_POS_KEY) || 'null');
-    if (p && typeof p.x === 'number') {
-      // position once it has a measurable size
-      requestAnimationFrame(() => positionAt(p.x, p.y));
-    }
-  } catch {}
-  let start = null;
-  let moved = false;
-  reveal.addEventListener('pointerdown', (e) => {
-    const r = reveal.getBoundingClientRect();
-    start = { px: e.clientX, py: e.clientY, ox: r.left, oy: r.top };
-    moved = false;
-    try { reveal.setPointerCapture(e.pointerId); } catch {}
-  });
-  reveal.addEventListener('pointermove', (e) => {
-    if (!start) return;
-    const dx = e.clientX - start.px;
-    const dy = e.clientY - start.py;
-    if (!moved && Math.hypot(dx, dy) < 4) return;
-    moved = true;
-    reveal.classList.add('dragging');
-    positionAt(start.ox + dx, start.oy + dy);
-  });
-  const end = (e) => {
-    if (!start) return;
-    try { reveal.releasePointerCapture(e.pointerId); } catch {}
-    reveal.classList.remove('dragging');
-    if (moved) {
-      const r = reveal.getBoundingClientRect();
-      try {
-        localStorage.setItem(TOOLBAR_REVEAL_POS_KEY,
-          JSON.stringify({ x: Math.round(r.left), y: Math.round(r.top) }));
-      } catch {}
-    }
-    start = null;
-  };
-  reveal.addEventListener('pointerup', end);
-  reveal.addEventListener('pointercancel', end);
-  // Suppress the reveal click when the pointerup ended a drag.
-  reveal.addEventListener('click', (e) => {
-    if (moved) { e.stopImmediatePropagation(); e.preventDefault(); }
-  }, true);
-}
 
 /** Highlight companion toolbar pill from current route (127.0.0.1 pages). */
 function syncCompanionToolbarPill() {
