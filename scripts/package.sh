@@ -7,12 +7,13 @@ OUT="${1:-$XPLORER/../chromium/src/out/aether}"
 VERSION="${2:-dev}"
 APP="$OUT/Xplorer.app"
 DIST="$XPLORER/dist"
-ARCH="$(uname -m)"           # arm64 or x86_64
-NAME="Xplorer-macos-$ARCH"
 
 [ -d "$APP" ] || { echo "No Xplorer.app at $APP — build first." >&2; exit 1; }
+ARCH="$("$XPLORER/scripts/app_arch.sh" "$APP")"
+NAME="Xplorer-macos-$ARCH"
 mkdir -p "$DIST"
 
+echo "Packaging $NAME (version $VERSION)..."
 echo "Zipping..."
 ditto -c -k --keepParent "$APP" "$DIST/$NAME.zip"
 

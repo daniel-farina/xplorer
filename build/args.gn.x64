@@ -1,0 +1,15 @@
+# Xplorer release build configuration (macOS Intel x64).
+is_debug = false
+is_component_build = false
+symbol_level = 0
+blink_symbol_level = 0
+
+# Branding: Chromium base (Google-branded builds require internal keys),
+# product name overridden to Xplorer via patches.
+is_chrome_branded = false
+
+dcheck_always_on = false
+target_cpu = "x64"
+target_os = "mac"
+
+use_lld = true

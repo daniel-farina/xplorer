@@ -30,6 +30,9 @@ permissions:
 
 jobs:
   build-macos:
+    strategy:
+      matrix:
+        arch: [arm64, x64]
     runs-on: [self-hosted, macos, xplorer-builder]
     steps:
       - name: Checkout Xplorer overlay
@@ -39,26 +42,47 @@ jobs:
         id: ver
         run: echo "v=${GITHUB_REF_NAME:-${{ github.event.inputs.version }}}" >> "$GITHUB_OUTPUT"
 
-      - name: Apply overlay onto the prepared Chromium checkout
-        run: ./apply.sh "$XPLORER_CHROMIUM_SRC"
+      - name: Release pipeline (${{ matrix.arch }})
+        run: ./scripts/release_arch.sh "${{ matrix.arch }}" "${{ steps.ver.outputs.v }}" "$XPLORER_CHROMIUM_SRC"
 
-      - name: Build
-        run: ./build.sh "$XPLORER_CHROMIUM_SRC"
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: xplorer-macos-${{ matrix.arch }}
+          path: |
+            dist/Xplorer-macos-*.zip
+            dist/Xplorer-macos-*.dmg
+            dist/Xplorer-macos-*.sha256.txt
+          if-no-files-found: error
 
-      - name: Package (.zip + .dmg + checksums)
-        run: ./scripts/package.sh "$XPLORER_CHROMIUM_SRC/out/aether" "${{ steps.ver.outputs.v }}"
+  publish:
+    needs: build-macos
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all arch artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Resolve version
+        id: ver
+        run: echo "v=${GITHUB_REF_NAME:-${{ github.event.inputs.version }}}" >> "$GITHUB_OUTPUT"
+
+      - name: Collect release files
+        run: |
+          mkdir -p release-files
+          find dist -type f \( -name 'Xplorer-macos-*.zip' -o -name 'Xplorer-macos-*.dmg' -o -name 'Xplorer-macos-*.sha256.txt' \) -exec cp {} release-files/ \;
+          ls -lh release-files/
 
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.ver.outputs.v }}
           name: Xplorer ${{ steps.ver.outputs.v }}
-          files: |
-            dist/Xplorer-macos-*.zip
-            dist/Xplorer-macos-*.dmg
-            dist/Xplorer-macos-*.sha256.txt
+          files: release-files/*
           body: |
             Xplorer ${{ steps.ver.outputs.v }} — AI-native Chromium fork.
-            Install: open the DMG and drag Xplorer to Applications, then
-            `xattr -dr com.apple.quarantine /Applications/Xplorer.app`.
-            See AGENTS.md for connecting agents.
+            **macOS Apple Silicon (arm64)** and **macOS Intel (x86_64)** builds included.
+            Install: open the DMG for your Mac and drag Xplorer to Applications.
+            See RELEASE.md for signing details and AGENTS.md for connecting agents.

@@ -79,18 +79,37 @@ silently skipped every replace-style patch — leaving e.g. an unconditional
 
 ## 3. Build
 
+Xplorer ships **two macOS architectures**. Use a separate `out/` directory per
+arch — do not flip `target_cpu` in an existing dir without a clean rebuild.
+
+| Arch | `build.sh` arg | `args.gn` | Output dir | Artifact name |
+|------|----------------|-----------|------------|---------------|
+| Apple Silicon | `arm64` (default) | `build/args.gn` | `out/aether` | `Xplorer-macos-arm64.*` |
+| Intel | `x64` | `build/args.gn.x64` | `out/aether_x64` | `Xplorer-macos-x86_64.*` |
+
 ```sh
+# Apple Silicon (default)
 ./xplorer/build.sh ./chromium/src
-# = gn gen out/aether (with xplorer/build/args.gn) + autoninja -C out/aether chrome
+# = gn gen out/aether + autoninja -C out/aether chrome
+
+# Intel — cross-compiles on Apple Silicon; no Intel Mac required
+./xplorer/build.sh ./chromium/src x64
+# = gn gen out/aether_x64 + autoninja -C out/aether_x64 chrome
 ```
 
 `args.gn` highlights: `is_debug=false`, `is_component_build=false`,
-`symbol_level=0`, `is_chrome_branded=false`, `target_cpu="arm64"`, `use_lld=true`.
+`symbol_level=0`, `is_chrome_branded=false`, `use_lld=true`. The only arch knob
+is `target_cpu` (`"arm64"` or `"x64"`).
 
-The output bundle is `chromium/src/out/aether/Xplorer.app` (plus the
-`Xplorer Helper*.app` child-process bundles). The build dir is kept as
-`out/aether` on purpose: renaming it forces a from-scratch rebuild (~1.5 h on an
-M-series Mac), whereas reusing it keeps rebuilds incremental.
+The output bundle is `chromium/src/out/<dir>/Xplorer.app` (plus the
+`Xplorer Helper*.app` child-process bundles). Build dirs are kept as
+`out/aether` / `out/aether_x64` on purpose: renaming forces a from-scratch
+rebuild (~1.5 h on an M-series Mac), whereas reusing them keeps rebuilds
+incremental.
+
+**Test an Intel build on Apple Silicon:** run the x86_64 `.app` under Rosetta
+(`arch -x86_64 open out/aether_x64/Xplorer.app`). Final QA on real Intel
+hardware is still recommended before publishing.
 
 ### Incremental rebuilds
 
@@ -137,18 +156,35 @@ shadows it under `~/.xplorer/companion/ui`.
 
 ## 5. Package installers
 
+`package.sh` names artifacts from the **built binary's** Mach-O arch (not the
+host machine), so cross-compiled Intel builds get `x86_64` in the filename.
+
 ```sh
+# After signing the app (§6), package each arch separately:
 ./xplorer/scripts/package.sh "$(pwd)/chromium/src/out/aether" v0.5.0
+./xplorer/scripts/package.sh "$(pwd)/chromium/src/out/aether_x64" v0.5.0
 ```
 
-Produces in `xplorer/dist/`:
-- `Xplorer-macos-arm64.dmg` (drag-to-Applications installer; mount-tested)
-- `Xplorer-macos-arm64.zip`
-- `Xplorer-macos-arm64.sha256.txt` (checksums)
+Produces in `xplorer/dist/` (per arch):
+- `Xplorer-macos-arm64.dmg` / `Xplorer-macos-x86_64.dmg` (drag-to-Applications)
+- `Xplorer-macos-arm64.zip` / `Xplorer-macos-x86_64.zip`
+- `Xplorer-macos-arm64.sha256.txt` / `Xplorer-macos-x86_64.sha256.txt`
 
-> **Package AFTER signing/notarizing (§6)**, so the artifacts contain the
-> signed + stapled app. If you package first, re-run package after signing
-> (or just sign the app in `out/aether`, then package).
+> **Package AFTER signing/notarizing the app (§6)**, so the zip/dmg contain the
+> signed + stapled `.app`. Then **notarize the DMG too** (§6) and regenerate
+> checksums after stapling (the dmg bytes change).
+
+### One-command release per arch
+
+`scripts/release_arch.sh` runs the full pipeline for one architecture:
+apply → build → sign+notarize app → package → notarize+staple dmg → checksums.
+
+```sh
+./xplorer/scripts/release_arch.sh arm64 v0.5.0 ../chromium/src
+./xplorer/scripts/release_arch.sh x64    v0.5.0 ../chromium/src
+```
+
+Use `--sign-only` to sign the app without notarization (local testing).
 
 ---
 
@@ -201,15 +237,18 @@ xcrun notarytool store-credentials "xplorer-notary" \
    the ticket to the `.app`.
 
 Then **(re)package** (§5) so the dmg/zip contain the signed+stapled app, and
-also notarize + staple the **dmg** itself for a clean download:
+also notarize + staple **each DMG** for a clean download:
 
 ```sh
-xcrun notarytool submit dist/Xplorer-macos-arm64.dmg --keychain-profile xplorer-notary --wait
-xcrun stapler staple dist/Xplorer-macos-arm64.dmg
+./xplorer/scripts/notarize_dmg.sh dist/Xplorer-macos-arm64.dmg
+./xplorer/scripts/notarize_dmg.sh dist/Xplorer-macos-x86_64.dmg
 # the .zip can't be stapled, but the app INSIDE it is — that's sufficient
 # regenerate checksums AFTER stapling (the dmg bytes changed):
 ( cd dist && shasum -a 256 Xplorer-macos-arm64.zip Xplorer-macos-arm64.dmg > Xplorer-macos-arm64.sha256.txt )
+( cd dist && shasum -a 256 Xplorer-macos-x86_64.zip Xplorer-macos-x86_64.dmg > Xplorer-macos-x86_64.sha256.txt )
 ```
+
+(`release_arch.sh` runs these steps automatically.)
 
 Verify acceptance:
 ```sh
@@ -226,15 +265,29 @@ xcrun notarytool log <submission-id> --keychain-profile xplorer-notary /tmp/nota
 
 ## 7. Publish the GitHub release
 
+Each release should include **both** architectures (arm64 + x86_64). The CI
+workflow (`.github/workflows/release.yml`) builds them in a matrix and uploads
+all six files. For a manual publish:
+
 ```sh
 cd xplorer
 gh release create v0.5.0 --target master --title "Xplorer v0.5.0" --notes "…release notes…"
 # upload assets ONE AT A TIME, in the foreground (see gotcha below)
-gh release upload v0.5.0 dist/Xplorer-macos-arm64.dmg        --clobber
-gh release upload v0.5.0 dist/Xplorer-macos-arm64.zip        --clobber
-gh release upload v0.5.0 dist/Xplorer-macos-arm64.sha256.txt --clobber
-# verify
+for arch in arm64 x86_64; do
+  gh release upload v0.5.0 "dist/Xplorer-macos-${arch}.dmg"        --clobber
+  gh release upload v0.5.0 "dist/Xplorer-macos-${arch}.zip"        --clobber
+  gh release upload v0.5.0 "dist/Xplorer-macos-${arch}.sha256.txt" --clobber
+done
+# verify — expect 6 assets (3 per arch)
 gh release view v0.5.0 --json url,assets -q '.url, (.assets[]|"  \(.name)  \(.size)")'
+```
+
+To add Intel artifacts to an **existing** release (e.g. arm64 already shipped):
+
+```sh
+gh release upload v0.5.0 dist/Xplorer-macos-x86_64.dmg        --clobber
+gh release upload v0.5.0 dist/Xplorer-macos-x86_64.zip        --clobber
+gh release upload v0.5.0 dist/Xplorer-macos-x86_64.sha256.txt --clobber
 ```
 
 ---

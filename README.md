@@ -31,7 +31,7 @@ Grok is woven in at the core, not bolted on as a sidebar. And the same engine th
 Grok in your tabs exposes a clean local API, so **any agent can drive the browser** — no
 launch flags, no setup dance.
 
-> **Platform:** macOS (Apple Silicon). [Download the latest release](https://github.com/daniel-farina/xplorer/releases) or [build from source](#develop-locally).
+> **Platform:** macOS — Apple Silicon (arm64) and Intel (x86_64). [Download the latest release](https://github.com/daniel-farina/xplorer/releases) or [build from source](#develop-locally).
 
 ---
 
@@ -186,9 +186,10 @@ Full endpoint reference: [`docs/AGENT_API.md`](docs/AGENT_API.md).
 
 ## Install
 
-Download the latest signed, notarized build for macOS (Apple Silicon) from the
-[**Releases**](https://github.com/daniel-farina/xplorer/releases) page (`.dmg` or `.zip`),
-or [build it yourself](#develop-locally).
+Download the latest signed, notarized build for your Mac from the
+[**Releases**](https://github.com/daniel-farina/xplorer/releases) page — choose
+`Xplorer-macos-arm64` (Apple Silicon) or `Xplorer-macos-x86_64` (Intel) — `.dmg`
+or `.zip`, or [build it yourself](#develop-locally).
 
 ---
 
@@ -222,7 +223,8 @@ git clone https://github.com/daniel-farina/xplorer.git
 
 ```sh
 ./xplorer/apply.sh    # copy src/ + companion UI + icons, apply source patches
-./xplorer/build.sh    # gn gen out/aether  +  autoninja -C out/aether chrome
+./xplorer/build.sh    # Apple Silicon: gn gen out/aether + autoninja
+./xplorer/build.sh ./chromium/src x64   # Intel: out/aether_x64 (cross-builds on M-series)
 ```
 
 The first build takes a few hours (it compiles all of Chromium locally). After that,
