@@ -62,6 +62,10 @@ if (Test-Path $vectorIcons) {
 }
 
 Write-Host "Applying integration edits..."
+# The patcher uses Path.read_text()/write_text(), which default to the locale
+# encoding (cp1252) on Windows and would corrupt/raise on Chromium's UTF-8
+# source. UTF-8 mode makes Python's file I/O UTF-8 regardless of locale.
+$env:PYTHONUTF8 = "1"
 & $python (Join-Path $Xplorer "patches\apply_integration.py") $Src
 if ($LASTEXITCODE -ne 0) { throw "apply_integration.py failed (exit $LASTEXITCODE)" }
 

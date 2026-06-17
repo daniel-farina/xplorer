@@ -1263,7 +1263,7 @@ void PumpGrokStream(net::HttpServer* server,
   base::win::ScopedHandle nul_in(
       ::CreateFileW(L"NUL", GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE,
                     &sa, OPEN_EXISTING, 0, nullptr));
-  if (nul_in.IsValid()) {
+  if (nul_in.is_valid()) {
     options.stdin_handle = nul_in.Get();
     options.handles_to_inherit.push_back(nul_in.Get());
   }
@@ -1279,7 +1279,7 @@ void PumpGrokStream(net::HttpServer* server,
     nul_err.Set(::CreateFileW(L"NUL", GENERIC_WRITE,
                               FILE_SHARE_READ | FILE_SHARE_WRITE, &sa,
                               OPEN_EXISTING, 0, nullptr));
-    if (nul_err.IsValid()) {
+    if (nul_err.is_valid()) {
       options.stderr_handle = nul_err.Get();
       options.handles_to_inherit.push_back(nul_err.Get());
     }

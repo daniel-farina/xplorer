@@ -634,7 +634,10 @@ void MarkAppBuilding(const std::string& app_id) {
 }
 
 std::string GuessContentType(const base::FilePath& path) {
-  const std::string ext = base::ToLowerASCII(path.Extension());
+  // FilePath::Extension() is wstring on Windows; normalize to a UTF-8
+  // std::string (extensions are ASCII) for the comparisons below.
+  const std::string ext =
+      base::ToLowerASCII(base::FilePath(path.Extension()).AsUTF8Unsafe());
   if (ext == ".html" || ext == ".htm")
     return "text/html";
   if (ext == ".css")
