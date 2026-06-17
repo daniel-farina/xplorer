@@ -1,0 +1,24 @@
+# Xplorer release build configuration (Windows x64).
+is_debug = false
+is_component_build = false
+symbol_level = 0
+blink_symbol_level = 0
+
+# Branding: Chromium base (Google-branded builds require internal keys),
+# product name overridden to Xplorer via patches.
+is_chrome_branded = false
+
+dcheck_always_on = false
+target_cpu = "x64"
+target_os = "win"
+
+# Notes vs. the macOS args:
+#   * use_lld is NOT set: Windows already links with lld-link by default, and
+#     use_lld=false is unsupported there — so the mac flag is intentionally
+#     omitted (it would be a redundant no-op).
+#   * target_os="win" is technically redundant when building ON Windows (GN
+#     defaults target_os to host_os), but is set for parity/clarity with the
+#     mac args and to keep cross-compiles explicit.
+#   * is_official_build is deliberately NOT set, to mirror the lighter mac
+#     release config (is_debug=false). Add it only for a fully PGO-optimized
+#     shippable build.

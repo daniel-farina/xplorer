@@ -55,8 +55,39 @@ jobs:
             dist/Xplorer-macos-*.sha256.txt
           if-no-files-found: error
 
+  # Windows has the same constraint as macOS: GitHub-hosted runners can't build
+  # Chromium (~14 GB disk / 6 h cap vs. ~150 GB / hours). This targets a
+  # SELF-HOSTED Windows runner labelled `xplorer-builder-win` with depot_tools
+  # and a synced checkout at $XPLORER_CHROMIUM_SRC. See RELEASE.windows.md.
+  build-windows:
+    runs-on: [self-hosted, windows, xplorer-builder-win]
+    steps:
+      - name: Checkout Xplorer overlay
+        uses: actions/checkout@v4
+
+      - name: Resolve version
+        id: ver
+        shell: pwsh
+        run: |
+          $v = if ($env:GITHUB_REF_NAME) { $env:GITHUB_REF_NAME } else { "${{ github.event.inputs.version }}" }
+          "v=$v" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+      - name: Release pipeline (x64)
+        shell: pwsh
+        run: .\scripts\release_win.ps1 -Arch x64 -Version "${{ steps.ver.outputs.v }}" -Src $env:XPLORER_CHROMIUM_SRC
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: xplorer-windows-x64
+          path: |
+            dist/Xplorer-windows-*.zip
+            dist/Xplorer-windows-*.exe
+            dist/Xplorer-windows-*.sha256.txt
+          if-no-files-found: error
+
   publish:
-    needs: build-macos
+    needs: [build-macos, build-windows]
     runs-on: ubuntu-latest
     steps:
       - name: Download all arch artifacts
@@ -72,7 +103,10 @@ jobs:
       - name: Collect release files
         run: |
           mkdir -p release-files
-          find dist -type f \( -name 'Xplorer-macos-*.zip' -o -name 'Xplorer-macos-*.dmg' -o -name 'Xplorer-macos-*.sha256.txt' \) -exec cp {} release-files/ \;
+          find dist -type f \( \
+            -name 'Xplorer-macos-*.zip' -o -name 'Xplorer-macos-*.dmg' -o -name 'Xplorer-macos-*.sha256.txt' \
+            -o -name 'Xplorer-windows-*.zip' -o -name 'Xplorer-windows-*.exe' -o -name 'Xplorer-windows-*.sha256.txt' \
+          \) -exec cp {} release-files/ \;
           ls -lh release-files/
 
       - name: Publish release
@@ -83,6 +117,7 @@ jobs:
           files: release-files/*
           body: |
             Xplorer ${{ steps.ver.outputs.v }} — AI-native Chromium fork.
-            **macOS Apple Silicon (arm64)** and **macOS Intel (x86_64)** builds included.
-            Install: open the DMG for your Mac and drag Xplorer to Applications.
-            See RELEASE.md for signing details and AGENTS.md for connecting agents.
+            **macOS** (Apple Silicon arm64 + Intel x86_64) and **Windows x64** builds included.
+            - macOS: open the DMG for your Mac and drag Xplorer to Applications.
+            - Windows: unzip `Xplorer-windows-x64.zip` and run `Xplorer.exe`.
+            See RELEASE.md (macOS) / RELEASE.windows.md (Windows) and AGENTS.md for connecting agents.

@@ -114,6 +114,12 @@ def main(src: Path):
                       "MAC_BUNDLE_ID=org.xplorer.Xplorer")
         b = b.replace("MAC_BUNDLE_ID=org.xbrowser.XBrowser",
                       "MAC_BUNDLE_ID=org.xplorer.Xplorer")
+        # Windows VERSIONINFO: CompanyName comes from these BRANDING keys (they
+        # are baked into chrome.exe/chrome.dll via chrome_exe_version.rc.version).
+        # Harmless on macOS, which keys off MAC_BUNDLE_ID / the product strings.
+        b = b.replace("COMPANY_FULLNAME=The Chromium Authors",
+                      "COMPANY_FULLNAME=Xplorer")
+        b = b.replace("COMPANY_SHORTNAME=Chromium", "COMPANY_SHORTNAME=Xplorer")
         branding.write_text(b)
         print(f"  edited: {branding}")
 
@@ -555,6 +561,25 @@ def main(src: Path):
             "\n[[maybe_unused]] void UpdateStatus(VersionUpdater::StatusCallback")
         vum.write_text(vm2)
         print(f"  edited (maybe_unused): {vum}")
+
+    # Windows (unbranded, is_chrome_branded=false) compiles version_updater_basic
+    # .cc, NOT version_updater_mac.mm. The basic updater reports DISABLED on the
+    # About page; report up-to-date instead, matching the mac fix above. This is
+    # best-effort: the exact upstream body varies across Chromium revisions, so
+    # warn (don't fail the whole run) if the anchor isn't present — the basic
+    # updater's DISABLED is cosmetic, not a hard error.
+    vub = src / "chrome/browser/ui/webui/help/version_updater_basic.cc"
+    if vub.exists():
+        vb = vub.read_text()
+        if "Run(UPDATED," in vb:
+            print(f"  skip (already applied): {vub}")
+        elif "Run(DISABLED," in vb:
+            vb = vb.replace("Run(DISABLED,", "Run(UPDATED,", 1)  # XPLORER
+            vub.write_text(vb)
+            print(f"  edited: {vub}")
+        else:
+            print(f"  WARNING: {vub}: anchor 'Run(DISABLED,' not found; the "
+                  "Windows About page may report 'updates disabled' (cosmetic)")
 
     # --- "Ask Google about this page" -> "Ask Grok about this page" ---------
     # Rebrand the Lens omnibox-action strings...

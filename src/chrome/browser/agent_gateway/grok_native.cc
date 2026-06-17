@@ -3,7 +3,17 @@
 
 #include "chrome/browser/agent_gateway/grok_native.h"
 
+#include "build/build_config.h"
+
+#if BUILDFLAG(IS_POSIX)
 #include <unistd.h>
+#endif
+
+#if BUILDFLAG(IS_WIN)
+#include <windows.h>
+
+#include "base/win/scoped_handle.h"
+#endif
 
 #include <cstring>
 
@@ -63,7 +73,7 @@ constexpr char kGrokBin[] = "grok";
 base::FilePath ResolveGrokBinary() {
   static const base::NoDestructor<base::FilePath> cached([] {
     if (const char* env = getenv("GROK_BIN"); env && *env) {
-      base::FilePath from_env(env);
+      base::FilePath from_env = base::FilePath::FromUTF8Unsafe(env);
       if (base::PathExists(from_env))
         return from_env;
     }
@@ -72,7 +82,7 @@ base::FilePath ResolveGrokBinary() {
       home = base::FilePath();
     if (home.empty()) {
       if (const char* h = getenv("HOME"); h && *h)
-        home = base::FilePath(h);
+        home = base::FilePath::FromUTF8Unsafe(h);
     }
     if (!home.empty()) {
       std::string companion_json;
@@ -83,25 +93,42 @@ base::FilePath ResolveGrokBinary() {
                 base::JSONReader::ReadDict(companion_json, base::JSON_PARSE_RFC)) {
           if (const std::string* bin = parsed->FindString("grok_bin");
               bin && !bin->empty()) {
-            base::FilePath from_cfg(*bin);
+            base::FilePath from_cfg = base::FilePath::FromUTF8Unsafe(*bin);
             if (base::PathExists(from_cfg))
               return from_cfg;
           }
         }
       }
+#if BUILDFLAG(IS_WIN)
+      // grok is an npm CLI; a global install lands under %APPDATA%\npm
+      // (grok.cmd shim + grok.exe); `grok login` may also drop a private copy.
+      for (const wchar_t* rel : {L"AppData\\Roaming\\npm\\grok.cmd",
+                                 L"AppData\\Roaming\\npm\\grok.exe",
+                                 L".grok\\bin\\grok.exe",
+                                 L".grok\\bin\\grok.cmd"}) {
+        base::FilePath candidate = home.Append(rel);
+        if (base::PathExists(candidate))
+          return base::MakeAbsoluteFilePath(candidate);
+      }
+#else
       for (const char* rel : {".grok/bin/grok", ".local/bin/grok"}) {
         base::FilePath candidate = home.AppendASCII(rel);
         if (base::PathExists(candidate))
           return base::MakeAbsoluteFilePath(candidate);
       }
+#endif
     }
+#if !BUILDFLAG(IS_WIN)
     for (const char* abs :
          {"/opt/homebrew/bin/grok", "/usr/local/bin/grok"}) {
       base::FilePath candidate(abs);
       if (base::PathExists(candidate))
         return candidate;
     }
-    return base::FilePath(kGrokBin);
+#endif
+    // Bare name: base::LaunchProcess resolves it via PATH (CreateProcess
+    // appends .exe on Windows), so a PATH-installed grok still launches.
+    return base::FilePath::FromASCII(kGrokBin);
   }());
   return *cached;
 }
@@ -179,16 +206,26 @@ base::FilePath UiDir() {
   if (!env || !*env)
     env = getenv("XBROWSER_COMPANION_UI");
   if (env && *env)
-    return base::FilePath(env);
-  // Packaged app: the UI ships inside the bundle so the gateway is
-  // self-contained on any machine. The gateway runs in the browser process, so
-  // DIR_EXE is Xplorer.app/Contents/MacOS — the UI sits at ../Resources/...
-  // Without this, a downloaded app has no UI on disk and every UI navigation
-  // (e.g. /search) falls through to the auth-required path -> 401.
+    return base::FilePath::FromUTF8Unsafe(env);
+  // Packaged build: the UI ships beside the browser so the gateway is
+  // self-contained on any machine. Without this, a downloaded build has no UI
+  // on disk and every UI navigation (e.g. /search) falls through to the
+  // auth-required path -> 401.
   base::FilePath exe_dir;
   if (base::PathService::Get(base::DIR_EXE, &exe_dir)) {
+#if BUILDFLAG(IS_WIN)
+    // Windows has no .app bundle: chrome.exe and its resources are flat in the
+    // install dir, so the UI sits at <exe_dir>\companion\ui (the packaging
+    // step copies companion/ui beside the executable).
     base::FilePath bundled =
-        exe_dir.DirName().AppendASCII("Resources").AppendASCII("companion").AppendASCII("ui");
+        exe_dir.AppendASCII("companion").AppendASCII("ui");
+#else
+    // macOS: DIR_EXE is Xplorer.app/Contents/MacOS, UI is at ../Resources/...
+    base::FilePath bundled = exe_dir.DirName()
+                                 .AppendASCII("Resources")
+                                 .AppendASCII("companion")
+                                 .AppendASCII("ui");
+#endif
     if (base::DirectoryExists(bundled))
       return bundled;
   }
@@ -490,7 +527,7 @@ void EnrichSettingsResponse(base::DictValue* d, int gateway_port) {
          "http://127.0.0.1:" + base::NumberToString(gateway_port));
   d->Set("search_model", GetConfiguredSearchModel());
   d->Set("search_model_label", ModelDisplayName(GetConfiguredSearchModel()));
-  d->Set("grok_bin", ResolveGrokBinary().value());
+  d->Set("grok_bin", ResolveGrokBinary().AsUTF8Unsafe());
   std::string gw_json;
   if (base::ReadFileToString(xplorer_paths::Resolve("gateway.json"),
                              &gw_json)) {
@@ -517,10 +554,45 @@ base::ListValue DefaultModelList() {
   return models;
 }
 
+#if BUILDFLAG(IS_WIN)
+// CreateProcess (under base::LaunchProcess / GetAppOutput) cannot execute a
+// .cmd/.bat shim directly, and does not honor PATHEXT for a bare program name —
+// but npm installs the grok CLI as grok.cmd. Re-route those through the command
+// interpreter (cmd.exe /c) so the shim runs; a real .exe launches directly.
+// NOTE: cmd.exe re-parses the line, so an arg with unquoted cmd metacharacters
+// (& | < > ^) could be mis-split. base::CommandLine quotes args with spaces
+// (which our prompts have), so cmd treats their contents literally; the residual
+// risk is a space-less arg containing a metachar (rare for prompts/queries).
+base::CommandLine MaybeWrapForWindowsShell(const base::CommandLine& cmd) {
+  const base::FilePath prog = cmd.GetProgram();
+  const base::FilePath::StringType ext = prog.Extension();
+  const bool is_batch =
+      base::FilePath::CompareEqualIgnoreCase(ext, FILE_PATH_LITERAL(".cmd")) ||
+      base::FilePath::CompareEqualIgnoreCase(ext, FILE_PATH_LITERAL(".bat"));
+  const bool bare_name = !prog.IsAbsolute() && ext.empty();
+  if (!is_batch && !bare_name)
+    return cmd;
+  base::FilePath comspec;
+  if (const char* cs = getenv("ComSpec"); cs && *cs)
+    comspec = base::FilePath::FromUTF8Unsafe(cs);
+  else
+    comspec = base::FilePath(FILE_PATH_LITERAL("cmd.exe"));
+  base::CommandLine wrapped(comspec);
+  wrapped.AppendArg("/c");
+  wrapped.AppendArgPath(prog);
+  for (const auto& arg : cmd.GetArgs())
+    wrapped.AppendArgNative(arg);
+  return wrapped;
+}
+#endif  // BUILDFLAG(IS_WIN)
+
 base::ListValue ListGrokModels() {
   base::CommandLine cmd(base::CommandLine::NO_PROGRAM);
   cmd.SetProgram(ResolveGrokBinary());
   cmd.AppendArg("models");
+#if BUILDFLAG(IS_WIN)
+  cmd = MaybeWrapForWindowsShell(cmd);
+#endif
   std::string output;
   if (!base::GetAppOutput(cmd, &output) || output.empty())
     return DefaultModelList();
@@ -1146,6 +1218,76 @@ void PumpGrokStream(net::HttpServer* server,
                     GrokStreamKind kind,
                     std::string conv_id,
                     std::string app_id) {
+  const std::string log_source =
+      kind == GrokStreamKind::kAppBuild
+          ? "build"
+          : (kind == GrokStreamKind::kSearch ? "search" : "chat");
+
+  // Capture the grok child's stdout (streaming NDJSON) through a pipe, and its
+  // stderr to a temp file. Merging stderr into stdout would inject ANSI logs
+  // like "[2m2026-..." that break NDJSON parsing in the companion UI; the temp
+  // file keeps the real failure reason recoverable for the error event +
+  // /api/logs.
+  base::FilePath stderr_path;
+  base::File stderr_file;
+  if (base::CreateTemporaryFile(&stderr_path)) {
+    stderr_file.Initialize(
+        stderr_path, base::File::FLAG_OPEN | base::File::FLAG_WRITE);
+  }
+  base::Process process;
+
+#if BUILDFLAG(IS_WIN)
+  // Anonymous pipe: child writes stdout to |stdout_write| (inheritable), we
+  // read |read_handle| (kept non-inheritable). Mirrors the POSIX path below.
+  SECURITY_ATTRIBUTES sa = {};
+  sa.nLength = sizeof(sa);
+  sa.bInheritHandle = TRUE;
+  HANDLE stdout_read = nullptr;
+  HANDLE stdout_write = nullptr;
+  if (!::CreatePipe(&stdout_read, &stdout_write, &sa, 0)) {
+    io_task_runner->PostTask(
+        FROM_HERE, base::BindOnce(&SendStreamError, server, connection_id,
+                                  "failed to create pipe"));
+    return;
+  }
+  ::SetHandleInformation(stdout_read, HANDLE_FLAG_INHERIT, 0);
+  base::win::ScopedHandle read_handle(stdout_read);
+
+  base::LaunchOptions options;
+  options.start_hidden = true;  // no console window for the grok child
+  // With handles_to_inherit set, base uses PROC_THREAD_ATTRIBUTE_HANDLE_LIST,
+  // so ONLY listed handles are inherited — list every std handle we hand over.
+  // Give the child a real (empty) stdin/stderr via the NUL device so it never
+  // inherits a NULL handle: STARTF_USESTDHANDLES does not fall back to a console
+  // for NULL members, and the browser process may itself have NULL std handles.
+  base::win::ScopedHandle nul_in(
+      ::CreateFileW(L"NUL", GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE,
+                    &sa, OPEN_EXISTING, 0, nullptr));
+  if (nul_in.IsValid()) {
+    options.stdin_handle = nul_in.Get();
+    options.handles_to_inherit.push_back(nul_in.Get());
+  }
+  options.stdout_handle = stdout_write;
+  options.handles_to_inherit.push_back(stdout_write);
+  base::win::ScopedHandle nul_err;  // kept alive until after LaunchProcess
+  if (stderr_file.IsValid()) {
+    ::SetHandleInformation(stderr_file.GetPlatformFile(), HANDLE_FLAG_INHERIT,
+                           HANDLE_FLAG_INHERIT);
+    options.stderr_handle = stderr_file.GetPlatformFile();
+    options.handles_to_inherit.push_back(stderr_file.GetPlatformFile());
+  } else {
+    nul_err.Set(::CreateFileW(L"NUL", GENERIC_WRITE,
+                              FILE_SHARE_READ | FILE_SHARE_WRITE, &sa,
+                              OPEN_EXISTING, 0, nullptr));
+    if (nul_err.IsValid()) {
+      options.stderr_handle = nul_err.Get();
+      options.handles_to_inherit.push_back(nul_err.Get());
+    }
+  }
+  process = base::LaunchProcess(MaybeWrapForWindowsShell(cmd), options);
+  ::CloseHandle(stdout_write);  // drop our copy so the read end EOFs on exit.
+  stderr_file.Close();          // child holds its own copy; read by path later.
+#else
   int pipe_fds[2];
   if (pipe(pipe_fds) != 0) {
     io_task_runner->PostTask(
@@ -1153,34 +1295,19 @@ void PumpGrokStream(net::HttpServer* server,
                                   "failed to create pipe"));
     return;
   }
-
-  const std::string log_source =
-      kind == GrokStreamKind::kAppBuild
-          ? "build"
-          : (kind == GrokStreamKind::kSearch ? "search" : "chat");
-
   base::LaunchOptions options;
-  // Only stream stdout (streaming-json). Merging stderr injects ANSI logs like
-  // "[2m2026-..." that break NDJSON parsing in the companion UI. Capture stderr
-  // to a temp file instead so the real failure reason (otherwise discarded) is
-  // recoverable for the error event + /api/logs.
   options.fds_to_remap.emplace_back(pipe_fds[1], STDOUT_FILENO);
-  base::FilePath stderr_path;
-  base::File stderr_file;
-  if (base::CreateTemporaryFile(&stderr_path)) {
-    stderr_file.Initialize(
-        stderr_path, base::File::FLAG_OPEN | base::File::FLAG_WRITE);
-  }
   if (stderr_file.IsValid()) {
     options.fds_to_remap.emplace_back(stderr_file.GetPlatformFile(),
                                       STDERR_FILENO);
   }
-  base::Process process = base::LaunchProcess(cmd, options);
+  process = base::LaunchProcess(cmd, options);
   close(pipe_fds[1]);
   stderr_file.Close();  // child holds its own copy; we read by path on exit.
+  base::File read_file(pipe_fds[0]);
+#endif
 
   if (!process.IsValid()) {
-    close(pipe_fds[0]);
     if (!stderr_path.empty())
       base::DeleteFile(stderr_path);
     std::string launch_msg =
@@ -1193,7 +1320,7 @@ void PumpGrokStream(net::HttpServer* server,
             &SendStreamError, server, connection_id,
             launch_msg +
                 " — run `grok login` or set GROK_BIN in ~/.xplorer/companion.json"));
-    return;
+    return;  // read_handle / read_file RAII-close the read end here.
   }
 
   RecordGatewayLog("info", log_source, app_id, "start",
@@ -1206,17 +1333,26 @@ void PumpGrokStream(net::HttpServer* server,
       base::BindOnce(&BeginNdjsonStreamWithMeta, server, connection_id, model,
                      kind == GrokStreamKind::kSearch ? mode : "chat"));
 
-  base::File read_file(pipe_fds[0]);
   std::string buffer;
   std::string full_text;
   std::string session_id;
   std::set<std::string> emitted_urls;
   char read_buf[4096];
   while (true) {
+#if BUILDFLAG(IS_WIN)
+    DWORD win_read = 0;
+    if (!::ReadFile(read_handle.Get(), read_buf, sizeof(read_buf), &win_read,
+                    nullptr) ||
+        win_read == 0) {
+      break;  // pipe closed (child exited) or read error
+    }
+    int n = static_cast<int>(win_read);
+#else
     int n = HANDLE_EINTR(
         read(read_file.GetPlatformFile(), read_buf, sizeof(read_buf)));
     if (n <= 0)
       break;
+#endif
     buffer.append(read_buf, n);
     size_t newline = std::string::npos;
     while ((newline = buffer.find('\n')) != std::string::npos) {
@@ -1697,6 +1833,9 @@ base::DictValue RunGrokSearch(const std::string& query,
                               SearchImageInput image) {
   base::CommandLine cmd = BuildGrokSearchCommand(
       query, mode, model, false, image.data.empty() ? nullptr : &image);
+#if BUILDFLAG(IS_WIN)
+  cmd = MaybeWrapForWindowsShell(cmd);
+#endif
   int exit_code = 0;
   std::string output;
   if (!base::GetAppOutputWithExitCode(cmd, &output, &exit_code) ||
@@ -1723,6 +1862,9 @@ base::DictValue RunGrokChat(const std::string& message,
                             const std::string& model) {
   base::CommandLine cmd = BuildGrokChatCommand(
       message, session_id, model, false, ChatRulesForMessage(message));
+#if BUILDFLAG(IS_WIN)
+  cmd = MaybeWrapForWindowsShell(cmd);
+#endif
   int exit_code = 0;
   std::string output;
   if (!base::GetAppOutputWithExitCode(cmd, &output, &exit_code) ||
@@ -1985,7 +2127,7 @@ bool GrokNative::TryHandleRequest(
     d.Set("ok", true);
     d.Set("native", true);
     d.Set("port", gateway_port);
-    d.Set("grok", ResolveGrokBinary().value());
+    d.Set("grok", ResolveGrokBinary().AsUTF8Unsafe());
     d.Set("model", model);
     d.Set("model_label", ModelDisplayName(model));
     d.Set("models", ListGrokModels());

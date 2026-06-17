@@ -31,7 +31,7 @@ Grok is woven in at the core, not bolted on as a sidebar. And the same engine th
 Grok in your tabs exposes a clean local API, so **any agent can drive the browser** — no
 launch flags, no setup dance.
 
-> **Platform:** macOS — Apple Silicon (arm64) and Intel (x86_64). [Download the latest release](https://github.com/daniel-farina/xplorer/releases) or [build from source](#develop-locally).
+> **Platform:** macOS — Apple Silicon (arm64) and Intel (x86_64) — and **Windows x64**. [Download the latest release](https://github.com/daniel-farina/xplorer/releases) or [build from source](#develop-locally).
 
 ---
 
@@ -239,8 +239,21 @@ open ./chromium/src/out/aether/Xplorer.app
 cat ~/.xplorer/gateway.json     # confirm the gateway came up
 ```
 
-Releasing (signing, notarization, packaging) is documented in
-[`RELEASE.md`](RELEASE.md).
+**Windows** builds the same overlay with the Windows toolchain — PowerShell
+scripts mirror the shell ones:
+
+```powershell
+.\xplorer\apply.ps1 -Src C:\src\chromium\src   # copy src/ + .ico icon, apply patches
+.\xplorer\build.ps1 -Src C:\src\chromium\src   # gn gen out\xplorer_x64 + autoninja
+```
+
+Prerequisites differ (Visual Studio 2022 + Windows SDK, `depot_tools` with
+`DEPOT_TOOLS_WIN_TOOLCHAIN=0`, ~150 GB disk). The output is a flat
+`out\xplorer_x64\chrome.exe` rather than a `.app` bundle.
+
+Releasing is documented per platform: [`RELEASE.md`](RELEASE.md) (macOS — signing,
+notarization, packaging) and [`RELEASE.windows.md`](RELEASE.windows.md) (Windows —
+portable zip / `mini_installer`, optional Authenticode signing).
 
 ---
 
@@ -257,9 +270,9 @@ xplorer/
   site/        landing page (published to GitHub Pages)
   build/       release build configuration (args.gn)
   branding/    app icon, vector marks
-  apply.sh     overlay onto ../chromium/src
-  build.sh     gn gen + autoninja
-  RELEASE.md   build / sign / notarize / publish runbook
+  apply.sh / apply.ps1   overlay onto ../chromium/src (macOS / Windows)
+  build.sh / build.ps1   gn gen + autoninja (macOS / Windows)
+  RELEASE.md / RELEASE.windows.md   build / package / publish runbooks
 ```
 
 ---
