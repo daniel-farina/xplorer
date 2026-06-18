@@ -8,6 +8,12 @@ blink_symbol_level = 0
 # product name overridden to Xplorer via patches.
 is_chrome_branded = false
 
+# Enable H.264 / AAC / MP3 so sites that ship MP4 video (e.g. x.com) play.
+# Chromium's default (ffmpeg_branding="Chromium", proprietary_codecs=false)
+# omits these patent-encumbered codecs. Mirrors build/args.gn(.x64).
+proprietary_codecs = true
+ffmpeg_branding = "Chrome"
+
 dcheck_always_on = false
 target_cpu = "x64"
 target_os = "win"
