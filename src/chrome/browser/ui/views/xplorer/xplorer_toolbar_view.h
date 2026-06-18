@@ -5,22 +5,35 @@
 #define CHROME_BROWSER_UI_VIEWS_XPLORER_XPLORER_TOOLBAR_VIEW_H_
 
 #include <memory>
+#include <set>
 #include <string>
 #include <vector>
 
 #include "base/callback_list.h"
 #include "base/memory/raw_ptr.h"
+#include "base/memory/weak_ptr.h"
+#include "base/values.h"
+#include "ui/base/dragdrop/mojom/drag_drop_types.mojom-forward.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/menus/simple_menu_model.h"
 #include "ui/views/accessible_pane_view.h"
 #include "ui/views/context_menu_controller.h"
+#include "ui/views/drag_controller.h"
 
 class BrowserWindowInterface;
 class Profile;
 class GURL;
 
+namespace gfx {
+class Canvas;
+}  // namespace gfx
+
 namespace ui {
+class ClipboardFormatType;
+class DropTargetEvent;
 class Event;
+class LayerTreeOwner;
+class OSExchangeData;
 }  // namespace ui
 
 namespace views {
@@ -59,7 +72,8 @@ struct ToolbarPill {
 // built-in default set when the config is absent/empty.
 class XplorerToolbarView : public views::AccessiblePaneView,
                            public ui::SimpleMenuModel::Delegate,
-                           public views::ContextMenuController {
+                           public views::ContextMenuController,
+                           public views::DragController {
   METADATA_HEADER(XplorerToolbarView, views::AccessiblePaneView)
 
  public:
@@ -87,6 +101,29 @@ class XplorerToolbarView : public views::AccessiblePaneView,
       views::View* source,
       const gfx::Point& point,
       ui::mojom::MenuSourceType source_type) override;
+
+  // views::View (drag drop target — reorder within the strip):
+  bool GetDropFormats(int* formats,
+                      std::set<ui::ClipboardFormatType>* format_types) override;
+  bool AreDropTypesRequired() override;
+  bool CanDrop(const ui::OSExchangeData& data) override;
+  int OnDragUpdated(const ui::DropTargetEvent& event) override;
+  void OnDragExited() override;
+  DropCallback GetDropCallback(const ui::DropTargetEvent& event) override;
+
+  // views::DragController (drag source — each pill button):
+  void WriteDragDataForView(views::View* sender,
+                            const gfx::Point& press_pt,
+                            ui::OSExchangeData* data) override;
+  int GetDragOperationsForView(views::View* sender,
+                               const gfx::Point& p) override;
+  bool CanStartDragForView(views::View* sender,
+                           const gfx::Point& press_pt,
+                           const gfx::Point& p) override;
+
+ protected:
+  // views::View:
+  void OnPaint(gfx::Canvas* canvas) override;
 
  private:
   // A pill's view: a single styled button. Pills with children render an
@@ -121,6 +158,18 @@ class XplorerToolbarView : public views::AccessiblePaneView,
   // Opens the toolbar customization surface (the /settings page).
   void OpenCustomizePage();
 
+  // Drag-reorder helpers.
+  // Returns the insertion index (0..pills_.size()) for a cursor at local |x|.
+  int ComputeDropIndex(int x) const;
+  // Serializes |pills_| (current order, all fields) to pill dicts.
+  std::vector<base::DictValue> SerializePills() const;
+  // Moves the pill with |dragged_id| to |target_index|, persists, reloads.
+  void PerformDrop(std::string dragged_id,
+                   int target_index,
+                   const ui::DropTargetEvent& event,
+                   ui::mojom::DragOperation& output_drag_op,
+                   std::unique_ptr<ui::LayerTreeOwner> drag_image_layer_owner);
+
   const raw_ptr<BrowserWindowInterface> browser_;
   const raw_ptr<Profile> profile_;
   std::vector<ToolbarPill> pills_;
@@ -140,6 +189,12 @@ class XplorerToolbarView : public views::AccessiblePaneView,
 
   // Reloads the bar when toolbar config is persisted (settings page / gateway).
   base::CallbackListSubscription toolbar_config_subscription_;
+
+  // Drag-reorder state. |drop_index_| is the live insertion marker during a
+  // drag (-1 when not dragging), used to paint the drop indicator.
+  int drop_index_ = -1;
+
+  base::WeakPtrFactory<XplorerToolbarView> weak_factory_{this};
 };
 
 }  // namespace xplorer

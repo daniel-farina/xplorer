@@ -14,6 +14,16 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
+#include "third_party/skia/include/core/SkColor.h"
+#include "ui/base/clipboard/clipboard_format_type.h"
+#include "ui/base/dragdrop/drag_drop_types.h"
+#include "ui/base/dragdrop/drop_target_event.h"
+#include "ui/base/dragdrop/mojom/drag_drop_types.mojom.h"
+#include "ui/base/dragdrop/os_exchange_data.h"
+#include "ui/color/color_provider.h"
+#include "ui/compositor/layer_tree_owner.h"
+#include "ui/gfx/canvas.h"
+#include "ui/gfx/geometry/vector2d.h"
 #include "chrome/browser/grok_companion/grok_companion_util.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/color/chrome_color_id.h"
@@ -224,6 +234,8 @@ void XplorerToolbarView::RebuildButtons() {
     }
     // Right-click a pill -> context menu scoped to that pill (Edit/Remove).
     button->set_context_menu_controller(this);
+    // Drag a pill to reorder; the toolbar view is the drag source controller.
+    button->set_drag_controller(this);
     views.main = AddChildView(std::move(button));
 
     pill_buttons_.push_back(views);
@@ -396,6 +408,174 @@ int XplorerToolbarView::PillIndexForView(const views::View* view) const {
 
 void XplorerToolbarView::OpenCustomizePage() {
   Navigate(grok_companion::GetCompanionURL().Resolve("/settings"));
+}
+
+// --- Drag-to-reorder -------------------------------------------------------
+
+void XplorerToolbarView::WriteDragDataForView(views::View* sender,
+                                              const gfx::Point& press_pt,
+                                              ui::OSExchangeData* data) {
+  const int index = PillIndexForView(sender);
+  if (index < 0 || static_cast<size_t>(index) >= pills_.size()) {
+    return;
+  }
+  // Carry the dragged pill id; ids are stable across the reorder, unlike a
+  // positional index.
+  data->SetString(base::UTF8ToUTF16(pills_[index].id));
+}
+
+int XplorerToolbarView::GetDragOperationsForView(views::View* sender,
+                                                 const gfx::Point& p) {
+  return ui::DragDropTypes::DRAG_MOVE;
+}
+
+bool XplorerToolbarView::CanStartDragForView(views::View* sender,
+                                             const gfx::Point& press_pt,
+                                             const gfx::Point& p) {
+  return View::ExceededDragThreshold(p - press_pt);
+}
+
+bool XplorerToolbarView::GetDropFormats(
+    int* formats,
+    std::set<ui::ClipboardFormatType>* format_types) {
+  *formats = ui::OSExchangeData::STRING;
+  return true;
+}
+
+bool XplorerToolbarView::AreDropTypesRequired() {
+  return true;
+}
+
+bool XplorerToolbarView::CanDrop(const ui::OSExchangeData& data) {
+  return data.HasString();
+}
+
+int XplorerToolbarView::OnDragUpdated(const ui::DropTargetEvent& event) {
+  const int idx = ComputeDropIndex(event.location().x());
+  if (idx != drop_index_) {
+    drop_index_ = idx;
+    SchedulePaint();
+  }
+  return ui::DragDropTypes::DRAG_MOVE;
+}
+
+void XplorerToolbarView::OnDragExited() {
+  if (drop_index_ != -1) {
+    drop_index_ = -1;
+    SchedulePaint();
+  }
+}
+
+views::View::DropCallback XplorerToolbarView::GetDropCallback(
+    const ui::DropTargetEvent& event) {
+  const int target = ComputeDropIndex(event.location().x());
+  const std::optional<std::u16string> dragged = event.data().GetString();
+  drop_index_ = -1;
+  SchedulePaint();
+  return base::BindOnce(
+      &XplorerToolbarView::PerformDrop, weak_factory_.GetWeakPtr(),
+      base::UTF16ToUTF8(dragged.value_or(std::u16string())), target);
+}
+
+int XplorerToolbarView::ComputeDropIndex(int x) const {
+  for (size_t i = 0; i < pill_buttons_.size(); ++i) {
+    const views::View* btn = pill_buttons_[i].main;
+    if (!btn) {
+      continue;
+    }
+    const gfx::Rect b = btn->bounds();
+    if (x < b.x() + b.width() / 2) {
+      return static_cast<int>(i);
+    }
+  }
+  return static_cast<int>(pill_buttons_.size());
+}
+
+std::vector<base::DictValue> XplorerToolbarView::SerializePills() const {
+  std::vector<base::DictValue> out;
+  out.reserve(pills_.size());
+  for (const ToolbarPill& pill : pills_) {
+    base::DictValue dict;
+    dict.Set("id", pill.id);
+    dict.Set("label", pill.label);
+    dict.Set("href", pill.href);
+    dict.Set("icon", pill.icon);
+    dict.Set("enabled", true);
+    if (pill.is_home) {
+      dict.Set("isHome", true);
+    }
+    if (!pill.children.empty()) {
+      base::ListValue kids;
+      for (const ToolbarChild& child : pill.children) {
+        base::DictValue cd;
+        cd.Set("label", child.label);
+        cd.Set("href", child.href);
+        kids.Append(std::move(cd));
+      }
+      dict.Set("children", std::move(kids));
+    }
+    out.push_back(std::move(dict));
+  }
+  return out;
+}
+
+void XplorerToolbarView::PerformDrop(
+    std::string dragged_id,
+    int target_index,
+    const ui::DropTargetEvent& event,
+    ui::mojom::DragOperation& output_drag_op,
+    std::unique_ptr<ui::LayerTreeOwner> drag_image_layer_owner) {
+  output_drag_op = ui::mojom::DragOperation::kNone;
+  if (dragged_id.empty()) {
+    return;
+  }
+  int from = -1;
+  for (size_t i = 0; i < pills_.size(); ++i) {
+    if (pills_[i].id == dragged_id) {
+      from = static_cast<int>(i);
+      break;
+    }
+  }
+  if (from < 0) {
+    return;
+  }
+  int to = std::clamp(target_index, 0, static_cast<int>(pills_.size()));
+  // Removing |from| shifts later items left by one.
+  if (to > from) {
+    --to;
+  }
+  output_drag_op = ui::mojom::DragOperation::kMove;
+  if (to == from) {
+    return;  // No change.
+  }
+  ToolbarPill moved = std::move(pills_[from]);
+  pills_.erase(pills_.begin() + from);
+  pills_.insert(pills_.begin() + to, std::move(moved));
+  // Persist the new order; this notifies subscribers, which calls Reload() and
+  // rebuilds the strip from the freshly written config.
+  grok_companion::SetToolbarPillConfigs(SerializePills());
+}
+
+void XplorerToolbarView::OnPaint(gfx::Canvas* canvas) {
+  views::AccessiblePaneView::OnPaint(canvas);
+  if (drop_index_ < 0 || pill_buttons_.empty()) {
+    return;
+  }
+  int x = kLeadingMargin;
+  if (drop_index_ == 0) {
+    const views::View* first = pill_buttons_.front().main;
+    x = first ? first->bounds().x() - kButtonSpacing / 2 : kLeadingMargin;
+  } else if (static_cast<size_t>(drop_index_) >= pill_buttons_.size()) {
+    const views::View* last = pill_buttons_.back().main;
+    x = last ? last->bounds().right() + kButtonSpacing / 2 : kLeadingMargin;
+  } else {
+    const views::View* btn = pill_buttons_[drop_index_].main;
+    x = btn ? btn->bounds().x() - kButtonSpacing / 2 : kLeadingMargin;
+  }
+  const SkColor color =
+      GetColorProvider() ? GetColorProvider()->GetColor(kColorToolbarButtonIcon)
+                         : SK_ColorGRAY;
+  canvas->FillRect(gfx::Rect(x - 1, 4, 2, std::max(0, height() - 8)), color);
 }
 
 void XplorerToolbarView::ShowContextMenuForViewImpl(
