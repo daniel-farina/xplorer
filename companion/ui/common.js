@@ -190,9 +190,12 @@ const GROK_TOOLBAR_FALLBACK =
   '</header>';
 
 async function mountGrokToolbar({ pageHome, onSwitch } = {}) {
-  // Canonical markup lives in /toolbar.html (the SINGLE source shared with the
-  // native overlay). Fetch it live; fall back to a minimal stub only if the
-  // partial can't be loaded so the bar is never blank.
+  // XPLORER: the toolbar is now a NATIVE browser-chrome bar (XplorerToolbarView)
+  // present on every tab, so suppress the in-page web bar entirely — companion
+  // pages (/search, /apps, ...) must not render a duplicate. No-op; callers and
+  // helpers stay defined. Remove this early return to restore the web bar.
+  return;
+  // eslint-disable-next-line no-unreachable
   let html;
   try {
     const res = await fetch('/toolbar.html', { cache: 'no-store' });
@@ -264,13 +267,12 @@ function syncCompanionToolbarPill() {
   });
 }
 
-if (typeof document !== 'undefined') {
-  document.addEventListener('DOMContentLoaded', () => {
-    if (document.body.dataset.grokToolbar === 'auto') {
-      mountGrokToolbar();
-    }
-  });
-}
+// The native browser-chrome toolbar (xplorer::XplorerToolbarView) is now the
+// single toolbar surface and covers companion pages too, so the in-page
+// auto-mount is suppressed to avoid a double bar. mountGrokToolbar remains
+// defined for explicit callers; we just no longer auto-call it on load.
+// (Previously: DOMContentLoaded → mountGrokToolbar() when
+//  document.body.dataset.grokToolbar === 'auto'.)
 
 /** Wire Grok Build / Grok Web / Groki home toggle. */
 async function initSearchHomeToggle(container, { onSwitch, pageHome } = {}) {

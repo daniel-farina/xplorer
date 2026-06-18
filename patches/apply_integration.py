@@ -38,6 +38,135 @@ def edit(path: Path, anchor: str, insertion: str, before: bool = False):
     print(f"  edited: {path}")
 
 
+def patch_native_toolbar(src: Path):
+    """SCAFFOLD: native browser-chrome Xplorer pill toolbar.
+
+    Adds an xplorer::XplorerToolbarView strip to top_container_, between the
+    bookmark bar and the contents separator. The new view source lives in
+    src/chrome/browser/ui/views/xplorer/ (copied into the checkout by apply.sh)
+    and is compiled into the existing static_library("ui") target next to
+    bookmark_bar_view.cc. This step only wires the existing-Chromium files.
+    """
+    # --- browser_view.h: forward-decl + owned member -----------------------
+    browser_view_h = src / "chrome/browser/ui/views/frame/browser_view.h"
+    edit(
+        browser_view_h,
+        "class BookmarkBarView;",
+        "class BookmarkBarView;\n"
+        "namespace xplorer {\n"
+        "class XplorerToolbarView;\n"
+        "}  // namespace xplorer  // XPLORER",
+    )
+    edit(
+        browser_view_h,
+        "  raw_ptr<BookmarkBarView> bookmark_bar_view_ = nullptr;",
+        "  raw_ptr<BookmarkBarView> bookmark_bar_view_ = nullptr;\n\n"
+        "  // XPLORER: native pill toolbar; always parented to top_container_.\n"
+        "  raw_ptr<xplorer::XplorerToolbarView> xplorer_toolbar_ = nullptr;",
+    )
+
+    # --- browser_view.cc: create + parent, register with layout, include ---
+    browser_view_cc = src / "chrome/browser/ui/views/frame/browser_view.cc"
+    edit(
+        browser_view_cc,
+        '#include "chrome/browser/ui/views/bookmarks/bookmark_bar_view.h"',
+        '#include "chrome/browser/ui/views/bookmarks/bookmark_bar_view.h"\n'
+        '#include "chrome/browser/ui/views/xplorer/xplorer_toolbar_view.h"'
+        "  // XPLORER",
+    )
+    edit(
+        browser_view_cc,
+        "  toolbar_ = top_container_->AddChildView(\n"
+        "      std::make_unique<ToolbarView>(browser_.get(), this));\n",
+        "  toolbar_ = top_container_->AddChildView(\n"
+        "      std::make_unique<ToolbarView>(browser_.get(), this));\n\n"
+        "  // XPLORER: native pill toolbar, owned by top_container_, always\n"
+        "  // present (parented eagerly, between bookmarks and the separator).\n"
+        "  xplorer_toolbar_ = top_container_->AddChildView(\n"
+        "      std::make_unique<xplorer::XplorerToolbarView>(\n"
+        "          browser_.get(), browser_->profile()));\n",
+    )
+    edit(
+        browser_view_cc,
+        "  layout_views.top_container_separator = top_container_separator_;",
+        "  layout_views.top_container_separator = top_container_separator_;\n"
+        "  layout_views.xplorer_toolbar = xplorer_toolbar_;  // XPLORER",
+    )
+
+    # --- browser_view_layout.h: forward-decl + struct field ----------------
+    layout_h = src / "chrome/browser/ui/views/frame/layout/browser_view_layout.h"
+    edit(
+        layout_h,
+        "class BookmarkBarView;",
+        "class BookmarkBarView;\n"
+        "namespace xplorer {\n"
+        "class XplorerToolbarView;\n"
+        "}  // namespace xplorer  // XPLORER",
+    )
+    edit(
+        layout_h,
+        "  raw_ptr<views::View> top_container_separator = nullptr;",
+        "  raw_ptr<views::View> top_container_separator = nullptr;\n\n"
+        "  // XPLORER: native pill toolbar strip (top_container child).\n"
+        "  raw_ptr<xplorer::XplorerToolbarView> xplorer_toolbar = nullptr;",
+    )
+
+    # --- browser_view_tabbed_layout_impl.cc: layout block + include --------
+    layout_impl = (src / "chrome/browser/ui/views/frame/layout/"
+                   "browser_view_tabbed_layout_impl.cc")
+    edit(
+        layout_impl,
+        '#include "chrome/browser/ui/views/bookmarks/bookmark_bar_view.h"',
+        '#include "chrome/browser/ui/views/bookmarks/bookmark_bar_view.h"\n'
+        '#include "chrome/browser/ui/views/xplorer/xplorer_toolbar_view.h"'
+        "  // XPLORER",
+    )
+    edit(
+        layout_impl,
+        "  // Maybe show the separator in the top container.\n"
+        "  if (IsParentedTo(views().top_container_separator, "
+        "views().top_container)) {",
+        "  // XPLORER: native Xplorer pill toolbar, below bookmarks, above the\n"
+        "  // contents separator. Scaffold: always visible.\n"
+        "  if (views().xplorer_toolbar &&\n"
+        "      IsParentedTo(views().xplorer_toolbar, views().top_container)) {\n"
+        "    const bool xplorer_visible = true;\n"
+        "    const gfx::Rect xplorer_bounds(\n"
+        "        params.visual_client_area.x(), params.visual_client_area.y(),\n"
+        "        params.visual_client_area.width(),\n"
+        "        xplorer_visible\n"
+        "            ? views().xplorer_toolbar->GetPreferredSize().height()\n"
+        "            : 0);\n"
+        "    layout.AddChild(views().xplorer_toolbar, xplorer_bounds,\n"
+        "                    xplorer_visible);\n"
+        "    params.SetTop(xplorer_bounds.bottom());\n"
+        "  }\n\n"
+        "  // Maybe show the separator in the top container.\n"
+        "  if (IsParentedTo(views().top_container_separator, "
+        "views().top_container)) {",
+    )
+
+    # --- BUILD.gn: compile the new source into the static_library("ui")
+    # target next to bookmark_bar_view.cc (avoids a new GN target and the
+    # grok_companion <-> //chrome/browser/ui dependency cycle). Symbols resolve
+    # at the final chrome/browser link, exactly like the existing grok patch
+    # into toolbar_view.cc.
+    browser_ui_gn = src / "chrome/browser/ui/BUILD.gn"
+    edit(
+        browser_ui_gn,
+        '      "views/bookmarks/bookmark_bar_view.cc",\n'
+        '      "views/bookmarks/bookmark_bar_view.h",',
+        '      "views/bookmarks/bookmark_bar_view.cc",\n'
+        '      "views/bookmarks/bookmark_bar_view.h",\n'
+        '      "views/xplorer/xplorer_toolbar_view.cc",  # XPLORER\n'
+        '      "views/xplorer/xplorer_toolbar_view.h",  # XPLORER\n'
+        '      "views/xplorer/xplorer_toolbar_pill_button.cc",  # XPLORER\n'
+        '      "views/xplorer/xplorer_toolbar_pill_button.h",  # XPLORER\n'
+        '      "views/xplorer/xplorer_toolbar_icons.cc",  # XPLORER\n'
+        '      "views/xplorer/xplorer_toolbar_icons.h",  # XPLORER',
+    )
+
+
 def main(src: Path):
     # 1. Start the AgentGateway once the browser UI is up.
     main_cc = src / "chrome/browser/chrome_browser_main.cc"
@@ -783,6 +912,9 @@ def main(src: Path):
             "}")
         acp.write_text(ac)
         print(f"  edited: {acp}")
+
+    # Native browser-chrome Xplorer pill toolbar (scaffold).
+    patch_native_toolbar(src)
 
     print("Integration edits applied.")
 

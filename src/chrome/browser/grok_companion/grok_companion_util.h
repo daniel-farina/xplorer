@@ -4,8 +4,11 @@
 #ifndef CHROME_BROWSER_GROK_COMPANION_GROK_COMPANION_UTIL_H_
 #define CHROME_BROWSER_GROK_COMPANION_GROK_COMPANION_UTIL_H_
 
+#include <vector>
+
 #include "base/files/file_path.h"
 #include "base/strings/string_util.h"
+#include "base/values.h"
 #include "url/gurl.h"
 
 class BrowserWindowInterface;
@@ -69,6 +72,13 @@ void MarkWelcomeCompleted();
 // User preference: native Grok Build UI vs grok.com (stored in grok_settings.json).
 std::string GetSearchHomeMode();
 void SetSearchHomeMode(const std::string& mode);
+
+// Reads grok_settings.json and returns the ordered "toolbar.pills" array as a
+// vector of Dicts (one per pill: {id,label,icon,href,enabled,isHome}). Returns
+// an EMPTY vector when the file is missing/unparseable or "toolbar.pills" is
+// absent/empty/non-list, so callers fall back to their built-in defaults. The
+// schema mirrors companion/ui/toolbar.js DEFAULT_PILLS.
+std::vector<base::DictValue> GetToolbarPillConfigs();
 
 // NTP / omnibox Grok chip destination based on search_home preference.
 GURL GetDefaultSearchHomeURL();

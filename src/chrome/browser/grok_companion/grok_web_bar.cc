@@ -253,12 +253,12 @@ class GrokWebBarInjector : public content::WebContentsObserver,
     ScheduleStartupBurst();
   }
 
-  bool ShouldInject(content::WebContents* contents) const {
-    if (!contents)
-      return false;
-    if (IsToolbarOverlayHost(contents->GetLastCommittedURL()))
-      return true;
-    return IsToolbarOverlayHost(contents->GetVisibleURL());
+  bool ShouldInject(content::WebContents* /*contents*/) const {
+    // XPLORER: native chrome toolbar replaces the injected web bar.
+    // The native Views bar (xplorer::XplorerToolbarView) is now the single
+    // toolbar surface on every tab, so the in-page injection on
+    // x.com/grok.com/grokipedia is disabled to avoid a double bar.
+    return false;
   }
 
   void ScheduleInject() {

@@ -169,6 +169,23 @@ void SetSearchHomeMode(const std::string& mode) {
   SaveGrokSettings(settings);
 }
 
+std::vector<base::DictValue> GetToolbarPillConfigs() {
+  std::vector<base::DictValue> pills;
+  base::DictValue settings = LoadGrokSettings();
+  const base::DictValue* toolbar = settings.FindDict("toolbar");
+  if (!toolbar)
+    return pills;
+  const base::ListValue* list = toolbar->FindList("pills");
+  if (!list)
+    return pills;
+  for (const base::Value& entry : *list) {
+    if (!entry.is_dict())
+      continue;
+    pills.push_back(entry.GetDict().Clone());
+  }
+  return pills;
+}
+
 GURL GetDefaultSearchHomeURL() {
   const std::string home = GetSearchHomeMode();
   if (home == kSearchHomeWeb)
