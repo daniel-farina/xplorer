@@ -61,13 +61,15 @@ try {
   # The launcher, renamed so the shipped product is Xplorer.exe.
   Copy-Item $exe (Join-Path $Root "Xplorer.exe") -Force
 
-  # Top-level runtime payload: DLLs, snapshot/data blobs, resource paks, and
-  # top-level JSON manifests (notably vk_swiftshader_icd.json — the Vulkan
-  # loader reads it to find vk_swiftshader.dll for the software-GL fallback).
-  # Whitelisted by extension and non-recursive, so obj\, gen\, *.pdb, *.lib
-  # stay excluded.
+  # Top-level runtime payload: DLLs, snapshot/data blobs, resource paks, the
+  # SwiftShader ICD .json, the versioned SxS .manifest (chrome.exe's embedded
+  # manifest declares a dependency on an assembly named after the version —
+  # without the matching <version>.manifest beside it, launch fails with
+  # "side-by-side configuration is incorrect"), and the VisualElements tile
+  # assets (.xml/.png) for the taskbar/Start icon. Whitelisted by extension and
+  # non-recursive, so obj\, gen\, *.pdb, *.lib, *.runtime_deps stay excluded.
   Get-ChildItem -Path $OutDir -File | Where-Object {
-    $_.Extension -in @('.dll', '.bin', '.dat', '.pak', '.json')
+    $_.Extension -in @('.dll', '.bin', '.dat', '.pak', '.json', '.manifest', '.xml', '.png')
   } | ForEach-Object { Copy-Item $_.FullName (Join-Path $Root $_.Name) -Force }
 
   # Localized string paks and (if present) the resources tree.
@@ -82,6 +84,9 @@ try {
   # Bundle the companion UI beside the exe so UiDir() finds <exe_dir>\companion\ui.
   robocopy (Join-Path $Xplorer "companion\ui") (Join-Path $Root "companion\ui") /E /NFL /NDL /NJH /NJS /NP | Out-Null
   if ($LASTEXITCODE -ge 8) { throw "robocopy failed staging companion\ui (exit $LASTEXITCODE)" }
+  # robocopy uses exit codes < 8 to signal success (1 = files copied); reset so
+  # the lingering code isn't mistaken for a script failure by callers/CI.
+  $global:LASTEXITCODE = 0
 
   # Fail loudly if a load-bearing runtime file is missing rather than shipping a
   # broken zip (extension-whitelist staging can silently drop new file types).
@@ -89,6 +94,10 @@ try {
                 'resources.pak', 'chrome_100_percent.pak')
   $missing = $required | Where-Object { -not (Test-Path (Join-Path $Root $_)) }
   if ($missing) { throw "Staged tree missing required runtime files: $($missing -join ', ')" }
+  # chrome.exe's manifest needs the versioned SxS assembly manifest beside it.
+  if (-not (Get-ChildItem (Join-Path $Root '*.manifest') -ErrorAction SilentlyContinue)) {
+    throw "No <version>.manifest staged - chrome.exe won't launch (SxS assembly missing)."
+  }
   if ((Test-Path (Join-Path $Root 'vk_swiftshader.dll')) -and
       -not (Test-Path (Join-Path $Root 'vk_swiftshader_icd.json'))) {
     throw "vk_swiftshader.dll staged without vk_swiftshader_icd.json (software-GL fallback would be broken)."
@@ -97,7 +106,13 @@ try {
   $Zip = Join-Path $Dist "$Name.zip"
   Write-Host "Zipping -> $Zip ..."
   if (Test-Path $Zip) { Remove-Item $Zip -Force }
-  Compress-Archive -Path (Join-Path $Root '*') -DestinationPath $Zip -CompressionLevel Optimal
+  # Use ZipFile (not Compress-Archive): on Windows PowerShell 5.1 Compress-Archive
+  # writes backslash entry separators (non-standard) and `-Path $dir\*` drops the
+  # enclosing folder (a tarbomb). CreateFromDirectory with includeBaseDirectory
+  # emits forward-slash paths under a top-level "Xplorer/" folder.
+  Add-Type -AssemblyName System.IO.Compression.FileSystem
+  [System.IO.Compression.ZipFile]::CreateFromDirectory(
+    $Root, $Zip, [System.IO.Compression.CompressionLevel]::Optimal, $true)
 
   # Optional installer artifact.
   $checksumInputs = @($Zip)
