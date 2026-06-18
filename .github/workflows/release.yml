@@ -119,5 +119,6 @@ jobs:
             Xplorer ${{ steps.ver.outputs.v }} — AI-native Chromium fork.
             **macOS** (Apple Silicon arm64 + Intel x86_64) and **Windows x64** builds included.
             - macOS: open the DMG for your Mac and drag Xplorer to Applications.
-            - Windows: unzip `Xplorer-windows-x64.zip` and run `Xplorer.exe`.
+            - Windows: run `Xplorer-windows-x64-installer.exe` (installs + creates shortcuts), or unzip the portable `Xplorer-windows-x64.zip` and run `Xplorer.exe`.
+              The Windows build isn't code-signed yet, so SmartScreen warns — click **More info → Run anyway** (and allow it in Defender if prompted).
             See RELEASE.md (macOS) / RELEASE.windows.md (Windows) and AGENTS.md for connecting agents.

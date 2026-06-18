@@ -17,18 +17,21 @@
 .PARAMETER Src
   Chromium src checkout. Defaults to ..\chromium\src.
 
-.PARAMETER Installer
-  Also build + package mini_installer.exe.
+.PARAMETER NoInstaller
+  Skip the mini_installer.exe build + packaging. By default a release builds and
+  packages the installer (Xplorer-windows-x64-installer.exe) alongside the
+  portable zip; pass -NoInstaller for a zip-only build.
 
 .EXAMPLE
-  .\scripts\release_win.ps1 -Arch x64 -Version v0.5.0
+  .\scripts\release_win.ps1 -Arch x64 -Version v0.5.0            # zip + installer
+  .\scripts\release_win.ps1 -Arch x64 -Version v0.5.0 -NoInstaller   # zip only
 #>
 [CmdletBinding()]
 param(
   [ValidateSet("x64", "arm64")][string]$Arch = "x64",
   [string]$Version = "dev",
   [string]$Src = (Join-Path (Split-Path $PSScriptRoot -Parent) "..\chromium\src"),
-  [switch]$Installer
+  [switch]$NoInstaller   # a release builds the mini_installer by default
 )
 
 $ErrorActionPreference = "Stop"
@@ -40,13 +43,13 @@ Write-Host "==> apply ($Arch)"
 
 Write-Host "==> build ($Arch)"
 $buildArgs = @{ Src = $Src; Arch = $Arch }
-if ($Installer) { $buildArgs.Installer = $true }
+if (-not $NoInstaller) { $buildArgs.Installer = $true }
 & (Join-Path $Xplorer "build.ps1") @buildArgs
 
 Write-Host "==> package ($Arch)"
 $outDir = Join-Path $Src "out\xplorer_$Arch"
 $pkgArgs = @{ OutDir = $outDir; Version = $Version; Arch = $Arch }
-if ($Installer) { $pkgArgs.Installer = $true }
+if (-not $NoInstaller) { $pkgArgs.Installer = $true }
 & (Join-Path $Xplorer "scripts\package.ps1") @pkgArgs
 
 Write-Host "==> done ($Arch $Version). Artifacts in $Xplorer\dist"

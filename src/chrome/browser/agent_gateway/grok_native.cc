@@ -211,12 +211,25 @@ base::FilePath UiDir() {
   // self-contained on any machine. Without this, a downloaded build has no UI
   // on disk and every UI navigation (e.g. /search) falls through to the
   // auth-required path -> 401.
+#if BUILDFLAG(IS_WIN)
+  // The gateway runs inside chrome.dll, which the installer places in the
+  // versioned dir (Application\<version>\); the companion UI ships there too
+  // (chrome.release: %(VersionDir)s\companion\ui). DIR_MODULE is chrome.dll's
+  // dir — the version dir for an install, or the flat dir for the portable zip
+  // and dev builds — so this one check covers all three layouts. (DIR_EXE is
+  // chrome.exe's dir, the parent dir for an install, handled as a fallback.)
+  base::FilePath module_dir;
+  if (base::PathService::Get(base::DIR_MODULE, &module_dir)) {
+    base::FilePath bundled =
+        module_dir.AppendASCII("companion").AppendASCII("ui");
+    if (base::DirectoryExists(bundled))
+      return bundled;
+  }
+#endif
   base::FilePath exe_dir;
   if (base::PathService::Get(base::DIR_EXE, &exe_dir)) {
 #if BUILDFLAG(IS_WIN)
-    // Windows has no .app bundle: chrome.exe and its resources are flat in the
-    // install dir, so the UI sits at <exe_dir>\companion\ui (the packaging
-    // step copies companion/ui beside the executable).
+    // Portable zip: chrome.exe and the UI are flat in the same dir.
     base::FilePath bundled =
         exe_dir.AppendASCII("companion").AppendASCII("ui");
 #else

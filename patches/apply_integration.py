@@ -941,6 +941,23 @@ def main(src: Path):
     # Native browser-chrome Xplorer pill toolbar (scaffold).
     patch_native_toolbar(src)
 
+    # Bundle the Grok companion UI into the Windows installer's version dir
+    # (next to chrome.dll) so the gateway's UiDir() resolves it via DIR_MODULE on
+    # installed builds; without it the installed app's /search (and other UI
+    # routes) return the gateway's 401. The version dir is fully extracted by
+    # setup (a ChromeDir-root subdir is not), so it must live there. Windows-only
+    # (mini_installer); harmless on macOS, which doesn't read this file. The
+    # build/packaging step stages companion/ui into the out dir to be picked up.
+    chrome_release = src / "chrome/installer/mini_installer/chrome.release"
+    if chrome_release.exists():
+        edit(
+            chrome_release,
+            "chrome_proxy.exe: %(ChromeDir)s\\\n",
+            "chrome_proxy.exe: %(ChromeDir)s\\\n"
+            "# XPLORER: companion UI in the version dir (gateway UiDir/DIR_MODULE).\n"
+            "companion\\ui\\*.*: %(VersionDir)s\\companion\\ui\\\n",
+        )
+
     print("Integration edits applied.")
 
 
