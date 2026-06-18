@@ -29,8 +29,14 @@ sudo apt-get install -y git python3 python3-pip curl lsb-release file ca-certifi
 mkdir -p "$ROOT" && cd "$ROOT"
 
 echo "--- [2/7] depot_tools ---"
-[ -d depot_tools ] || git clone --depth 1 https://chromium.googlesource.com/chromium/tools/depot_tools.git || fail depot_tools
+# NOTE: clone depot_tools FULL (not --depth 1): a shallow clone leaves its CIPD
+# self-bootstrap (gn/ninja/vpython/luci-auth) incomplete, so gclient's hooks
+# can't fetch the toolchain and `gn gen` later fails with
+# "python3_bin_reldir.txt not found" / "Unable to find gn".
+[ -d depot_tools ] || git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git || fail depot_tools
 export PATH="$ROOT/depot_tools:$PATH"
+export DEPOT_TOOLS_UPDATE=1
+gclient --version >/dev/null 2>&1 || true   # trigger CIPD bin bootstrap
 
 echo "--- [3/7] fetch chromium (full history, needed to pin the revision) ---"
 mkdir -p chromium && cd chromium
