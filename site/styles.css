@@ -606,3 +606,27 @@ body { position: relative; }
   .nav__gh { justify-content: center; margin-top: 8px; }
   .theme-toggle { align-self: flex-start; margin-top: 4px; }
 }
+
+/* ---------- Mobile hero: fit the backdrop, stop text/image overlap ---------- */
+@media (max-width: 760px) {
+  .hero { padding: 58px 20px 24px; }
+  .hero__wordmark {
+    --wm-x-size: 50px; --wm-word-size: 42px; --wm-gap: -20px;
+    margin-bottom: 14px;
+  }
+  .hero__title { font-size: clamp(29px, 8.4vw, 42px); line-height: 1.08; }
+  .hero__sub { font-size: 16.5px; margin-top: 16px; }
+  .hero__cta { margin-top: 24px; }
+  /* readable halo for any hero text that still sits over the backdrop */
+  .hero__wordmark, .hero__title { text-shadow: 0 1px 16px var(--bg), 0 0 3px var(--bg); }
+  /* shorter backdrop that fades out ABOVE the title, so the title/subtitle
+     land on a clean page background instead of the busy mid-image (grass). */
+  .bg-space, .bg-anim {
+    height: 46vh;
+    -webkit-mask-image: linear-gradient(to bottom,
+      #000 0%, #000 20%, rgba(0,0,0,0.4) 48%, rgba(0,0,0,0) 76%);
+    mask-image: linear-gradient(to bottom,
+      #000 0%, #000 20%, rgba(0,0,0,0.4) 48%, rgba(0,0,0,0) 76%);
+  }
+  .bg-space { background-size: cover; background-position: top center; }
+}
