@@ -88,7 +88,8 @@ body {
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
-  overflow-x: hidden;
+  overflow-x: clip;  /* clip, not hidden: avoids making <body> a vertical scroll
+                        container (which paired with <html> = double scrollbar) */
   transition: background-color .35s ease, color .35s ease;
 }
 
@@ -634,8 +635,11 @@ body { position: relative; }
 /* ---------- Mobile: overflow clamp (iOS shrink-to-fit) + hero contrast ---------- */
 /* iOS Safari can shrink-to-fit the whole page when a descendant is wider than
    the viewport (here: the wide code block), even though it scrolls internally.
-   Clamp the document so the viewport width is authoritative. */
-html { overflow-x: hidden; }
+   Clamp the document so the viewport width is authoritative. Use `clip` (NOT
+   `hidden`): `overflow-x: hidden` forces overflow-y to compute to `auto`, which
+   makes <html> a 2nd vertical scroll container -> double scrollbar on desktop.
+   `clip` clamps the x axis without establishing a scroll container. */
+html { overflow-x: clip; }
 html, body { width: 100%; max-width: 100%; }
 img, svg, video, canvas, iframe, table { max-width: 100%; }
 
