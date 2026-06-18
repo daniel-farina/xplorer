@@ -70,6 +70,12 @@ try {
   if ($LASTEXITCODE -ne 0) { throw "autoninja chrome failed (exit $LASTEXITCODE)" }
 
   if ($Installer) {
+    # Stage the companion UI into the out dir so mini_installer packages it
+    # (chrome.release ships it to <ChromeDir>\companion\ui, where the gateway's
+    # UiDir() resolves it; without it the installed app's /search etc. 401).
+    robocopy (Join-Path $Xplorer "companion\ui") (Join-Path $outPath "companion\ui") /E /NFL /NDL /NJH /NJS /NP | Out-Null
+    if ($LASTEXITCODE -ge 8) { throw "robocopy failed staging companion\ui for installer (exit $LASTEXITCODE)" }
+    $global:LASTEXITCODE = 0
     Write-Host "autoninja -C out\$OutDir mini_installer ..."
     & autoninja -C "out\$OutDir" mini_installer
     if ($LASTEXITCODE -ne 0) { throw "autoninja mini_installer failed (exit $LASTEXITCODE)" }

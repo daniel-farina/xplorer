@@ -28,7 +28,7 @@ param(
   [ValidateSet("x64", "arm64")][string]$Arch = "x64",
   [string]$Version = "dev",
   [string]$Src = (Join-Path (Split-Path $PSScriptRoot -Parent) "..\chromium\src"),
-  [switch]$Installer
+  [switch]$NoInstaller   # a release builds the mini_installer by default
 )
 
 $ErrorActionPreference = "Stop"
@@ -40,13 +40,13 @@ Write-Host "==> apply ($Arch)"
 
 Write-Host "==> build ($Arch)"
 $buildArgs = @{ Src = $Src; Arch = $Arch }
-if ($Installer) { $buildArgs.Installer = $true }
+if (-not $NoInstaller) { $buildArgs.Installer = $true }
 & (Join-Path $Xplorer "build.ps1") @buildArgs
 
 Write-Host "==> package ($Arch)"
 $outDir = Join-Path $Src "out\xplorer_$Arch"
 $pkgArgs = @{ OutDir = $outDir; Version = $Version; Arch = $Arch }
-if ($Installer) { $pkgArgs.Installer = $true }
+if (-not $NoInstaller) { $pkgArgs.Installer = $true }
 & (Join-Path $Xplorer "scripts\package.ps1") @pkgArgs
 
 Write-Host "==> done ($Arch $Version). Artifacts in $Xplorer\dist"
