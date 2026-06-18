@@ -4,6 +4,10 @@ This is the end-to-end process used to build Xplorer (the AI-native Chromium
 fork) from source and publish a macOS release to GitHub. It also records the
 gotchas hit along the way so you don't rediscover them.
 
+> **Windows?** See [`RELEASE.windows.md`](RELEASE.windows.md) for the Windows
+> toolchain, build, and packaging runbook (PowerShell `apply.ps1` / `build.ps1`
+> / `scripts\package.ps1`). This document is macOS-specific.
+
 > Layout note: the overlay lives in the `xplorer/` directory; the Chromium
 > checkout sits next to it at `../chromium/src`. The product, app bundle, and
 > repo are all "Xplorer". (`xplorer` is also the internal codename — the MCP

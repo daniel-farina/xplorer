@@ -33,6 +33,7 @@ source_set("agent_gateway") {
     "//content/public/browser",
     "//net",
     "//skia",
+    "//third_party/zlib/google:zip",
     "//ui/base",
     "//ui/gfx/codec",
     "//ui/gfx/geometry",
