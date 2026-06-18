@@ -28,8 +28,11 @@ void WriteCompanionDiscovery(int gateway_port) {
     companion.Set("model", "grok-composer-2.5-fast");
   companion.Set("native", true);
   base::FilePath grok_bin = ResolveGrokBinary();
-  if (!grok_bin.empty() && grok_bin.value() != "grok")
-    companion.Set("grok_bin", grok_bin.value());
+  // FilePath::value() is std::wstring on Windows, so compare against a
+  // FilePath literal and serialize via AsUTF8Unsafe() (JSON is UTF-8).
+  if (!grok_bin.empty() &&
+      grok_bin != base::FilePath(FILE_PATH_LITERAL("grok")))
+    companion.Set("grok_bin", grok_bin.AsUTF8Unsafe());
   std::string json;
   if (base::JSONWriter::Write(companion, &json))
     base::WriteFile(dir.AppendASCII("companion.json"), json);

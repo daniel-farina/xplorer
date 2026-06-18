@@ -26,11 +26,17 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "chrome/browser/agent_gateway/grok_native.h"
 #include "net/http/http_status_code.h"
 #include "net/server/http_server_response_info.h"
 #include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
+#include "third_party/zlib/google/zip.h"
 #include "url/gurl.h"
+
+#if BUILDFLAG(IS_WIN)
+#include "base/environment.h"
+#endif
 
 namespace agent_gateway {
 namespace {
@@ -123,6 +129,13 @@ bool ZipAppDirectoryOnWorker(const base::FilePath& dir, std::string* out_bytes) 
     return false;
   }
   base::FilePath zip_path = temp_dir.AppendASCII("export.zip");
+
+#if BUILDFLAG(IS_WIN)
+  // Windows ships no `zip` CLI; use Chromium's cross-platform zip utility.
+  // zip::Zip writes every file under |dir| into |zip_path| with paths
+  // relative to |dir| — equivalent to the POSIX `cd dir; zip -r . ` below.
+  const bool produced = zip::Zip(dir, zip_path, /*include_hidden_files=*/true);
+#else
   base::FilePath zip_bin(FILE_PATH_LITERAL("/usr/bin/zip"));
   if (!base::PathExists(zip_bin))
     zip_bin = base::FilePath(FILE_PATH_LITERAL("/bin/zip"));
@@ -147,7 +160,10 @@ bool ZipAppDirectoryOnWorker(const base::FilePath& dir, std::string* out_bytes) 
   int exit_code = 0;
   const bool finished = process.WaitForExitWithTimeout(base::Seconds(60),
                                                      &exit_code);
-  const bool ok = finished && exit_code == 0 &&
+  const bool produced = finished && exit_code == 0;
+#endif
+
+  const bool ok = produced &&
                   base::ReadFileToString(zip_path, out_bytes) &&
                   !out_bytes->empty();
   base::DeletePathRecursively(temp_dir);
@@ -288,11 +304,11 @@ void MigrateAppPaths(base::DictValue& registry) {
       }
     }
     if (updated != *path) {
-      base::FilePath candidate(updated);
+      base::FilePath candidate = base::FilePath::FromUTF8Unsafe(updated);
       if (!base::DirectoryExists(candidate) && id && !id->empty()) {
         base::FilePath fallback = root.AppendASCII(*id);
         if (base::DirectoryExists(fallback))
-          updated = fallback.value();
+          updated = fallback.AsUTF8Unsafe();
       }
       app.Set("path", updated);
       app.Set("updated_at", NowIso());
@@ -402,14 +418,23 @@ bool LaunchAppRuntimeServer(const std::string& app_id,
   }
   StopAppRuntimeServer(app_id);
 
-  base::FilePath python = base::FilePath("/usr/bin/python3");
+#if BUILDFLAG(IS_WIN)
+  // The `py` launcher ships in C:\Windows (always on PATH) and dispatches to
+  // python3; CreateProcess resolves the bare name via PATH at launch. This
+  // per-app server is best-effort — apps also preview through the gateway's
+  // /run/<id>/ static server — so a missing interpreter degrades gracefully
+  // (LaunchProcess returns an invalid process, handled below).
+  base::FilePath python(FILE_PATH_LITERAL("py.exe"));
+#else
+  base::FilePath python(FILE_PATH_LITERAL("/usr/bin/python3"));
   if (!base::PathExists(python))
-    python = base::FilePath("/usr/local/bin/python3");
+    python = base::FilePath(FILE_PATH_LITERAL("/usr/local/bin/python3"));
   if (!base::PathExists(python)) {
     RecordGatewayLog("error", "runtime", app_id, "launch_fail",
                      "python3 not found — cannot host app runtime", -1, "");
     return false;
   }
+#endif
 
   base::CommandLine cmd(python);
   cmd.AppendArg("-m");
@@ -422,6 +447,9 @@ bool LaunchAppRuntimeServer(const std::string& app_id,
 
   base::LaunchOptions options;
   options.current_directory = app_path;
+#if BUILDFLAG(IS_WIN)
+  options.start_hidden = true;  // no console window for the helper server
+#endif
   base::Process process = base::LaunchProcess(cmd, options);
   if (!process.IsValid()) {
     RecordGatewayLog("error", "runtime", app_id, "launch_fail",
@@ -432,7 +460,7 @@ bool LaunchAppRuntimeServer(const std::string& app_id,
   }
   (*g_app_runtime_servers)[app_id] = {std::move(process), port};
   LOG(INFO) << "[apps] runtime server app=" << app_id << " port=" << port
-            << " path=" << app_path.value();
+            << " path=" << app_path.AsUTF8Unsafe();
   RecordGatewayLog("info", "runtime", app_id, "server_start",
                    "runtime server started on port " +
                        base::NumberToString(port),
@@ -606,7 +634,10 @@ void MarkAppBuilding(const std::string& app_id) {
 }
 
 std::string GuessContentType(const base::FilePath& path) {
-  const std::string ext = base::ToLowerASCII(path.Extension());
+  // FilePath::Extension() is wstring on Windows; normalize to a UTF-8
+  // std::string (extensions are ASCII) for the comparisons below.
+  const std::string ext =
+      base::ToLowerASCII(base::FilePath(path.Extension()).AsUTF8Unsafe());
   if (ext == ".html" || ext == ".htm")
     return "text/html";
   if (ext == ".css")
@@ -638,7 +669,7 @@ base::FilePath ResolveAppPath(const base::DictValue& app) {
   const std::string* path = app.FindString("path");
   if (!path || path->empty())
     return base::FilePath();
-  return base::FilePath(*path);
+  return base::FilePath::FromUTF8Unsafe(*path);
 }
 
 std::string DefaultAppName(const std::string& prompt) {
@@ -883,7 +914,7 @@ bool TryHandleAppsRequest(
     }
     base::DictValue result;
     result.Set("ok", true);
-    result.Set("apps_root", AppsRootDir().value());
+    result.Set("apps_root", AppsRootDir().AsUTF8Unsafe());
     result.Set("apps", std::move(out_apps));
     SendJson(server, connection_id, net::HTTP_OK, std::move(result));
     return true;
@@ -899,7 +930,8 @@ bool TryHandleAppsRequest(
       SendJson(server, connection_id, net::HTTP_BAD_REQUEST, std::move(err));
       return true;
     }
-    base::FilePath abs = base::MakeAbsoluteFilePath(base::FilePath(*import_path));
+    base::FilePath abs =
+        base::MakeAbsoluteFilePath(base::FilePath::FromUTF8Unsafe(*import_path));
     if (abs.empty() || !base::DirectoryExists(abs)) {
       base::DictValue err;
       err.Set("error", "path not found");
@@ -908,12 +940,13 @@ bool TryHandleAppsRequest(
     }
     const std::string id = NewId();
     const std::string name =
-        name_body && !name_body->empty() ? *name_body : abs.BaseName().value();
+        name_body && !name_body->empty() ? *name_body
+                                         : abs.BaseName().AsUTF8Unsafe();
     const std::string conv_id = CreateAppConversation(id, name);
     base::DictValue app;
     app.Set("id", id);
     app.Set("name", name);
-    app.Set("path", abs.value());
+    app.Set("path", abs.AsUTF8Unsafe());
     app.Set("conversation_id", conv_id);
     app.Set("session_id", "");
     app.Set("status", kStatusReady);
@@ -966,7 +999,7 @@ bool TryHandleAppsRequest(
     base::DictValue app;
     app.Set("id", id);
     app.Set("name", name);
-    app.Set("path", app_dir.value());
+    app.Set("path", app_dir.AsUTF8Unsafe());
     app.Set("conversation_id", conv_id);
     app.Set("session_id", "");
     app.Set("status", kStatusIdle);
@@ -1203,7 +1236,7 @@ bool TryHandleAppsRequest(
     base::DictValue dup;
     dup.Set("id", new_id);
     dup.Set("name", name);
-    dup.Set("path", dst.value());
+    dup.Set("path", dst.AsUTF8Unsafe());
     dup.Set("conversation_id", conv_id);
     dup.Set("session_id", "");
     dup.Set("status", kStatusReady);

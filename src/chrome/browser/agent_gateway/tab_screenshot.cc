@@ -86,7 +86,9 @@ void CaptureViaCompositor(
   info.copy_rect = gfx::Rect(source_size);
   info.target_size = source_size;
 
-  view->EnsureSurfaceSynchronizedForWebTest();
+  // EnsureSurfaceSynchronizedForWebTest() was removed from the public
+  // RenderWidgetHostView API upstream; CopyFromSurface captures the current
+  // surface directly.
   view->CopyFromSurface(
       info.copy_rect, info.target_size, base::Seconds(8),
       base::BindOnce(
