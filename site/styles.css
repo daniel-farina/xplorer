@@ -526,3 +526,40 @@ html.theme-animating * {
 /* ---------- Scroll-reveal (applied by JS; no-JS shows content normally) ---------- */
 .reveal { opacity: 0; transform: translateY(20px); transition: opacity .6s ease, transform .7s cubic-bezier(.2, .7, .2, 1); }
 .reveal.is-visible { opacity: 1; transform: none; }
+
+/* ---------- OS logos: download cards + hero platform chips ---------- */
+.download-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); max-width: 780px; }
+.download-card {
+  display: flex; flex-direction: column; align-items: center; text-align: center;
+  transition: transform .18s ease, border-color .2s ease, box-shadow .2s ease;
+}
+.download-card:hover {
+  transform: translateY(-3px); border-color: var(--line-strong);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.12);
+}
+.download-card__buttons { justify-content: center; }
+.os-badge {
+  width: 58px; height: 58px; border-radius: 16px; display: grid; place-items: center;
+  margin-bottom: 14px; box-shadow: 0 8px 22px rgba(0, 0, 0, 0.16);
+}
+.os-badge svg { width: 32px; height: 32px; display: block; }
+.os-badge--apple { background: linear-gradient(145deg, #43434a 0%, #74747e 100%); }
+.os-badge--apple .os-apple { fill: #fff; }
+.os-badge--windows { background: #fff; border: 1px solid var(--line); }
+@media (max-width: 780px) { .download-grid { grid-template-columns: 1fr; max-width: 360px; } }
+
+/* Hero: OS logo in the primary button + a platform-chip showcase row */
+.btn .os-apple { width: 17px; height: 17px; fill: currentColor; }
+.hero__platforms {
+  display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-top: 18px;
+}
+.platform-chip {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 8px 15px; border-radius: 980px; border: 1px solid var(--line);
+  font: 600 13px "Inter", system-ui, sans-serif; color: var(--text); background: var(--bg);
+  transition: transform .15s ease, border-color .2s ease, background .2s ease;
+}
+.platform-chip:hover { transform: translateY(-1px); border-color: var(--line-strong); background: var(--fill); }
+.platform-chip svg { width: 16px; height: 16px; display: block; }
+.platform-chip .os-apple { fill: var(--text); }
+.platform-chip__note { color: var(--muted-2); font-weight: 500; }

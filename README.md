@@ -15,6 +15,7 @@
   <img src="https://img.shields.io/badge/macOS-Apple%20Silicon-000000?logo=apple&logoColor=white" alt="macOS Apple Silicon">
   <img src="https://img.shields.io/badge/Windows-x64-0078D6?logo=windows&logoColor=white" alt="Windows x64">
   <a href="https://github.com/daniel-farina/xplorer/releases"><img src="https://img.shields.io/github/v/release/daniel-farina/xplorer?color=2563eb" alt="Latest release"></a>
+  <a href="https://github.com/daniel-farina/xplorer/stargazers"><img src="https://img.shields.io/github/stars/daniel-farina/xplorer?color=f5a623&label=%E2%AD%90%20stars" alt="GitHub stars"></a>
   <a href="https://daniel-farina.github.io/xplorer/"><img src="https://img.shields.io/badge/website-xplorer-2563eb" alt="Website"></a>
 </p>
 
@@ -46,6 +47,7 @@ launch flags, no setup dance.
 - [Develop locally](#develop-locally)
 - [Project layout](#project-layout)
 - [Contributing](#contributing)
+- [Star history](#star-history)
 - [License](#license)
 
 ---
@@ -305,6 +307,22 @@ Contributions are welcome. A few things that keep this fork healthy:
   running browser (the SDK in `sdk/` is handy for scripted checks).
 
 Open an issue to discuss larger changes first, and keep PRs focused.
+
+---
+
+## Star history
+
+If Xplorer is useful to you, please **[give it a ⭐ on GitHub](https://github.com/daniel-farina/xplorer)** — it's the simplest way to support the project and helps more people discover it.
+
+<p align="center">
+  <a href="https://star-history.com/#daniel-farina/xplorer&Date">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=daniel-farina/xplorer&type=Date&theme=dark">
+      <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=daniel-farina/xplorer&type=Date">
+      <img alt="Xplorer star history" src="https://api.star-history.com/svg?repos=daniel-farina/xplorer&type=Date" width="640">
+    </picture>
+  </a>
+</p>
 
 ---
 
