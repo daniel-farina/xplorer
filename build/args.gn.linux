@@ -1,0 +1,23 @@
+# Xplorer release build configuration (Linux x64).
+is_debug = false
+is_component_build = false
+symbol_level = 0
+blink_symbol_level = 0
+
+# Branding: Chromium base (Google-branded builds require internal keys),
+# product name overridden to Xplorer via patches.
+is_chrome_branded = false
+
+# Enable H.264 / AAC / MP3 so sites that ship MP4 video (e.g. x.com) play.
+proprietary_codecs = true
+ffmpeg_branding = "Chrome"
+
+dcheck_always_on = false
+target_cpu = "x64"
+target_os = "linux"
+
+# lld ships with Chromium's bundled clang; faster linking.
+use_lld = true
+
+# Use Chromium's bundled Debian sysroot (default true) for a reproducible build
+# independent of the host distro's -dev packages. Do NOT set is_official_build.

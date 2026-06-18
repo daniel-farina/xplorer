@@ -764,7 +764,9 @@ def main(src: Path):
     # failed with "error code 0". Report up-to-date instead. (Live GitHub
     # release check deferred until the repo is public.)
     vum = src / "chrome/browser/ui/webui/help/version_updater_mac.mm"
-    vm = vum.read_text()
+    # macOS-only file: absent on Linux/Windows checkouts. Read as "" so the
+    # anchored edits below all no-op (and never write) when it doesn't exist.
+    vm = vum.read_text() if vum.exists() else ""
     _upd_pristine = (
         "  void CheckForUpdate(StatusCallback status_callback,\n"
         "                      PromoteCallback promote_callback) override {\n"
@@ -844,7 +846,7 @@ def main(src: Path):
         "        }];\n"
         "    [task resume];\n"
         "  }")
-    if "releases/latest" not in vm:
+    if vum.exists() and "releases/latest" not in vm:
         if _upd_pristine in vm:
             vm = vm.replace(_upd_pristine, _upd_new)
         elif _upd_old in vm:
@@ -860,8 +862,8 @@ def main(src: Path):
         print(f"  edited (live update check): {vum}")
     # Our CheckForUpdate no longer calls the UpdateStatus helper, which now
     # trips -Werror,-Wunused-function. Mark it maybe_unused.
-    vm2 = vum.read_text()
-    if "[[maybe_unused]] void UpdateStatus" not in vm2:
+    vm2 = vum.read_text() if vum.exists() else ""
+    if vum.exists() and "[[maybe_unused]] void UpdateStatus" not in vm2:
         vm2 = vm2.replace(
             "\nvoid UpdateStatus(VersionUpdater::StatusCallback",
             "\n[[maybe_unused]] void UpdateStatus(VersionUpdater::StatusCallback")
