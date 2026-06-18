@@ -13,6 +13,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/macOS-Apple%20Silicon-000000?logo=apple&logoColor=white" alt="macOS Apple Silicon">
+  <img src="https://img.shields.io/badge/Windows-x64-0078D6?logo=windows&logoColor=white" alt="Windows x64">
   <a href="https://github.com/daniel-farina/xplorer/releases"><img src="https://img.shields.io/github/v/release/daniel-farina/xplorer?color=2563eb" alt="Latest release"></a>
   <a href="https://daniel-farina.github.io/xplorer/"><img src="https://img.shields.io/badge/website-xplorer-2563eb" alt="Website"></a>
 </p>
@@ -186,17 +187,20 @@ Full endpoint reference: [`docs/AGENT_API.md`](docs/AGENT_API.md).
 
 ## Download
 
-Latest macOS build — Developer ID–signed & notarized, so it opens without
-Gatekeeper warnings. These links always point at the **newest release**:
+Latest builds — these links always point at the **newest release**. macOS builds
+are Developer ID–signed & notarized (open without Gatekeeper warnings); the
+Windows build is an unsigned portable zip (SmartScreen may warn — choose **More
+info → Run anyway**).
 
-| Your Mac | Direct download |
+| Platform | Direct download |
 |----------|-----------------|
-| **Apple Silicon** (M1/M2/M3/M4) | [**Xplorer-macos-arm64.dmg**](https://github.com/daniel-farina/xplorer/releases/latest/download/Xplorer-macos-arm64.dmg) · [.zip](https://github.com/daniel-farina/xplorer/releases/latest/download/Xplorer-macos-arm64.zip) |
-| **Intel** | [**Xplorer-macos-x86_64.dmg**](https://github.com/daniel-farina/xplorer/releases/latest/download/Xplorer-macos-x86_64.dmg) · [.zip](https://github.com/daniel-farina/xplorer/releases/latest/download/Xplorer-macos-x86_64.zip) |
+| **macOS — Apple Silicon** (M1/M2/M3/M4) | [**Xplorer-macos-arm64.dmg**](https://github.com/daniel-farina/xplorer/releases/latest/download/Xplorer-macos-arm64.dmg) · [.zip](https://github.com/daniel-farina/xplorer/releases/latest/download/Xplorer-macos-arm64.zip) |
+| **macOS — Intel** | [**Xplorer-macos-x86_64.dmg**](https://github.com/daniel-farina/xplorer/releases/latest/download/Xplorer-macos-x86_64.dmg) · [.zip](https://github.com/daniel-farina/xplorer/releases/latest/download/Xplorer-macos-x86_64.zip) |
+| **Windows x64** (10/11) | [**Xplorer-windows-x64.zip**](https://github.com/daniel-farina/xplorer/releases/latest/download/Xplorer-windows-x64.zip) |
 
-Open the DMG and drag **Xplorer** to Applications. Not sure which Mac you have?
- (Apple menu → About This Mac.) All releases + checksums on the
-[Releases](https://github.com/daniel-farina/xplorer/releases) page, or
+macOS: open the DMG and drag **Xplorer** to Applications. Windows: unzip and run
+**`Xplorer\Xplorer.exe`** (portable, no installer). All releases + checksums on
+the [Releases](https://github.com/daniel-farina/xplorer/releases) page, or
 [build it yourself](#develop-locally).
 
 ---
