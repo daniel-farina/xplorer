@@ -630,3 +630,27 @@ body { position: relative; }
   }
   .bg-space { background-size: cover; background-position: top center; }
 }
+
+/* ---------- Mobile: overflow clamp (iOS shrink-to-fit) + hero contrast ---------- */
+/* iOS Safari can shrink-to-fit the whole page when a descendant is wider than
+   the viewport (here: the wide code block), even though it scrolls internally.
+   Clamp the document so the viewport width is authoritative. */
+html { overflow-x: hidden; }
+html, body { width: 100%; max-width: 100%; }
+img, svg, video, canvas, iframe, table { max-width: 100%; }
+
+@media (max-width: 760px) {
+  .section { padding: 64px 20px; }
+  .codeblock { max-width: 100%; }
+  .codeblock pre { -webkit-overflow-scrolling: touch; }
+  .codeblock code { font-size: 12px; line-height: 1.6; }
+  /* The gradient hero title (text -> muted) plus the white halo washed out on
+     light bg; render it solid + high-contrast on mobile, no halo. */
+  .hero__title { text-shadow: none; }
+  .hero__title .grad {
+    background: none;
+    -webkit-background-clip: border-box; background-clip: border-box;
+    -webkit-text-fill-color: var(--text); color: var(--text);
+  }
+  .hero__wordmark { text-shadow: 0 1px 12px var(--bg); }
+}
