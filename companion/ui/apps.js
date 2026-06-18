@@ -39,7 +39,10 @@ function applyView() {
       ? 'Describe an app for Grok to build, or import an existing app folder.'
       : 'Build, import, and manage apps with Grok Build agents. Each app lives in its own folder with a dedicated conversation.';
   }
-  if (creating) $('#create-prompt')?.focus();
+  if (creating) {
+    $('#create-prompt')?.focus();
+    ensureGrokReady();  // prompt to install Grok Build if it isn't set up
+  }
 }
 
 function goToView(path) {
@@ -389,6 +392,7 @@ createBtn.onclick = async () => {
   const prompt = $('#create-prompt').value.trim();
   const name = $('#create-name').value.trim();
   if (!prompt) return;
+  if (!(await ensureGrokReady())) return;  // Grok Build required to build apps
   createBtn.disabled = true;
   try {
     const r = await fetch('/api/apps', {

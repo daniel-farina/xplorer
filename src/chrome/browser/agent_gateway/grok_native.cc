@@ -586,6 +586,34 @@ base::CommandLine MaybeWrapForWindowsShell(const base::CommandLine& cmd) {
 }
 #endif  // BUILDFLAG(IS_WIN)
 
+// Whether the grok CLI ("Grok Build") is actually runnable — via an npm shim,
+// PATH, or an absolute path. The companion UI calls this to prompt the user to
+// install Grok Build before creating/building apps (which shell out to grok).
+// Runs `<grok> --version`; a clean exit means it's installed. Cross-platform.
+base::DictValue GetGrokInstallStatus() {
+  const base::FilePath bin = ResolveGrokBinary();
+  base::CommandLine cmd(bin);
+  cmd.AppendArg("--version");
+#if BUILDFLAG(IS_WIN)
+  cmd = MaybeWrapForWindowsShell(cmd);
+#endif
+  std::string out;
+  int exit_code = -1;
+  const bool ran = base::GetAppOutputWithExitCode(cmd, &out, &exit_code);
+  const bool installed = ran && exit_code == 0;
+  base::DictValue d;
+  d.Set("installed", installed);
+  d.Set("path", bin.AsUTF8Unsafe());
+  if (installed) {
+    std::string version =
+        std::string(base::TrimWhitespaceASCII(out, base::TRIM_ALL));
+    if (version.size() > 80)
+      version.resize(80);
+    d.Set("version", version);
+  }
+  return d;
+}
+
 base::ListValue ListGrokModels() {
   base::CommandLine cmd(base::CommandLine::NO_PROGRAM);
   cmd.SetProgram(ResolveGrokBinary());
@@ -2132,6 +2160,13 @@ bool GrokNative::TryHandleRequest(
     d.Set("model_label", ModelDisplayName(model));
     d.Set("models", ListGrokModels());
     SendJson(server, connection_id, net::HTTP_OK, std::move(d));
+    return true;
+  }
+
+  // Grok Build install check — the companion UI shows an install splash before
+  // creating/building apps if grok isn't runnable.
+  if (info.method == "GET" && path == "/api/grok/status") {
+    SendJson(server, connection_id, net::HTTP_OK, GetGrokInstallStatus());
     return true;
   }
 

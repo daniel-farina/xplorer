@@ -775,3 +775,110 @@ function fileToBase64(file) {
     reader.readAsDataURL(file);
   });
 }
+
+// --- Grok Build install check + splash -------------------------------------
+// Building apps shells out to the `grok` CLI ("Grok Build"). If it isn't
+// installed, guide the user to set it up instead of failing mid-build.
+async function fetchGrokStatus() {
+  try {
+    const r = await fetch('/api/grok/status', { cache: 'no-store' });
+    if (!r.ok) return { installed: false };
+    return await r.json();
+  } catch {
+    return { installed: false };
+  }
+}
+
+function ensureGrokSplashStyles() {
+  if (document.getElementById('grok-splash-styles')) return;
+  const s = document.createElement('style');
+  s.id = 'grok-splash-styles';
+  s.textContent = `
+  .grok-splash-overlay{position:fixed;inset:0;z-index:2147483600;display:flex;
+    align-items:center;justify-content:center;padding:24px;
+    background:rgba(0,0,0,.55);backdrop-filter:blur(4px);}
+  .grok-splash-overlay.hidden{display:none;}
+  .grok-splash{max-width:520px;width:100%;background:var(--surface,#111);
+    color:var(--text,#fff);border:1px solid var(--border,#2f2f2f);border-radius:16px;
+    padding:28px 28px 24px;box-shadow:0 24px 60px var(--shadow,rgba(0,0,0,.5));
+    font:14px/1.5 -apple-system,system-ui,'Segoe UI',sans-serif;}
+  .grok-splash__icon{width:48px;height:48px;border-radius:12px;
+    background:var(--accent-soft,rgba(255,255,255,.1));display:flex;align-items:center;
+    justify-content:center;font-size:24px;margin-bottom:16px;}
+  .grok-splash h2{margin:0 0 8px;font-size:20px;font-weight:650;}
+  .grok-splash p{margin:0 0 16px;color:var(--text-secondary,#a3a3a3);}
+  .grok-splash ol{margin:0 0 18px;padding-left:20px;}
+  .grok-splash ol li{margin:0 0 10px;}
+  .grok-splash code{background:var(--elevated,#1a1a1a);border:1px solid var(--border,#2f2f2f);
+    border-radius:6px;padding:2px 7px;font:12.5px ui-monospace,Menlo,Consolas,monospace;user-select:all;}
+  .grok-splash__row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:4px;}
+  .grok-splash__btn{appearance:none;cursor:pointer;border-radius:9px;padding:9px 16px;
+    font-size:13.5px;font-weight:600;border:1px solid var(--border,#2f2f2f);text-decoration:none;}
+  .grok-splash__btn.primary{background:var(--button-bg,#fff);color:var(--button-text,#000);border-color:transparent;}
+  .grok-splash__btn.ghost{background:transparent;color:var(--text,#fff);}
+  .grok-splash__note{margin-top:16px;font-size:12px;color:var(--text-secondary,#a3a3a3);}
+  .grok-splash__status{margin-top:12px;font-size:12.5px;min-height:16px;}
+  .grok-splash__status.err{color:#ff7a7a;}
+  `;
+  document.head.appendChild(s);
+}
+
+// Show the "install Grok Build" splash. Recheck re-runs the check and hides on
+// success (firing a 'grok-ready' event on the overlay).
+function showGrokInstallSplash() {
+  ensureGrokSplashStyles();
+  let overlay = document.getElementById('grok-splash');
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.id = 'grok-splash';
+    overlay.className = 'grok-splash-overlay';
+    overlay.innerHTML = `
+      <div class="grok-splash" role="dialog" aria-modal="true" aria-labelledby="grok-splash-title">
+        <div class="grok-splash__icon">✦</div>
+        <h2 id="grok-splash-title">Set up Grok Build</h2>
+        <p>Building apps runs <strong>Grok Build</strong> — the <code>grok</code> command-line tool — which isn't installed or on your PATH yet.</p>
+        <ol>
+          <li>Install the <strong>Grok CLI</strong> and make sure <code>grok</code> runs in your terminal.</li>
+          <li>Sign in: <code>grok login</code></li>
+          <li>Come back and click <strong>Recheck</strong>.</li>
+        </ol>
+        <div class="grok-splash__row">
+          <button type="button" class="grok-splash__btn primary" data-grok-recheck>Recheck</button>
+          <a class="grok-splash__btn ghost" href="https://grok.com/" target="_blank" rel="noopener">Get Grok</a>
+          <button type="button" class="grok-splash__btn ghost" data-grok-dismiss>Not now</button>
+        </div>
+        <div class="grok-splash__status" data-grok-status></div>
+        <p class="grok-splash__note">Already installed elsewhere? Set its full path as <code>grok_bin</code> in <code>~/.xplorer/companion.json</code>, or the <code>GROK_BIN</code> environment variable.</p>
+      </div>`;
+    document.body.appendChild(overlay);
+    overlay.querySelector('[data-grok-dismiss]').onclick = () => overlay.classList.add('hidden');
+    overlay.querySelector('[data-grok-recheck]').onclick = async () => {
+      const statusEl = overlay.querySelector('[data-grok-status]');
+      const btn = overlay.querySelector('[data-grok-recheck]');
+      btn.disabled = true;
+      statusEl.className = 'grok-splash__status';
+      statusEl.textContent = 'Checking…';
+      const s = await fetchGrokStatus();
+      btn.disabled = false;
+      if (s.installed) {
+        statusEl.textContent = 'Grok Build detected ✓';
+        overlay.dispatchEvent(new CustomEvent('grok-ready'));
+        setTimeout(() => overlay.classList.add('hidden'), 700);
+      } else {
+        statusEl.className = 'grok-splash__status err';
+        statusEl.textContent = 'Still not detected — make sure `grok` runs in a terminal, then retry.';
+      }
+    };
+  }
+  overlay.classList.remove('hidden');
+  return overlay;
+}
+
+// Gate app-building actions: resolves true if grok is installed; otherwise
+// shows the install splash and resolves false.
+async function ensureGrokReady() {
+  const status = await fetchGrokStatus();
+  if (status.installed) return true;
+  showGrokInstallSplash();
+  return false;
+}

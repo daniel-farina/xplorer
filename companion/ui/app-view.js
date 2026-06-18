@@ -361,6 +361,7 @@ async function refreshApp() {
 
 async function runAgentStream({ text, mode = 'message' }) {
   if (busy || !app || !text) return;
+  if (!(await ensureGrokReady())) return;  // Grok Build required to build apps
   const endpoint = mode === 'build' ? 'build/stream' : 'message/stream';
   busy = true;
   $('#chat-send').disabled = true;

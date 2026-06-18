@@ -192,6 +192,7 @@ async function sendMessage(text, { retry = false } = {}) {
   if (!text.trim() || busy || !activeId) return;
   const conv = conversations.find((c) => c.id === activeId);
   if (!conv) return;
+  if (!(await ensureGrokReady())) return;  // Grok Build required to build/modify
 
   const model = messageNeedsBrowserTools(text)
     ? modelForSearchMode('web', activeModel, models)
