@@ -191,18 +191,20 @@ Full endpoint reference: [`docs/AGENT_API.md`](docs/AGENT_API.md).
 
 Latest builds — these links always point at the **newest release**. macOS builds
 are Developer ID–signed & notarized (open without Gatekeeper warnings); the
-Windows build is an unsigned portable zip (SmartScreen may warn — choose **More
-info → Run anyway**).
+Windows build isn't code‑signed yet (SmartScreen may warn — choose **More info →
+Run anyway**, and allow it in Defender if prompted).
 
 | Platform | Direct download |
 |----------|-----------------|
 | **macOS — Apple Silicon** (M1/M2/M3/M4) | [**Xplorer-macos-arm64.dmg**](https://github.com/daniel-farina/xplorer/releases/latest/download/Xplorer-macos-arm64.dmg) · [.zip](https://github.com/daniel-farina/xplorer/releases/latest/download/Xplorer-macos-arm64.zip) |
 | **macOS — Intel** | [**Xplorer-macos-x86_64.dmg**](https://github.com/daniel-farina/xplorer/releases/latest/download/Xplorer-macos-x86_64.dmg) · [.zip](https://github.com/daniel-farina/xplorer/releases/latest/download/Xplorer-macos-x86_64.zip) |
-| **Windows x64** (10/11) | [**Xplorer-windows-x64.zip**](https://github.com/daniel-farina/xplorer/releases/latest/download/Xplorer-windows-x64.zip) |
+| **Windows x64** (10/11) | [**Xplorer-windows-x64-installer.exe**](https://github.com/daniel-farina/xplorer/releases/latest/download/Xplorer-windows-x64-installer.exe) · [.zip](https://github.com/daniel-farina/xplorer/releases/latest/download/Xplorer-windows-x64.zip) |
 
-macOS: open the DMG and drag **Xplorer** to Applications. Windows: unzip and run
-**`Xplorer\Xplorer.exe`** (portable, no installer). All releases + checksums on
-the [Releases](https://github.com/daniel-farina/xplorer/releases) page, or
+macOS: open the DMG and drag **Xplorer** to Applications. Windows: run the
+**installer** (`Xplorer-windows-x64-installer.exe` — creates Start‑menu & Desktop
+shortcuts), or grab the portable **`.zip`** and run **`Xplorer\Xplorer.exe`**. All
+releases + checksums on the
+[Releases](https://github.com/daniel-farina/xplorer/releases) page, or
 [build it yourself](#develop-locally).
 
 ---
