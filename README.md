@@ -41,7 +41,7 @@ launch flags, no setup dance.
 - [How it works](#how-it-works)
 - [Architecture](#architecture)
 - [For agents & developers](#for-agents--developers)
-- [Install](#install)
+- [Download](#download)
 - [Develop locally](#develop-locally)
 - [Project layout](#project-layout)
 - [Contributing](#contributing)
@@ -184,12 +184,20 @@ Full endpoint reference: [`docs/AGENT_API.md`](docs/AGENT_API.md).
 
 ---
 
-## Install
+## Download
 
-Download the latest signed, notarized build for your Mac from the
-[**Releases**](https://github.com/daniel-farina/xplorer/releases) page — choose
-`Xplorer-macos-arm64` (Apple Silicon) or `Xplorer-macos-x86_64` (Intel) — `.dmg`
-or `.zip`, or [build it yourself](#develop-locally).
+Latest macOS build — Developer ID–signed & notarized, so it opens without
+Gatekeeper warnings. These links always point at the **newest release**:
+
+| Your Mac | Direct download |
+|----------|-----------------|
+| **Apple Silicon** (M1/M2/M3/M4) | [**Xplorer-macos-arm64.dmg**](https://github.com/daniel-farina/xplorer/releases/latest/download/Xplorer-macos-arm64.dmg) · [.zip](https://github.com/daniel-farina/xplorer/releases/latest/download/Xplorer-macos-arm64.zip) |
+| **Intel** | [**Xplorer-macos-x86_64.dmg**](https://github.com/daniel-farina/xplorer/releases/latest/download/Xplorer-macos-x86_64.dmg) · [.zip](https://github.com/daniel-farina/xplorer/releases/latest/download/Xplorer-macos-x86_64.zip) |
+
+Open the DMG and drag **Xplorer** to Applications. Not sure which Mac you have?
+ (Apple menu → About This Mac.) All releases + checksums on the
+[Releases](https://github.com/daniel-farina/xplorer/releases) page, or
+[build it yourself](#develop-locally).
 
 ---
 

@@ -165,8 +165,8 @@ host machine), so cross-compiled Intel builds get `x86_64` in the filename.
 
 ```sh
 # After signing the app (§6), package each arch separately:
-./xplorer/scripts/package.sh "$(pwd)/chromium/src/out/aether" v0.5.0
-./xplorer/scripts/package.sh "$(pwd)/chromium/src/out/aether_x64" v0.5.0
+./xplorer/scripts/package.sh "$(pwd)/chromium/src/out/aether" v0.6.1
+./xplorer/scripts/package.sh "$(pwd)/chromium/src/out/aether_x64" v0.6.1
 ```
 
 Produces in `xplorer/dist/` (per arch):
@@ -184,8 +184,8 @@ Produces in `xplorer/dist/` (per arch):
 apply → build → sign+notarize app → package → notarize+staple dmg → checksums.
 
 ```sh
-./xplorer/scripts/release_arch.sh arm64 v0.5.0 ../chromium/src
-./xplorer/scripts/release_arch.sh x64    v0.5.0 ../chromium/src
+./xplorer/scripts/release_arch.sh arm64 v0.6.1 ../chromium/src
+./xplorer/scripts/release_arch.sh x64    v0.6.1 ../chromium/src
 ```
 
 Use `--sign-only` to sign the app without notarization (local testing).
@@ -275,23 +275,23 @@ all six files. For a manual publish:
 
 ```sh
 cd xplorer
-gh release create v0.5.0 --target master --title "Xplorer v0.5.0" --notes "…release notes…"
+gh release create v0.6.1 --target master --title "Xplorer v0.6.1" --notes "…release notes…"
 # upload assets ONE AT A TIME, in the foreground (see gotcha below)
 for arch in arm64 x86_64; do
-  gh release upload v0.5.0 "dist/Xplorer-macos-${arch}.dmg"        --clobber
-  gh release upload v0.5.0 "dist/Xplorer-macos-${arch}.zip"        --clobber
-  gh release upload v0.5.0 "dist/Xplorer-macos-${arch}.sha256.txt" --clobber
+  gh release upload v0.6.1 "dist/Xplorer-macos-${arch}.dmg"        --clobber
+  gh release upload v0.6.1 "dist/Xplorer-macos-${arch}.zip"        --clobber
+  gh release upload v0.6.1 "dist/Xplorer-macos-${arch}.sha256.txt" --clobber
 done
 # verify — expect 6 assets (3 per arch)
-gh release view v0.5.0 --json url,assets -q '.url, (.assets[]|"  \(.name)  \(.size)")'
+gh release view v0.6.1 --json url,assets -q '.url, (.assets[]|"  \(.name)  \(.size)")'
 ```
 
 To add Intel artifacts to an **existing** release (e.g. arm64 already shipped):
 
 ```sh
-gh release upload v0.5.0 dist/Xplorer-macos-x86_64.dmg        --clobber
-gh release upload v0.5.0 dist/Xplorer-macos-x86_64.zip        --clobber
-gh release upload v0.5.0 dist/Xplorer-macos-x86_64.sha256.txt --clobber
+gh release upload v0.6.1 dist/Xplorer-macos-x86_64.dmg        --clobber
+gh release upload v0.6.1 dist/Xplorer-macos-x86_64.zip        --clobber
+gh release upload v0.6.1 dist/Xplorer-macos-x86_64.sha256.txt --clobber
 ```
 
 ---

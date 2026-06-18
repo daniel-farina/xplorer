@@ -9,6 +9,7 @@
 #include "base/base_paths.h"
 #include "base/files/file_util.h"
 #include "base/functional/bind.h"
+#include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
 #include "base/path_service.h"
 #include "base/strings/string_util.h"
@@ -82,6 +83,30 @@ std::string JsonStringLiteral(const std::string& value) {
   return json;
 }
 
+// Read the "toolbar" config dict from grok_settings.json and serialize it back
+// to a compact JSON string. Returns "" if the file is missing, unparseable, or
+// has no "toolbar" key -- callers then bake `toolbarConfig:null`. The native
+// overlay can't fetch cross-origin (third-party CSP), so the config MUST be
+// baked into the injection rather than fetched at runtime.
+std::string LoadToolbarConfigJson() {
+  base::FilePath path = ResolveDataFile("grok_settings.json");
+  if (path.empty())
+    return std::string();
+  std::string contents;
+  if (!base::ReadFileToString(path, &contents) || contents.empty())
+    return std::string();
+  auto parsed = base::JSONReader::ReadDict(contents, base::JSON_PARSE_RFC);
+  if (!parsed)
+    return std::string();
+  const base::DictValue* toolbar = parsed->FindDict("toolbar");
+  if (!toolbar)
+    return std::string();
+  std::string out;
+  if (!base::JSONWriter::Write(*toolbar, &out))
+    return std::string();
+  return out;
+}
+
 std::string BrowserThemeAttribute() {
   Profile* profile = ProfileManager::GetLastUsedProfile();
   if (!profile)
@@ -121,24 +146,42 @@ std::string BuildInjectScript(const std::string& active_mode) {
   if (js.empty() || html.empty() || css.empty())
     return MinimalFallbackScript(gw);
 
+  // Config-driven toolbar customization, baked in (the native overlay can't
+  // fetch the gateway cross-origin). |tbcfg_js| is a JS expression evaluating
+  // to either the parsed config object or null. We build it from a JSON string
+  // literal so the renderer JSON.parse()s our trusted config rather than us
+  // splicing raw JSON into source. JSON of our config contains no '%', but we
+  // still append it via std::string concatenation (not StringPrintf) to be safe.
+  const std::string toolbar_json = LoadToolbarConfigJson();
+  const std::string tbcfg_js =
+      toolbar_json.empty()
+          ? std::string("null")
+          : ("JSON.parse(" + JsonStringLiteral(toolbar_json) + ")");
+
   // companion/ui/toolbar.js is the single source of toolbar behavior for BOTH
   // surfaces. It defines window.XplorerToolbar; the bootstrap below calls
   // XplorerToolbar.mountNative() with the canonical markup + CSS baked in (so
   // the native overlay never fetches cross-origin). The markup's root-relative
   // hrefs are rewritten to absolute gateway URLs in JS at mount time (see
   // absolutizeHrefs() in toolbar.js) -- replacing the old C++ string rewrite.
+  // NOTE: the mountNative({...}) object is left UNCLOSED here on purpose --
+  // |toolbarConfig:| + tbcfg_js and the closing "});}})();" are appended below
+  // via concatenation so the (possibly large) baked JS never hits StringPrintf.
   const std::string boot = base::StringPrintf(
       ";(function(){if(window.XplorerToolbar&&window.XplorerToolbar.mountNative)"
       "{window.XplorerToolbar.mountNative({surface:'native',baseHtml:%s,"
-      "baseCss:%s,gatewayOrigin:%s,theme:%s,fallbackPill:%s});}})();",
+      "baseCss:%s,gatewayOrigin:%s,theme:%s,fallbackPill:%s",
       JsonStringLiteral(html).c_str(), JsonStringLiteral(css).c_str(),
       JsonStringLiteral(gw).c_str(),
       JsonStringLiteral(BrowserThemeAttribute()).c_str(),
       JsonStringLiteral(active_mode).c_str());
 
+  const std::string boot_full =
+      boot + ",toolbarConfig:" + tbcfg_js + "});}})();";
+
   // Concatenate the JS source -- never run it through a printf format string,
   // since it may contain '%'.
-  return js + "\n" + boot;
+  return js + "\n" + boot_full;
 }
 
 class GrokWebBarInjector : public content::WebContentsObserver,
