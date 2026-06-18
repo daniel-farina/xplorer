@@ -154,18 +154,39 @@ Produces in `xplorer\dist\`:
 
 ---
 
-## 5. (Optional) Code signing
+## 5. Code signing (fixes "unknown publisher" + SmartScreen/Defender)
 
-Windows has no notarization requirement, but unsigned binaries trip SmartScreen.
-To sign, use `signtool` (the Authenticode analog of `codesign`) on `Xplorer.exe`,
-`chrome.dll`, and `mini_installer.exe` with an OV/EV certificate, e.g.:
+Unsigned binaries are the cause of: SmartScreen "unknown publisher", the
+"Windows protected your PC" block, **and** Defender sometimes quarantining a DLL
+from the download — which then surfaces as a missing-DLL **error on launch**.
+The fix is a real Authenticode code-signing certificate; a self-signed cert does
+*not* help SmartScreen.
+
+**Certificate options** (you obtain this from a CA — DigiCert, Sectigo, SSL.com,
+GlobalSign, Certum):
+- **EV (Extended Validation)** — *instant* SmartScreen reputation (no warning
+  from day one). Ships on a USB hardware token or cloud HSM (Azure Key Vault).
+  Best choice. ~$300–700/yr.
+- **OV (Organization Validation)** — cheaper (~$200–400/yr) but SmartScreen
+  reputation accrues over downloads/time (early users still warned for a while).
+  Now also delivered on a token/HSM (no more exportable PFX for new issuances).
+
+**Signing** (`scripts/sign_win.ps1`, wraps `signtool` / `AzureSignTool` with
+SHA-256 + RFC-3161 timestamp). Sign in this order so the zip *and* installer
+contain signed binaries:
 
 ```powershell
-signtool sign /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 /a `
-  out\xplorer_x64\chrome.exe out\xplorer_x64\chrome.dll
+.\build.ps1 -Src C:\src\chromium\src                       # 1. build chrome
+.\scripts\sign_win.ps1 -OutDir ...\out\xplorer_x64 <cert>  # 2. sign binaries
+.\build.ps1 -Src C:\src\chromium\src -Installer            # 3. installer repacks signed bins
+.\scripts\sign_win.ps1 -OutDir ...\out\xplorer_x64 -InstallerOnly <cert>  # 4. sign installer
+.\scripts\package.ps1 -OutDir ...\out\xplorer_x64 -Installer             # 5. package
 ```
 
-Sign **before** packaging so the zip/installer contain signed binaries.
+`<cert>` is one of:
+- PFX file: `-PfxPath cert.pfx -PfxPassword '…'`
+- Azure Key Vault (cloud HSM, CI-friendly): `-KeyVaultUrl … -KeyVaultCert … -KeyVaultClientId … -KeyVaultClientSecret … -KeyVaultTenantId …` (needs `dotnet tool install --global AzureSignTool`)
+- Hardware token: plug it in and omit the cert args — `signtool /a` auto-selects from the cert store.
 
 ---
 
