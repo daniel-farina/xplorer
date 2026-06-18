@@ -17,11 +17,14 @@
 .PARAMETER Src
   Chromium src checkout. Defaults to ..\chromium\src.
 
-.PARAMETER Installer
-  Also build + package mini_installer.exe.
+.PARAMETER NoInstaller
+  Skip the mini_installer.exe build + packaging. By default a release builds and
+  packages the installer (Xplorer-windows-x64-installer.exe) alongside the
+  portable zip; pass -NoInstaller for a zip-only build.
 
 .EXAMPLE
-  .\scripts\release_win.ps1 -Arch x64 -Version v0.5.0
+  .\scripts\release_win.ps1 -Arch x64 -Version v0.5.0            # zip + installer
+  .\scripts\release_win.ps1 -Arch x64 -Version v0.5.0 -NoInstaller   # zip only
 #>
 [CmdletBinding()]
 param(
