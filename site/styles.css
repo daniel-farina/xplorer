@@ -563,3 +563,46 @@ html.theme-animating * {
 .platform-chip svg { width: 16px; height: 16px; display: block; }
 .platform-chip .os-apple { fill: var(--text); }
 .platform-chip__note { color: var(--muted-2); font-weight: 500; }
+
+/* ---------- Mobile nav (hamburger) + scroll-friendly background ---------- */
+/* Background layers scroll WITH the page (pinned to the top) instead of being
+   fixed to the viewport — the fixed version looked "stuck" on scroll and janks
+   on mobile (background-attachment:fixed is poorly supported there). */
+body { position: relative; }
+.bg-space, .bg-anim { position: absolute; }
+
+.nav__toggle { display: none; }
+
+@media (max-width: 760px) {
+  .nav__toggle {
+    display: inline-flex; flex-direction: column; justify-content: center; gap: 5px;
+    width: 44px; height: 40px; padding: 10px 11px; border-radius: 12px;
+    border: 1px solid var(--line-strong); background: var(--bg); cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .nav__toggle span {
+    display: block; height: 2px; width: 100%; background: var(--text); border-radius: 2px;
+    transition: transform .25s ease, opacity .2s ease;
+  }
+  .nav.is-open .nav__toggle span:nth-child(1) { transform: translateY(7px) rotate(45deg); }
+  .nav.is-open .nav__toggle span:nth-child(2) { opacity: 0; }
+  .nav.is-open .nav__toggle span:nth-child(3) { transform: translateY(-7px) rotate(-45deg); }
+
+  .nav.is-open { background: var(--bg); }
+  .nav__links {
+    position: absolute; top: 100%; left: 0; right: 0;
+    flex-direction: column; align-items: stretch; gap: 2px;
+    padding: 8px 18px 18px; background: var(--bg);
+    border-bottom: 1px solid var(--line); box-shadow: 0 22px 44px rgba(0, 0, 0, 0.18);
+    transform: translateY(-10px); opacity: 0; pointer-events: none;
+    transition: transform .22s ease, opacity .22s ease;
+  }
+  .nav.is-open .nav__links { transform: none; opacity: 1; pointer-events: auto; }
+  /* override the desktop hide-links rule — show every link in the dropdown */
+  .nav__links a:not(.nav__gh) {
+    display: block; padding: 12px 8px; font-size: 16px; border-radius: 10px; color: var(--text);
+  }
+  .nav__links a:not(.nav__gh):hover { background: var(--fill); }
+  .nav__gh { justify-content: center; margin-top: 8px; }
+  .theme-toggle { align-self: flex-start; margin-top: 4px; }
+}

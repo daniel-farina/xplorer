@@ -38,7 +38,7 @@
       <svg class="nav__x" viewBox="0 0 32 32" aria-hidden="true"><path d="M9.5 9.5 L22.5 22.5 M22.5 9.5 L9.5 22.5" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round"/></svg>
       <span class="nav__word">plorer</span>
     </a>
-    <nav class="nav__links">
+    <nav class="nav__links" id="nav-links">
       <a href="#features">Features</a>
       <a href="#showcase">Showcase</a>
       <a href="#customize">Customize</a>
@@ -53,6 +53,9 @@
         <svg class="ico ico--sun" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M12 17a5 5 0 1 0 0-10 5 5 0 0 0 0 10zm0-13a1 1 0 0 1 1 1v1a1 1 0 1 1-2 0V5a1 1 0 0 1 1-1zm0 14a1 1 0 0 1 1 1v1a1 1 0 1 1-2 0v-1a1 1 0 0 1 1-1zM4 11h1a1 1 0 1 1 0 2H4a1 1 0 1 1 0-2zm15 0h1a1 1 0 1 1 0 2h-1a1 1 0 1 1 0-2zM6.3 5.3l.7.7A1 1 0 1 1 5.6 7.4l-.7-.7a1 1 0 0 1 1.4-1.4zm11 11l.7.7a1 1 0 0 1-1.4 1.4l-.7-.7a1 1 0 0 1 1.4-1.4zM17.7 5.3a1 1 0 0 1 0 1.4l-.7.7A1 1 0 1 1 15.6 6l.7-.7a1 1 0 0 1 1.4 0zM6.3 16.3a1 1 0 0 1 1.4 1.4l-.7.7A1 1 0 0 1 5.6 17l.7-.7z"/></svg>
       </button>
     </nav>
+    <button type="button" class="nav__toggle" id="nav-toggle" aria-label="Open menu" aria-expanded="false" aria-controls="nav-links">
+      <span></span><span></span><span></span>
+    </button>
     </div>
   </header>
 
@@ -632,6 +635,34 @@ curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:9334/tabs
       panel.querySelector('[data-act="reset"]').addEventListener('click', function () {
         try { localStorage.removeItem(active.key); } catch (e) {}
         location.reload();
+      });
+    })();
+  </script>
+
+  <!-- Mobile nav: hamburger toggle -->
+  <script>
+    (function () {
+      var nav = document.querySelector('.nav');
+      var btn = document.getElementById('nav-toggle');
+      var links = document.getElementById('nav-links');
+      if (!nav || !btn || !links) return;
+      function setOpen(open) {
+        nav.classList.toggle('is-open', open);
+        btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+        btn.setAttribute('aria-label', open ? 'Close menu' : 'Open menu');
+      }
+      btn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        setOpen(!nav.classList.contains('is-open'));
+      });
+      links.addEventListener('click', function (e) {
+        if (e.target.closest('a')) setOpen(false);
+      });
+      document.addEventListener('click', function (e) {
+        if (nav.classList.contains('is-open') && !nav.contains(e.target)) setOpen(false);
+      });
+      document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') setOpen(false);
       });
     })();
   </script>
