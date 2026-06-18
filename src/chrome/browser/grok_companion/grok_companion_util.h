@@ -6,7 +6,9 @@
 
 #include <vector>
 
+#include "base/callback_list.h"
 #include "base/files/file_path.h"
+#include "base/functional/callback_forward.h"
 #include "base/strings/string_util.h"
 #include "base/values.h"
 #include "url/gurl.h"
@@ -79,6 +81,20 @@ void SetSearchHomeMode(const std::string& mode);
 // absent/empty/non-list, so callers fall back to their built-in defaults. The
 // schema mirrors companion/ui/toolbar.js DEFAULT_PILLS.
 std::vector<base::DictValue> GetToolbarPillConfigs();
+
+// Replaces the ordered "toolbar.pills" array in grok_settings.json with |pills|
+// (each a {id,label,icon,href,enabled,isHome,children} dict) and notifies live
+// toolbar views. Used by drag-to-reorder / inline edit.
+void SetToolbarPillConfigs(const std::vector<base::DictValue>& pills);
+
+// Live-reload seam. Fired on the UI thread whenever toolbar config is persisted
+// in-process (the gateway's toolbar write, or SetToolbarPillConfigs), so open
+// XplorerToolbarViews can Reload(). The subscriber holds the returned
+// subscription for as long as it wants callbacks (RAII unsubscribe).
+base::CallbackListSubscription AddToolbarConfigChangedCallback(
+    base::RepeatingClosure callback);
+// Notifies subscribers. Must be called on the UI thread.
+void NotifyToolbarConfigChanged();
 
 // NTP / omnibox Grok chip destination based on search_home preference.
 GURL GetDefaultSearchHomeURL();

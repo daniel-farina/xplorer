@@ -8,11 +8,13 @@
 #include <memory>
 #include <utility>
 
+#include "base/callback_list.h"
 #include "base/files/file_util.h"
 #include "base/files/file_path.h"
 #include "base/functional/bind.h"
 #include "base/json/json_writer.h"
 #include "base/json/json_reader.h"
+#include "base/no_destructor.h"
 #include "base/path_service.h"
 #include "base/strings/escape.h"
 #include "base/strings/string_number_conversions.h"
@@ -108,6 +110,12 @@ std::unique_ptr<views::View> CreateGrokCompanionView(
   return web_view;
 }
 
+// Subscribers (live XplorerToolbarViews) notified when toolbar config changes.
+base::RepeatingClosureList& ToolbarConfigChangedCallbacks() {
+  static base::NoDestructor<base::RepeatingClosureList> list;
+  return *list;
+}
+
 }  // namespace
 
 base::FilePath GetXplorerDataDir() {
@@ -184,6 +192,25 @@ std::vector<base::DictValue> GetToolbarPillConfigs() {
     pills.push_back(entry.GetDict().Clone());
   }
   return pills;
+}
+
+void SetToolbarPillConfigs(const std::vector<base::DictValue>& pills) {
+  base::DictValue settings = LoadGrokSettings();
+  base::ListValue list;
+  for (const base::DictValue& pill : pills)
+    list.Append(pill.Clone());
+  settings.EnsureDict("toolbar")->Set("pills", std::move(list));
+  SaveGrokSettings(settings);
+  NotifyToolbarConfigChanged();
+}
+
+base::CallbackListSubscription AddToolbarConfigChangedCallback(
+    base::RepeatingClosure callback) {
+  return ToolbarConfigChangedCallbacks().Add(std::move(callback));
+}
+
+void NotifyToolbarConfigChanged() {
+  ToolbarConfigChangedCallbacks().Notify();
 }
 
 GURL GetDefaultSearchHomeURL() {

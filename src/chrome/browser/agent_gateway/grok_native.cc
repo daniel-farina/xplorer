@@ -2147,6 +2147,10 @@ bool GrokNative::TryHandleRequest(
       base::DictValue settings = LoadSettings();
       settings.Set("toolbar", toolbar->Clone());
       SaveSettings(settings);
+      // Live-reload the native toolbar (views live on the UI thread).
+      content::GetUIThreadTaskRunner({})->PostTask(
+          FROM_HERE,
+          base::BindOnce(&grok_companion::NotifyToolbarConfigChanged));
       updated = true;
     }
     if (!updated) {
@@ -2176,6 +2180,95 @@ bool GrokNative::TryHandleRequest(
     }
     EnrichSettingsResponse(&d, gateway_port);
     SendJson(server, connection_id, net::HTTP_OK, std::move(d));
+    return true;
+  }
+
+  // --- Toolbar config API (localhost; mirrors /api/settings posture) ---------
+  // GET /toolbar -> {"toolbar":{"pills":[...]}} (pills [] if unset).
+  if (info.method == "GET" && (path == "/toolbar" || path == "/api/toolbar")) {
+    base::DictValue settings = LoadSettings();
+    base::DictValue out;
+    if (const base::DictValue* tb = settings.FindDict("toolbar")) {
+      out.Set("toolbar", tb->Clone());
+    } else {
+      base::DictValue empty;
+      empty.Set("pills", base::ListValue());
+      out.Set("toolbar", std::move(empty));
+    }
+    SendJson(server, connection_id, net::HTTP_OK, std::move(out));
+    return true;
+  }
+
+  // POST /toolbar  body {"pills":[...]} or {"toolbar":{"pills":[...]}} -> replace.
+  if (info.method == "POST" && (path == "/toolbar" || path == "/api/toolbar")) {
+    auto body = base::JSONReader::ReadDict(info.data, base::JSON_PARSE_RFC);
+    const base::DictValue* tb =
+        body ? (body->FindDict("toolbar") ? body->FindDict("toolbar") : &*body)
+             : nullptr;
+    if (!tb || !tb->FindList("pills")) {
+      base::DictValue err;
+      err.Set("error", "expected {\"pills\":[...]}");
+      SendJson(server, connection_id, net::HTTP_BAD_REQUEST, std::move(err));
+      return true;
+    }
+    base::DictValue settings = LoadSettings();
+    settings.Set("toolbar", tb->Clone());
+    SaveSettings(settings);
+    content::GetUIThreadTaskRunner({})->PostTask(
+        FROM_HERE,
+        base::BindOnce(&grok_companion::NotifyToolbarConfigChanged));
+    base::DictValue out;
+    out.Set("ok", true);
+    out.Set("toolbar", tb->Clone());
+    SendJson(server, connection_id, net::HTTP_OK, std::move(out));
+    return true;
+  }
+
+  // POST /toolbar/reorder  body {"order":["id1","id2",...]} -> reorder by id.
+  if (info.method == "POST" &&
+      (path == "/toolbar/reorder" || path == "/api/toolbar/reorder")) {
+    auto body = base::JSONReader::ReadDict(info.data, base::JSON_PARSE_RFC);
+    const base::ListValue* order = body ? body->FindList("order") : nullptr;
+    base::DictValue settings = LoadSettings();
+    base::DictValue* tb = settings.FindDict("toolbar");
+    base::ListValue* pills = tb ? tb->FindList("pills") : nullptr;
+    if (!order || !pills) {
+      base::DictValue err;
+      err.Set("error", "need {\"order\":[ids]} and existing toolbar.pills");
+      SendJson(server, connection_id, net::HTTP_BAD_REQUEST, std::move(err));
+      return true;
+    }
+    auto pill_id = [](const base::Value& v) -> const std::string* {
+      return v.is_dict() ? v.GetDict().FindString("id") : nullptr;
+    };
+    base::ListValue reordered;
+    std::vector<bool> taken(pills->size(), false);
+    for (const base::Value& idv : *order) {
+      if (!idv.is_string())
+        continue;
+      for (size_t i = 0; i < pills->size(); ++i) {
+        const std::string* pid = pill_id((*pills)[i]);
+        if (!taken[i] && pid && *pid == idv.GetString()) {
+          reordered.Append((*pills)[i].Clone());
+          taken[i] = true;
+          break;
+        }
+      }
+    }
+    // Append any pills not named in |order|, preserving their relative order.
+    for (size_t i = 0; i < pills->size(); ++i) {
+      if (!taken[i])
+        reordered.Append((*pills)[i].Clone());
+    }
+    tb->Set("pills", std::move(reordered));
+    SaveSettings(settings);
+    content::GetUIThreadTaskRunner({})->PostTask(
+        FROM_HERE,
+        base::BindOnce(&grok_companion::NotifyToolbarConfigChanged));
+    base::DictValue out;
+    out.Set("ok", true);
+    out.Set("toolbar", tb->Clone());
+    SendJson(server, connection_id, net::HTTP_OK, std::move(out));
     return true;
   }
 

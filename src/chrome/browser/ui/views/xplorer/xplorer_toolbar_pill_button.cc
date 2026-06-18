@@ -7,11 +7,16 @@
 
 #include "chrome/browser/ui/color/chrome_color_id.h"
 #include "chrome/browser/ui/views/location_bar/location_bar_util.h"
+#include "chrome/browser/ui/views/xplorer/xplorer_toolbar_icons.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/models/image_model.h"
 #include "ui/color/color_provider.h"
+#include "ui/gfx/canvas.h"
 #include "ui/gfx/geometry/insets.h"
+#include "ui/gfx/geometry/point.h"
+#include "ui/gfx/geometry/rect.h"
+#include "ui/gfx/image/image_skia.h"
 #include "ui/gfx/vector_icon_types.h"
 #include "ui/views/background.h"
 #include "ui/views/controls/button/button.h"
@@ -29,6 +34,11 @@ constexpr int kIconSize = 16;
 constexpr int kImageLabelSpacing = 6;
 constexpr int kVerticalPadding = 4;
 constexpr int kHorizontalPadding = 10;
+
+// Integrated dropdown caret drawn inside the trailing edge of the pill.
+constexpr int kCaretSize = 12;
+constexpr int kCaretGap = 4;
+constexpr int kCaretReserve = kCaretSize + kCaretGap;
 
 }  // namespace
 
@@ -92,6 +102,42 @@ void XplorerToolbarPillButton::UpdateIconImage() {
   SetImageModel(views::Button::STATE_NORMAL,
                 ui::ImageModel::FromVectorIcon(*icon_, kColorToolbarButtonIcon,
                                                kIconSize));
+}
+
+void XplorerToolbarPillButton::SetHasDropdownCaret(bool has_caret) {
+  if (has_caret_ == has_caret) {
+    return;
+  }
+  has_caret_ = has_caret;
+  // Reserve room on the trailing edge so the caret never overlaps the label.
+  SetCustomPadding(gfx::Insets::TLBR(
+      kVerticalPadding, kHorizontalPadding, kVerticalPadding,
+      kHorizontalPadding + (has_caret_ ? kCaretReserve : 0)));
+  PreferredSizeChanged();
+  SchedulePaint();
+}
+
+bool XplorerToolbarPillButton::PointInCaret(const gfx::Point& point) const {
+  if (!has_caret_) {
+    return false;
+  }
+  // The trailing strip (caret + its surrounding padding) is the dropdown zone.
+  const int zone_left = width() - kCaretReserve - kHorizontalPadding;
+  return point.x() >= GetMirroredXInView(zone_left);
+}
+
+void XplorerToolbarPillButton::PaintButtonContents(gfx::Canvas* canvas) {
+  MdTextButton::PaintButtonContents(canvas);
+  if (!has_caret_ || !GetColorProvider()) {
+    return;
+  }
+  const gfx::ImageSkia caret =
+      ui::ImageModel::FromVectorIcon(GetToolbarVectorIcon("caret"),
+                                     kColorToolbarButtonIcon, kCaretSize)
+          .Rasterize(GetColorProvider());
+  const int x = width() - kHorizontalPadding - kCaretSize;
+  const int y = (height() - kCaretSize) / 2;
+  canvas->DrawImageInt(caret, GetMirroredXWithWidthInView(x, kCaretSize), y);
 }
 
 BEGIN_METADATA(XplorerToolbarPillButton)

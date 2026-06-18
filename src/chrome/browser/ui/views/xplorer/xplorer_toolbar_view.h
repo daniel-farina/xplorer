@@ -8,6 +8,7 @@
 #include <string>
 #include <vector>
 
+#include "base/callback_list.h"
 #include "base/memory/raw_ptr.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/menus/simple_menu_model.h"
@@ -17,6 +18,10 @@
 class BrowserWindowInterface;
 class Profile;
 class GURL;
+
+namespace ui {
+class Event;
+}  // namespace ui
 
 namespace views {
 class MenuRunner;
@@ -84,11 +89,11 @@ class XplorerToolbarView : public views::AccessiblePaneView,
       ui::mojom::MenuSourceType source_type) override;
 
  private:
-  // A pill's view(s): the main button, plus an optional trailing chevron button
-  // present only when the pill has children. Index-aligned with |pills_|.
+  // A pill's view: a single styled button. Pills with children render an
+  // integrated trailing dropdown caret inside this same button (no separate
+  // chevron view). Index-aligned with |pills_|.
   struct PillViews {
     raw_ptr<XplorerToolbarPillButton> main = nullptr;
-    raw_ptr<XplorerToolbarPillButton> chevron = nullptr;
   };
 
   // Reads toolbar.pills from grok_settings.json into |pills_|, falling back to
@@ -97,6 +102,9 @@ class XplorerToolbarView : public views::AccessiblePaneView,
   // Builds the pill buttons (+ chevrons) for |pills_|, attaches icons, and
   // marks the active home pill as selected.
   void RebuildButtons();
+  // Click dispatch for a pill: opens the dropdown when the press lands in the
+  // integrated caret zone (and the pill has children), else navigates.
+  void OnPillActivated(size_t pill_index, const ui::Event& event);
   // Navigation dispatch for the pill at |pill_index|.
   void OnPillPressed(size_t pill_index);
   // Opens the children dropdown for the pill at |pill_index|, anchored to its
@@ -129,6 +137,9 @@ class XplorerToolbarView : public views::AccessiblePaneView,
   std::unique_ptr<ui::SimpleMenuModel> context_menu_model_;
   std::unique_ptr<views::MenuRunner> context_menu_runner_;
   int context_pill_ = -1;
+
+  // Reloads the bar when toolbar config is persisted (settings page / gateway).
+  base::CallbackListSubscription toolbar_config_subscription_;
 };
 
 }  // namespace xplorer

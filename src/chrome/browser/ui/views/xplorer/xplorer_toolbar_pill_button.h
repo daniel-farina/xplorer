@@ -41,14 +41,25 @@ class XplorerToolbarPillButton : public views::MdTextButton {
   void SetSelected(bool selected);
   bool GetSelected() const { return selected_; }
 
+  // Shows an integrated trailing dropdown caret inside the pill (reserves room
+  // on the right). The owner routes clicks: see PointInCaret().
+  void SetHasDropdownCaret(bool has_caret);
+  bool GetHasDropdownCaret() const { return has_caret_; }
+
+  // True if |point| (in this view's coordinates) falls in the trailing caret
+  // hit-zone, so the owner can open the dropdown instead of navigating.
+  bool PointInCaret(const gfx::Point& point) const;
+
   // views::MdTextButton:
   void OnThemeChanged() override;
   void UpdateBackgroundColor() override;
+  void PaintButtonContents(gfx::Canvas* canvas) override;
 
  private:
   void UpdateIconImage();
 
   bool selected_ = false;
+  bool has_caret_ = false;
   raw_ptr<const gfx::VectorIcon> icon_ = nullptr;
 };
 

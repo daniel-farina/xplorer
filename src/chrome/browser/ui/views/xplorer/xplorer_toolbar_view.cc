@@ -27,6 +27,7 @@
 #include "ui/base/models/menu_separator_types.h"
 #include "ui/base/mojom/menu_source_type.mojom.h"
 #include "ui/base/page_transition_types.h"
+#include "ui/events/event.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
@@ -65,8 +66,6 @@ constexpr struct {
 constexpr int kToolbarHeight = 40;
 constexpr int kLeadingMargin = 8;
 constexpr int kButtonSpacing = 6;
-// Tight gap between a pill and its trailing chevron (reads as one control).
-constexpr int kChevronSpacing = 1;
 
 // Menu command-id ranges. Disjoint so the right-click context menu and the
 // child dropdown (separate SimpleMenuModels) never collide.
@@ -121,6 +120,13 @@ XplorerToolbarView::XplorerToolbarView(BrowserWindowInterface* browser,
 
   LoadPills();
   RebuildButtons();
+
+  // Live-reload when toolbar config is persisted (settings page or gateway).
+  // The subscription is a member, so it unsubscribes before |this| is gone;
+  // base::Unretained is safe.
+  toolbar_config_subscription_ =
+      grok_companion::AddToolbarConfigChangedCallback(base::BindRepeating(
+          &XplorerToolbarView::Reload, base::Unretained(this)));
 }
 
 XplorerToolbarView::~XplorerToolbarView() = default;
@@ -202,11 +208,16 @@ void XplorerToolbarView::RebuildButtons() {
     PillViews views;
 
     auto button = std::make_unique<XplorerToolbarPillButton>(
-        base::BindRepeating(&XplorerToolbarView::OnPillPressed,
+        base::BindRepeating(&XplorerToolbarView::OnPillActivated,
                             base::Unretained(this), i),
         base::UTF8ToUTF16(pills_[i].label));
     button->SetPillIcon(GetToolbarVectorIcon(pills_[i].icon));
     button->GetViewAccessibility().SetName(base::UTF8ToUTF16(pills_[i].label));
+    // Pills with children show an integrated trailing caret; a click in the
+    // caret zone opens the dropdown, the rest of the pill navigates the href.
+    if (!pills_[i].children.empty()) {
+      button->SetHasDropdownCaret(true);
+    }
     if (pills_[i].is_home && !active_mode.empty() &&
         ExtractMode(pills_[i].href) == active_mode) {
       button->SetSelected(true);
@@ -214,19 +225,6 @@ void XplorerToolbarView::RebuildButtons() {
     // Right-click a pill -> context menu scoped to that pill (Edit/Remove).
     button->set_context_menu_controller(this);
     views.main = AddChildView(std::move(button));
-
-    // Pills with children get a trailing chevron pill that opens the dropdown.
-    // Primary click on the main pill still navigates the pill's own href.
-    if (!pills_[i].children.empty()) {
-      auto chevron = std::make_unique<XplorerToolbarPillButton>(
-          base::BindRepeating(&XplorerToolbarView::ShowChildMenu,
-                              base::Unretained(this), i));
-      chevron->SetPillIcon(GetToolbarVectorIcon("caret"));
-      chevron->GetViewAccessibility().SetName(
-          base::UTF8ToUTF16("More " + pills_[i].label + " options"));
-      chevron->set_context_menu_controller(this);
-      views.chevron = AddChildView(std::move(chevron));
-    }
 
     pill_buttons_.push_back(views);
   }
@@ -254,10 +252,7 @@ void XplorerToolbarView::Layout(PassKey) {
     x += preferred.width() + trailing_gap;
   };
   for (const PillViews& views : pill_buttons_) {
-    place(views.main, views.chevron ? kChevronSpacing : kButtonSpacing);
-    if (views.chevron) {
-      place(views.chevron, kButtonSpacing);
-    }
+    place(views.main, kButtonSpacing);
   }
 }
 
@@ -267,6 +262,24 @@ GURL XplorerToolbarView::ResolveHref(const std::string& href) const {
     return grok_companion::GetCompanionURL().Resolve(href);
   }
   return GURL(href);
+}
+
+void XplorerToolbarView::OnPillActivated(size_t pill_index,
+                                         const ui::Event& event) {
+  if (pill_index >= pills_.size() || pill_index >= pill_buttons_.size()) {
+    return;
+  }
+  // A click in the integrated caret zone opens the dropdown (for pills with
+  // children); anything else navigates the pill's own href.
+  if (!pills_[pill_index].children.empty() && event.IsLocatedEvent()) {
+    const gfx::Point location = event.AsLocatedEvent()->location();
+    XplorerToolbarPillButton* button = pill_buttons_[pill_index].main;
+    if (button && button->PointInCaret(location)) {
+      ShowChildMenu(pill_index);
+      return;
+    }
+  }
+  OnPillPressed(pill_index);
 }
 
 void XplorerToolbarView::OnPillPressed(size_t pill_index) {
@@ -321,12 +334,9 @@ void XplorerToolbarView::ShowChildMenu(size_t pill_index) {
                                base::UTF8ToUTF16(children[c].label));
   }
 
-  // Anchor under the chevron (fall back to the main pill).
-  views::View* anchor = pill_buttons_[pill_index].chevron
-                            ? static_cast<views::View*>(
-                                  pill_buttons_[pill_index].chevron.get())
-                            : static_cast<views::View*>(
-                                  pill_buttons_[pill_index].main.get());
+  // Anchor under the pill button (the caret lives inside it).
+  views::View* anchor =
+      static_cast<views::View*>(pill_buttons_[pill_index].main.get());
   if (!anchor || !GetWidget()) {
     return;
   }
@@ -338,7 +348,19 @@ void XplorerToolbarView::ShowChildMenu(size_t pill_index) {
 }
 
 void XplorerToolbarView::ExecuteCommand(int command_id, int event_flags) {
-  // Child dropdown items (highest range first).
+  // Bar-level actions first (exact match, lowest ids) so they can never be
+  // shadowed by a range check.
+  if (command_id == kCmdCustomize) {
+    OpenCustomizePage();
+    return;
+  }
+  if (command_id == kCmdHideToolbar) {
+    // Immediate hide for this window; persistence across restart is a follow-up
+    // (a toolbar.hidden flag read by the layout gate).
+    SetVisible(false);
+    return;
+  }
+  // Child dropdown items (range [3000, ...)).
   if (command_id >= kChildCmdBase) {
     const size_t child = static_cast<size_t>(command_id - kChildCmdBase);
     if (open_pill_ < pills_.size() &&
@@ -347,30 +369,11 @@ void XplorerToolbarView::ExecuteCommand(int command_id, int event_flags) {
     }
     return;
   }
-  // Remove pill (range [2000,3000)) — first cut opens the /settings editor;
-  // true inline remove is a follow-up (needs Load/SaveGrokSettings promoted out
-  // of grok_companion_util.cc's anonymous namespace).
-  if (command_id >= kCmdRemovePillBase) {
-    OpenCustomizePage();
-    return;
-  }
-  // Edit pill (range [1000,2000)) — likewise opens the editor for now.
+  // Edit pill [1000,2000) and Remove pill [2000,3000) — first cut opens the
+  // rich /settings editor for both (true inline edit/remove is a follow-up).
   if (command_id >= kCmdEditPillBase) {
     OpenCustomizePage();
     return;
-  }
-  // Bar-level actions.
-  switch (command_id) {
-    case kCmdCustomize:
-      OpenCustomizePage();
-      break;
-    case kCmdHideToolbar:
-      // Immediate hide for this window; persistence across restart is a
-      // follow-up (a toolbar.hidden flag read by the layout gate).
-      SetVisible(false);
-      break;
-    default:
-      break;
   }
 }
 
@@ -384,7 +387,7 @@ bool XplorerToolbarView::IsCommandIdEnabled(int command_id) const {
 
 int XplorerToolbarView::PillIndexForView(const views::View* view) const {
   for (size_t i = 0; i < pill_buttons_.size(); ++i) {
-    if (pill_buttons_[i].main == view || pill_buttons_[i].chevron == view) {
+    if (pill_buttons_[i].main == view) {
       return static_cast<int>(i);
     }
   }
