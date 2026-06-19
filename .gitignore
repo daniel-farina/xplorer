@@ -11,6 +11,9 @@ __pycache__/
 # DO buildbox/test-vm state (droplet ids, ips) — local only
 .do-*.state
 
+# Private build-machine config (hosts, keys, snapshot ids) — never commit
+*.local.md
+
 # Secrets — never commit
 .env
 .env.*
