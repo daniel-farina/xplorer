@@ -98,6 +98,10 @@
           <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="2" width="9" height="9" rx="1" fill="#F25022"/><rect x="13" y="2" width="9" height="9" rx="1" fill="#7FBA00"/><rect x="2" y="13" width="9" height="9" rx="1" fill="#00A4EF"/><rect x="13" y="13" width="9" height="9" rx="1" fill="#FFB900"/></svg>
           Windows <span class="platform-chip__note">x64</span>
         </a>
+        <a class="platform-chip" href="https://github.com/daniel-farina/xplorer/releases/latest/download/Xplorer-linux-x64.tar.gz" target="_blank" rel="noopener">
+          <svg class="os-linux" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12.5 2c-2.8 0-5 2.2-5 5 0 1.1.4 2.1 1 2.9-.6.3-1.1.8-1.5 1.4-.7 1-1 2.2-1 3.4 0 2.2 1.2 4.1 3 5.1.3 1.5 1.2 2.8 2.5 3.6.4.8.6 1.7.6 2.6 0 .6-.1 1.2-.3 1.7-.5 1.2-1.6 2-2.9 2.1-.2 0-.4 0-.6 0 1.4.8 3 1.2 4.7 1.2 5.2 0 9.5-4.3 9.5-9.5S17.7 2 12.5 2zm-1.2 3.2c.4 0 .7.3.7.7s-.3.7-.7.7-.7-.3-.7-.7.3-.7.7-.7zm2.4 0c.4 0 .7.3.7.7s-.3.7-.7.7-.7-.3-.7-.7.3-.7.7-.7zm-2.1 8.6c-1.5 0-2.7-1.2-2.7-2.7h5.4c0 1.5-1.2 2.7-2.7 2.7z"/></svg>
+          Linux <span class="platform-chip__note">x64</span>
+        </a>
         <a class="platform-chip" href="#download">All downloads</a>
       </div>
     </div>
@@ -384,6 +388,16 @@ curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:9334/tabs
             </a>
           </div>
         </article>
+        <article class="download-card">
+          <div class="os-badge os-badge--linux"><svg class="os-linux" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12.5 2c-2.8 0-5 2.2-5 5 0 1.1.4 2.1 1 2.9-.6.3-1.1.8-1.5 1.4-.7 1-1 2.2-1 3.4 0 2.2 1.2 4.1 3 5.1.3 1.5 1.2 2.8 2.5 3.6.4.8.6 1.7.6 2.6 0 .6-.1 1.2-.3 1.7-.5 1.2-1.6 2-2.9 2.1-.2 0-.4 0-.6 0 1.4.8 3 1.2 4.7 1.2 5.2 0 9.5-4.3 9.5-9.5S17.7 2 12.5 2zm-1.2 3.2c.4 0 .7.3.7.7s-.3.7-.7.7-.7-.3-.7-.7.3-.7.7-.7zm2.4 0c.4 0 .7.3.7.7s-.3.7-.7.7-.7-.3-.7-.7.3-.7.7-.7zm-2.1 8.6c-1.5 0-2.7-1.2-2.7-2.7h5.4c0 1.5-1.2 2.7-2.7 2.7z"/></svg></div>
+          <h3>Linux</h3>
+          <p class="download-card__sub">x64 · Ubuntu 22.04+ / Debian 12+</p>
+          <div class="download-card__buttons">
+            <a class="btn btn--primary" href="https://github.com/daniel-farina/xplorer/releases/latest/download/Xplorer-linux-x64.tar.gz" target="_blank" rel="noopener">
+              Download tar.gz
+            </a>
+          </div>
+        </article>
       </div>
       <div class="cta__buttons">
         <a class="btn btn--ghost btn--lg" href="https://github.com/daniel-farina/xplorer/releases" target="_blank" rel="noopener">
@@ -393,7 +407,7 @@ curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:9334/tabs
           Build from source
         </a>
       </div>
-      <p class="cta__platforms">macOS &amp; Windows · Linux coming soon</p>
+      <p class="cta__platforms">macOS · Windows · Linux x64</p>
     </div>
   </section>
 
@@ -677,6 +691,7 @@ curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:9334/tabs
       // Default in the markup is macOS (Apple Silicon DMG) so no-JS visitors get a
       // working link; we only rewrite when we can confidently detect Windows/Linux.
       var WIN_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="2" width="9" height="9" rx="1" fill="#F25022"/><rect x="13" y="2" width="9" height="9" rx="1" fill="#7FBA00"/><rect x="2" y="13" width="9" height="9" rx="1" fill="#00A4EF"/><rect x="13" y="13" width="9" height="9" rx="1" fill="#FFB900"/></svg>';
+      var LINUX_ICON = '<svg class="os-linux" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12.5 2c-2.8 0-5 2.2-5 5 0 1.1.4 2.1 1 2.9-.6.3-1.1.8-1.5 1.4-.7 1-1 2.2-1 3.4 0 2.2 1.2 4.1 3 5.1.3 1.5 1.2 2.8 2.5 3.6.4.8.6 1.7.6 2.6 0 .6-.1 1.2-.3 1.7-.5 1.2-1.6 2-2.9 2.1-.2 0-.4 0-.6 0 1.4.8 3 1.2 4.7 1.2 5.2 0 9.5-4.3 9.5-9.5S17.7 2 12.5 2zm-1.2 3.2c.4 0 .7.3.7.7s-.3.7-.7.7-.7-.3-.7-.7.3-.7.7-.7zm2.4 0c.4 0 .7.3.7.7s-.3.7-.7.7-.7-.3-.7-.7.3-.7.7-.7zm-2.1 8.6c-1.5 0-2.7-1.2-2.7-2.7h5.4c0 1.5-1.2 2.7-2.7 2.7z"/></svg>';
 
       function detectOS() {
         var d = navigator.userAgentData;
@@ -693,14 +708,17 @@ curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:9334/tabs
       if (btn && os === 'windows') {
         btn.href = REL + 'Xplorer-windows-x64-installer.exe';
         btn.innerHTML = WIN_ICON + ' Download for Windows';
+      } else if (btn && os === 'linux') {
+        btn.href = REL + 'Xplorer-linux-x64.tar.gz';
+        btn.innerHTML = LINUX_ICON + ' Download for Linux';
       }
-      // macOS / Linux / unknown keep the macOS DMG default (no native Linux build yet).
+      // macOS / unknown keep the macOS DMG default.
 
       // Move the chip matching the visitor's OS to the front of the row.
       try {
         var chips = document.querySelector('.hero__platforms');
         if (chips && os !== 'other') {
-          var needle = os === 'windows' ? 'windows' : 'macos';
+          var needle = os === 'windows' ? 'windows' : os === 'linux' ? 'linux' : 'macos';
           var match = [].filter.call(chips.querySelectorAll('.platform-chip[href]'), function (a) {
             return a.getAttribute('href').toLowerCase().indexOf(needle) !== -1;
           })[0];

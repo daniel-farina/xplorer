@@ -14,6 +14,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/macOS-Apple%20Silicon-000000?logo=apple&logoColor=white" alt="macOS Apple Silicon">
   <img src="https://img.shields.io/badge/Windows-x64-0078D6?logo=windows&logoColor=white" alt="Windows x64">
+  <img src="https://img.shields.io/badge/Linux-x64-FCC624?logo=linux&logoColor=black" alt="Linux x64">
   <a href="https://github.com/daniel-farina/xplorer/releases"><img src="https://img.shields.io/github/v/release/daniel-farina/xplorer?color=2563eb" alt="Latest release"></a>
   <a href="https://github.com/daniel-farina/xplorer/stargazers"><img src="https://img.shields.io/github/stars/daniel-farina/xplorer?color=f5a623&label=%E2%AD%90%20stars" alt="GitHub stars"></a>
   <a href="https://daniel-farina.github.io/xplorer/"><img src="https://img.shields.io/badge/website-xplorer-2563eb" alt="Website"></a>
@@ -33,7 +34,7 @@ Grok is woven in at the core, not bolted on as a sidebar. And the same engine th
 Grok in your tabs exposes a clean local API, so **any agent can drive the browser** — no
 launch flags, no setup dance.
 
-> **Platform:** macOS — Apple Silicon (arm64) and Intel (x86_64) — and **Windows x64**. [Download the latest release](https://github.com/daniel-farina/xplorer/releases) or [build from source](#develop-locally).
+> **Platform:** macOS — Apple Silicon (arm64) and Intel (x86_64) — **Windows x64**, and **Linux x64**. [Download the latest release](https://github.com/daniel-farina/xplorer/releases) or [build from source](#develop-locally).
 
 ---
 
@@ -199,10 +200,13 @@ Run anyway**, and allow it in Defender if prompted).
 | **macOS — Apple Silicon** (M1/M2/M3/M4) | [**Xplorer-macos-arm64.dmg**](https://github.com/daniel-farina/xplorer/releases/latest/download/Xplorer-macos-arm64.dmg) · [.zip](https://github.com/daniel-farina/xplorer/releases/latest/download/Xplorer-macos-arm64.zip) |
 | **macOS — Intel** | [**Xplorer-macos-x86_64.dmg**](https://github.com/daniel-farina/xplorer/releases/latest/download/Xplorer-macos-x86_64.dmg) · [.zip](https://github.com/daniel-farina/xplorer/releases/latest/download/Xplorer-macos-x86_64.zip) |
 | **Windows x64** (10/11) | [**Xplorer-windows-x64-installer.exe**](https://github.com/daniel-farina/xplorer/releases/latest/download/Xplorer-windows-x64-installer.exe) · [.zip](https://github.com/daniel-farina/xplorer/releases/latest/download/Xplorer-windows-x64.zip) |
+| **Linux x64** (Ubuntu 22.04+ / Debian 12+) | [**Xplorer-linux-x64.tar.gz**](https://github.com/daniel-farina/xplorer/releases/latest/download/Xplorer-linux-x64.tar.gz) |
 
 macOS: open the DMG and drag **Xplorer** to Applications. Windows: run the
 **installer** (`Xplorer-windows-x64-installer.exe` — creates Start‑menu & Desktop
-shortcuts), or grab the portable **`.zip`** and run **`Xplorer\Xplorer.exe`**. All
+shortcuts), or grab the portable **`.zip`** and run **`Xplorer\Xplorer.exe`**.
+Linux: extract the **`.tar.gz`** and run **`./xplorer`** from the unpacked folder
+(portable — no installer yet). All
 releases + checksums on the
 [Releases](https://github.com/daniel-farina/xplorer/releases) page, or
 [build it yourself](#develop-locally).
