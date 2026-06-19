@@ -20,3 +20,7 @@ target_cpu = "x64"
 target_os = "mac"
 
 use_lld = true
+
+# Local-only build (no Google RBE/reclient) — siso bails with "offline
+# mode" on Windows without this when it cannot auth to the RBE backend.
+use_remoteexec = false

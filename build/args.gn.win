@@ -28,3 +28,7 @@ target_os = "win"
 #   * is_official_build is deliberately NOT set, to mirror the lighter mac
 #     release config (is_debug=false). Add it only for a fully PGO-optimized
 #     shippable build.
+
+# Local-only build (no Google RBE/reclient) — siso bails with "offline
+# mode" on Windows without this when it cannot auth to the RBE backend.
+use_remoteexec = false

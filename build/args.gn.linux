@@ -21,3 +21,7 @@ use_lld = true
 
 # Use Chromium's bundled Debian sysroot (default true) for a reproducible build
 # independent of the host distro's -dev packages. Do NOT set is_official_build.
+
+# Local-only build (no Google RBE/reclient) — siso bails with "offline
+# mode" on Windows without this when it cannot auth to the RBE backend.
+use_remoteexec = false
