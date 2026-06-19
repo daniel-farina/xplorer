@@ -396,9 +396,38 @@ curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:9334/tabs
             <a class="btn btn--primary" href="https://github.com/daniel-farina/xplorer/releases/latest/download/Xplorer-linux-x64.tar.gz" target="_blank" rel="noopener">
               Download tar.gz
             </a>
+            <a class="btn btn--ghost" href="https://github.com/daniel-farina/xplorer/releases/latest/download/Xplorer-linux-x64.sha256.txt" target="_blank" rel="noopener">
+              SHA-256
+            </a>
           </div>
         </article>
       </div>
+
+      <div class="install-steps" id="linux-install">
+        <h3>Linux install</h3>
+        <p class="install-steps__lead">Portable <strong>x86_64</strong> build — extract anywhere and run. Requires Intel/AMD Linux (not ARM64).</p>
+        <div class="codeblock" id="linux-install-block">
+          <div class="codeblock__bar">
+            <span class="dot dot--r"></span><span class="dot dot--y"></span><span class="dot dot--g"></span>
+            <span class="codeblock__name">install.sh</span>
+            <button type="button" class="codeblock__copy" id="linux-install-copy" aria-label="Copy install commands">Copy</button>
+          </div>
+          <pre><code><span class="c-com"># 1. Download + verify</span>
+curl -LO https://github.com/daniel-farina/xplorer/releases/latest/download/Xplorer-linux-x64.tar.gz
+curl -LO https://github.com/daniel-farina/xplorer/releases/latest/download/Xplorer-linux-x64.sha256.txt
+sha256sum -c Xplorer-linux-x64.sha256.txt
+
+<span class="c-com"># 2. Extract + run</span>
+tar -xzf Xplorer-linux-x64.tar.gz
+cd Xplorer-linux-x64
+./xplorer
+
+<span class="c-com"># 3. Confirm the gateway came up</span>
+cat ~/.xplorer/gateway.json</code></pre>
+        </div>
+        <p class="install-steps__note">Sandbox trouble on your distro? Run <code>./xplorer --no-sandbox</code>. Optional menu entry: see <a href="https://github.com/daniel-farina/xplorer#linux-install" target="_blank" rel="noopener">README</a>.</p>
+      </div>
+
       <div class="cta__buttons">
         <a class="btn btn--ghost btn--lg" href="https://github.com/daniel-farina/xplorer/releases" target="_blank" rel="noopener">
           All releases
@@ -479,6 +508,20 @@ curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:9334/tabs
     })();
   </script>
   <script>
+    // Linux install codeblock: copy-to-clipboard.
+    (function () {
+      var copy = document.getElementById('linux-install-copy');
+      var cb = document.getElementById('linux-install-block');
+      if (copy && cb) copy.addEventListener('click', function () {
+        var code = cb.querySelector('code');
+        var text = code ? code.textContent : '';
+        navigator.clipboard.writeText(text).then(function () {
+          copy.textContent = 'Copied!';
+          setTimeout(function () { copy.textContent = 'Copy'; }, 1500);
+        }).catch(function () {});
+      });
+    })();
+
     // Agent codeblock: tab switching + copy-to-clipboard.
     (function () {
       var cb = document.getElementById('agent-codeblock');
@@ -534,6 +577,7 @@ curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:9334/tabs
           { sel: '.soon__inner' },
           { sel: '#agent-codeblock' },
           { sel: '#agents .feat-row__item', stagger: true },
+          { sel: '#linux-install' },
           { sel: '.cta__inner' },
           { sel: '.footer' }
         ];
