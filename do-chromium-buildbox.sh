@@ -58,7 +58,10 @@ preflight() {
   require curl
   require jq
   [ -n "${DO_TOKEN:-}" ] || die "DO_TOKEN is not set (export DO_TOKEN=dop_v1_...)"
-  case "$REGION" in nyc3|sfo3) ;; *) die "REGION must be nyc3 or sfo3 (got: $REGION)";; esac
+  # Region must offer the chosen SIZE; the 16-vCPU CPU-optimized slugs live in
+  # lon1/blr1/sgp1 (AMD) or ams3/nyc2/sgp1 (Intel), not nyc3/sfo3. Trust the
+  # caller's REGION and let the DO API reject mismatches.
+  [ -n "${REGION:-}" ] || die "REGION is empty"
 }
 
 # api METHOD PATH [json-body]

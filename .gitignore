@@ -1,6 +1,8 @@
 # Xplorer is an overlay repo — the Chromium checkout and build outputs are NOT
 # vendored here (they're ~100 GB). Only the overlay sources live in git.
 dist/
+dist-linux/
+*.tar.gz
 *.log
 .DS_Store
 __pycache__/
