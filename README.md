@@ -212,30 +212,21 @@ Portable **x86_64** build — no installer yet. Tested on Ubuntu 24.04; Ubuntu 2
 and Debian 12+ should work. **Requires an x86_64 CPU** (Intel/AMD). ARM64 Linux
 (Raspberry Pi, Apple Silicon VMs) will fail with `Exec format error`.
 
-**1. Download** (pick a directory, e.g. `~/Downloads`):
+**Quick install** — copy‑paste the whole block:
 
 ```sh
+cd ~/Downloads   # or wherever you want it
 curl -LO https://github.com/daniel-farina/xplorer/releases/latest/download/Xplorer-linux-x64.tar.gz
 curl -LO https://github.com/daniel-farina/xplorer/releases/latest/download/Xplorer-linux-x64.sha256.txt
-sha256sum -c Xplorer-linux-x64.sha256.txt
-```
-
-**2. Extract and run** (from anywhere you like — `~/Applications`, `/opt`, etc.):
-
-```sh
+sha256sum -c Xplorer-linux-x64.sha256.txt      # prints "...tar.gz: OK"
 tar -xzf Xplorer-linux-x64.tar.gz
 cd Xplorer-linux-x64
 ./xplorer
 ```
 
 The `xplorer` wrapper launches the real `chrome` binary beside it. On first start
-the Agent Gateway writes `~/.xplorer/gateway.json` and listens on `127.0.0.1:9334`.
-
-**3. Confirm it came up:**
-
-```sh
-cat ~/.xplorer/gateway.json
-```
+the Agent Gateway writes `~/.xplorer/gateway.json` and listens on `127.0.0.1:9334`
+(confirm with `cat ~/.xplorer/gateway.json`).
 
 **Optional — add a menu shortcut** (while still inside `Xplorer-linux-x64/`):
 

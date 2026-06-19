@@ -571,9 +571,7 @@ html.theme-animating * {
 .os-badge--apple { background: linear-gradient(145deg, #43434a 0%, #74747e 100%); }
 .os-badge--apple .os-apple { fill: #fff; }
 .os-badge--windows { background: #fff; border: 1px solid var(--line); }
-.os-badge--linux { background: linear-gradient(145deg, #1a1a1a 0%, #2d2d2d 100%); }
-.os-badge--linux .os-linux { fill: #fff; }
-.os-linux { fill: var(--text); }
+.os-badge--linux { background: #fff; border: 1px solid var(--line); }
 @media (max-width: 780px) { .download-grid { grid-template-columns: 1fr; max-width: 360px; } }
 
 /* Hero: OS logo in the primary button + a platform-chip showcase row */
