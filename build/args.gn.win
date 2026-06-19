@@ -32,3 +32,6 @@ target_os = "win"
 # Local-only build (no Google RBE/reclient) — siso bails with "offline
 # mode" on Windows without this when it cannot auth to the RBE backend.
 use_remoteexec = false
+
+# Force classic ninja (no siso) — Windows siso bails "offline mode" without RBE.
+use_siso = false
