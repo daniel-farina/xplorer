@@ -655,11 +655,11 @@ def main(src: Path):
         print(f"  edited: {grdp}")
 
     # --- About page version line: lead with the Xplorer version --------------
-    # The about/help line is the Chromium ENGINE version ("Version 151.0.7890.0
+    # The about/help line is the Chromium ENGINE version ("Version 151.0.7897.0
     # (Developer Build) ..."). Prepend the Xplorer product version so users see
     # OUR version first. NOTE: bump XPLORER_VERSION here per release (or wire it
     # to the release version later).
-    XPLORER_VERSION = "0.7.0"
+    XPLORER_VERSION = "0.7.1"
     ss = src / "chrome/app/settings_strings.grdp"
     sst = ss.read_text()
     _ver_marker = "Xplorer " + XPLORER_VERSION + " · Chromium"

@@ -10,7 +10,7 @@
 # (BUILD_RESULT: SUCCESS|FAILED) and the artifact path to the log.
 set -uo pipefail
 
-PIN=242a04c867e0486e1f26f0f3bc0c42f23b9da347   # chromium 151.0.7890.0 (matches mac/win)
+PIN=cd1d42cba19c64f3386d5dfa1475d620b6efb6a4   # chromium 151.0.7897.0 (aligned: mac/win/linux)
 BRANCH=feat/linux-build
 REPO=https://github.com/daniel-farina/xplorer.git
 VER=v0.7.0
