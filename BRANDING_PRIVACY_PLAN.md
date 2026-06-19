@@ -23,17 +23,19 @@ Each loop iteration: read this file + `git log`, do the next safe item, commit, 
 - [x] **Blank Google key env vars** in `build.sh` before `gn gen` (belt-and-suspenders so a dev's
   exported real key can't be compiled in).
 
+## ✅ Done (cont.)
+
+- [x] **Hardened the prepopulated_engines.json default-search hijack** (`apply_integration.py`).
+  Replaced the literal `.replace()` (silent no-op on drift) with a whitespace-tolerant `re.subn`
+  + `n==1` **fail-loud assert**, and the hardcoded `kCurrentDataVersion 206→207` (a no-op on M151,
+  which ships 207) with a **dynamic read-then-+1 bump**. Verified the exact pristine name/keyword
+  format + version against the **local Mac checkout** (same pinned rev 242a04c8 — no snapshot needed)
+  and unit-tested the transform (Grok set, 207→208, other engines untouched, idempotent, valid JSON).
+- [x] **Grok engine favicon** — was still Google's `googleg_alldp.ico`; now `https://grok.com/favicon.ico`,
+  scoped `count=1` to the Grok block.
+
 ## 🔜 do_now (next iterations, in order)
 
-- [ ] **Harden the prepopulated_engines.json default-search hijack** (`apply_integration.py` ~621-631).
-  HIGH IMPACT — current code uses literal `.replace()` for name/keyword and a hardcoded
-  `kCurrentDataVersion 206→207`; on M151 both can silently no-op → ships **Google** as default.
-  Fix: `re.subn` + `n==1` assert (fail loud), read-then-bump version to `current+1`.
-  **GATE: verify the exact name/keyword JSON format + current kCurrentDataVersion against the real
-  `third_party/search_engines_data/.../prepopulated_engines.json`** (available on the build snapshot)
-  before landing the assert — an unverified assert would break `apply.sh`.
-- [ ] **Set the Grok engine favicon** (same JSON block) — currently still Google's favicon. Scope a
-  `count=1` regex to the Grok object → `https://grok.com/favicon.ico`.
 - [ ] **Disable Variations/Finch + component updater + What's New** via the existing
   `chrome_main_delegate.cc` switch block (`apply_integration.py` ~217-233 / ~462-473).
   Add `disable-component-update`, `disable-field-trial-config`, empty `variations-server-url` +
