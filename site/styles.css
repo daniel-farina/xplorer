@@ -510,6 +510,30 @@ html.theme-animating * {
 .download-card .btn { padding: 11px 18px; font-size: 14px; }
 .cta__buttons { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; margin-top: 24px; }
 .cta__platforms { margin-top: 20px; font: 500 13px "JetBrains Mono", monospace; color: var(--muted-2); }
+
+/* Linux install steps under the download grid */
+.install-steps {
+  max-width: 720px; margin: 32px auto 0; text-align: left;
+}
+.install-steps h3 {
+  margin: 0 0 8px; font: 700 18px "Space Grotesk", system-ui, sans-serif; color: var(--text);
+}
+.install-steps__lead {
+  margin: 0 0 16px; font: 500 14px "Inter", system-ui, sans-serif; color: var(--muted);
+  line-height: 1.55;
+}
+.install-steps__note {
+  margin: 14px 0 0; font: 500 13px "Inter", system-ui, sans-serif; color: var(--muted-2);
+  line-height: 1.5;
+}
+.install-steps__note code {
+  font: 500 12px "JetBrains Mono", monospace; color: var(--text);
+  background: var(--fill); padding: 2px 6px; border-radius: 6px;
+}
+.install-steps__note a { color: var(--accent); text-decoration: none; }
+.install-steps__note a:hover { text-decoration: underline; }
+.install-steps .codeblock { margin-top: 0; }
+
 @media (max-width: 640px) { .download-grid { grid-template-columns: 1fr; } }
 
 /* ---------- Footer ---------- */
@@ -529,7 +553,7 @@ html.theme-animating * {
 .reveal.is-visible { opacity: 1; transform: none; }
 
 /* ---------- OS logos: download cards + hero platform chips ---------- */
-.download-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); max-width: 780px; }
+.download-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); max-width: 820px; }
 .download-card {
   display: flex; flex-direction: column; align-items: center; text-align: center;
   transition: transform .18s ease, border-color .2s ease, box-shadow .2s ease;
@@ -547,6 +571,9 @@ html.theme-animating * {
 .os-badge--apple { background: linear-gradient(145deg, #43434a 0%, #74747e 100%); }
 .os-badge--apple .os-apple { fill: #fff; }
 .os-badge--windows { background: #fff; border: 1px solid var(--line); }
+.os-badge--linux { background: linear-gradient(145deg, #1a1a1a 0%, #2d2d2d 100%); }
+.os-badge--linux .os-linux { fill: #fff; }
+.os-linux { fill: var(--text); }
 @media (max-width: 780px) { .download-grid { grid-template-columns: 1fr; max-width: 360px; } }
 
 /* Hero: OS logo in the primary button + a platform-chip showcase row */

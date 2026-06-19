@@ -17,8 +17,12 @@ case "$ARCH" in
     ARGS_FILE=args.gn.x64
     ARCH=x64
     ;;
+  linux)
+    OUT_DIR=aether_linux
+    ARGS_FILE=args.gn.linux
+    ;;
   *)
-    echo "Unknown arch: $ARCH (use arm64 or x64)" >&2
+    echo "Unknown arch: $ARCH (use arm64, x64, or linux)" >&2
     exit 1
     ;;
 esac
@@ -28,4 +32,8 @@ mkdir -p "out/$OUT_DIR"
 cp "$XPLORER/build/$ARGS_FILE" "out/$OUT_DIR/args.gn"
 gn gen "out/$OUT_DIR"
 autoninja -C "out/$OUT_DIR" chrome
-echo "Built ($ARCH): $SRC/out/$OUT_DIR/Xplorer.app"
+if [ "$ARCH" = "linux" ]; then
+  echo "Built ($ARCH): $SRC/out/$OUT_DIR/chrome"
+else
+  echo "Built ($ARCH): $SRC/out/$OUT_DIR/Xplorer.app"
+fi

@@ -14,6 +14,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/macOS-Apple%20Silicon-000000?logo=apple&logoColor=white" alt="macOS Apple Silicon">
   <img src="https://img.shields.io/badge/Windows-x64-0078D6?logo=windows&logoColor=white" alt="Windows x64">
+  <img src="https://img.shields.io/badge/Linux-x64-FCC624?logo=linux&logoColor=black" alt="Linux x64">
   <a href="https://github.com/daniel-farina/xplorer/releases"><img src="https://img.shields.io/github/v/release/daniel-farina/xplorer?color=2563eb" alt="Latest release"></a>
   <a href="https://github.com/daniel-farina/xplorer/stargazers"><img src="https://img.shields.io/github/stars/daniel-farina/xplorer?color=f5a623&label=%E2%AD%90%20stars" alt="GitHub stars"></a>
   <a href="https://daniel-farina.github.io/xplorer/"><img src="https://img.shields.io/badge/website-xplorer-2563eb" alt="Website"></a>
@@ -33,7 +34,7 @@ Grok is woven in at the core, not bolted on as a sidebar. And the same engine th
 Grok in your tabs exposes a clean local API, so **any agent can drive the browser** — no
 launch flags, no setup dance.
 
-> **Platform:** macOS — Apple Silicon (arm64) and Intel (x86_64) — and **Windows x64**. [Download the latest release](https://github.com/daniel-farina/xplorer/releases) or [build from source](#develop-locally).
+> **Platform:** macOS — Apple Silicon (arm64) and Intel (x86_64) — **Windows x64**, and **Linux x64**. [Download the latest release](https://github.com/daniel-farina/xplorer/releases) or [build from source](#develop-locally).
 
 ---
 
@@ -199,11 +200,59 @@ Run anyway**, and allow it in Defender if prompted).
 | **macOS — Apple Silicon** (M1/M2/M3/M4) | [**Xplorer-macos-arm64.dmg**](https://github.com/daniel-farina/xplorer/releases/latest/download/Xplorer-macos-arm64.dmg) · [.zip](https://github.com/daniel-farina/xplorer/releases/latest/download/Xplorer-macos-arm64.zip) |
 | **macOS — Intel** | [**Xplorer-macos-x86_64.dmg**](https://github.com/daniel-farina/xplorer/releases/latest/download/Xplorer-macos-x86_64.dmg) · [.zip](https://github.com/daniel-farina/xplorer/releases/latest/download/Xplorer-macos-x86_64.zip) |
 | **Windows x64** (10/11) | [**Xplorer-windows-x64-installer.exe**](https://github.com/daniel-farina/xplorer/releases/latest/download/Xplorer-windows-x64-installer.exe) · [.zip](https://github.com/daniel-farina/xplorer/releases/latest/download/Xplorer-windows-x64.zip) |
+| **Linux x64** (Ubuntu 22.04+ / Debian 12+) | [**Xplorer-linux-x64.tar.gz**](https://github.com/daniel-farina/xplorer/releases/latest/download/Xplorer-linux-x64.tar.gz) · [checksum](https://github.com/daniel-farina/xplorer/releases/latest/download/Xplorer-linux-x64.sha256.txt) |
 
 macOS: open the DMG and drag **Xplorer** to Applications. Windows: run the
 **installer** (`Xplorer-windows-x64-installer.exe` — creates Start‑menu & Desktop
-shortcuts), or grab the portable **`.zip`** and run **`Xplorer\Xplorer.exe`**. All
-releases + checksums on the
+shortcuts), or grab the portable **`.zip`** and run **`Xplorer\Xplorer.exe`**.
+
+### Linux install
+
+Portable **x86_64** build — no installer yet. Tested on Ubuntu 24.04; Ubuntu 22.04+
+and Debian 12+ should work. **Requires an x86_64 CPU** (Intel/AMD). ARM64 Linux
+(Raspberry Pi, Apple Silicon VMs) will fail with `Exec format error`.
+
+**1. Download** (pick a directory, e.g. `~/Downloads`):
+
+```sh
+curl -LO https://github.com/daniel-farina/xplorer/releases/latest/download/Xplorer-linux-x64.tar.gz
+curl -LO https://github.com/daniel-farina/xplorer/releases/latest/download/Xplorer-linux-x64.sha256.txt
+sha256sum -c Xplorer-linux-x64.sha256.txt
+```
+
+**2. Extract and run** (from anywhere you like — `~/Applications`, `/opt`, etc.):
+
+```sh
+tar -xzf Xplorer-linux-x64.tar.gz
+cd Xplorer-linux-x64
+./xplorer
+```
+
+The `xplorer` wrapper launches the real `chrome` binary beside it. On first start
+the Agent Gateway writes `~/.xplorer/gateway.json` and listens on `127.0.0.1:9334`.
+
+**3. Confirm it came up:**
+
+```sh
+cat ~/.xplorer/gateway.json
+```
+
+**Optional — add a menu shortcut** (while still inside `Xplorer-linux-x64/`):
+
+```sh
+sed "s|@@INSTALL_DIR@@|$PWD|g" xplorer.desktop > ~/.local/share/applications/xplorer.desktop
+```
+
+**Sandbox note:** the tarball ships without the SUID sandbox bit (tar cannot
+preserve it). Modern kernels use the unprivileged namespace sandbox and need no
+extra setup. If Chromium warns about the sandbox on your distro, either pass
+`--no-sandbox` or run:
+
+```sh
+sudo chown root:root chrome_sandbox && sudo chmod 4755 chrome_sandbox
+```
+
+All releases + checksums on the
 [Releases](https://github.com/daniel-farina/xplorer/releases) page, or
 [build it yourself](#develop-locally).
 
@@ -241,7 +290,13 @@ git clone https://github.com/daniel-farina/xplorer.git
 ./xplorer/apply.sh    # copy src/ + companion UI + icons, apply source patches
 ./xplorer/build.sh    # Apple Silicon: gn gen out/aether + autoninja
 ./xplorer/build.sh ./chromium/src x64   # Intel: out/aether_x64 (cross-builds on M-series)
+./xplorer/build.sh ./chromium/src linux # Linux x64: out/aether_linux
 ```
+
+**Linux** from source (Ubuntu 24.04+ recommended): same overlay, then
+`./build/install-build-deps.sh --no-prompt`, `gclient runhooks`, and
+`./scripts/package_linux.sh` to produce `dist/Xplorer-linux-x64.tar.gz`.
+See `scripts/linux_buildbox_bootstrap.sh` for an unattended remote-build script.
 
 The first build takes a few hours (it compiles all of Chromium locally). After that,
 **incremental rebuilds are minutes** — edit a file and re‑run `autoninja -C out/aether chrome`.

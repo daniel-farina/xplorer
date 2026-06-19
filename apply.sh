@@ -9,6 +9,9 @@ SRC="${1:-$XPLORER/../chromium/src}"
 echo "Copying new source files..."
 cp -R "$XPLORER/src/chrome" "$SRC/"
 
+# macOS-only icon work (sips, xcrun actool, .icns, chrome/app/theme/chromium/mac
+# paths) — skipped on Linux/Windows, which don't have these tools/paths.
+if [ "$(uname)" = "Darwin" ]; then
 echo "Installing Xplorer app icon..."
 cp "$XPLORER/branding/app.icns" "$SRC/chrome/app/theme/chromium/mac/app.icns"
 
@@ -44,7 +47,10 @@ if [ -d "$ICONSET" ]; then
   fi
   rm -rf "$CAR_TMP"
 fi
+fi  # end macOS-only app-icon block
 
+# Cross-platform: the Grok toolbar vector icon is referenced by BUILD.gn (added
+# by apply_integration.py), so it must be copied on every platform.
 echo "Installing Grok toolbar vector icon..."
 cp "$XPLORER/branding/grok.icon" "$SRC/chrome/app/vector_icons/grok.icon"
 
@@ -53,6 +59,10 @@ cp "$XPLORER/branding/grok.icon" "$SRC/chrome/app/vector_icons/grok.icon"
 # whose REAL grit sources are the scaled theme dirs (default_100_percent =NxN,
 # default_200_percent =2Nx2N), NOT chrome/app/theme/chromium/. We overwrite all
 # three from the transparent Xplorer mark.
+# macOS-only: product logos are regenerated with `sips` (not present on Linux).
+# On Linux the stock Chromium logos remain on the About page (cosmetic); the
+# Xplorer version string is still applied via apply_integration.py.
+if [ "$(uname)" = "Darwin" ]; then
 echo "Installing Xplorer product logos..."
 LOGO_SRC="$XPLORER/branding/xplorer-mark-1024.png"
 if [ -f "$LOGO_SRC" ]; then
@@ -73,6 +83,7 @@ if [ -f "$LOGO_SRC" ]; then
 else
   echo "  WARNING: $LOGO_SRC not found — product logos NOT updated" >&2
 fi
+fi  # end macOS-only product-logo block
 
 echo "Applying integration edits..."
 python3 "$XPLORER/patches/apply_integration.py" "$SRC"
