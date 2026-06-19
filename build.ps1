@@ -61,6 +61,12 @@ Set-Content -Path (Join-Path $outPath "args.gn") -Value $gnArgs -Encoding ascii
 
 Push-Location $Src
 try {
+  # siso prints "offline mode" to stderr when building locally (use_remoteexec=
+  # false). Under EAP=Stop, PowerShell 5.1 turns that native-command stderr line
+  # into a *terminating* error and aborts the build even though it succeeded.
+  # Rely on the explicit $LASTEXITCODE checks below for real failures instead.
+  $ErrorActionPreference = "Continue"
+
   Write-Host "gn gen out\$OutDir ..."
   & gn gen "out\$OutDir"
   if ($LASTEXITCODE -ne 0) { throw "gn gen failed (exit $LASTEXITCODE)" }
