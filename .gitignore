@@ -8,6 +8,9 @@ dist-linux/
 __pycache__/
 *.pyc
 
+# DO buildbox/test-vm state (droplet ids, ips) — local only
+.do-*.state
+
 # Secrets — never commit
 .env
 .env.*

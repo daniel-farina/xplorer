@@ -9,13 +9,15 @@
 #
 #   Usage:
 #     ./do-chromium-buildbox.sh provision        # create key + droplet (+ optional volume), wait, print ssh
-#     ./do-chromium-buildbox.sh teardown         # destroy droplet (and volume) recorded in the state file
+#     ./do-chromium-buildbox.sh snapshot         # snapshot disk (warm checkout + out/) — kept across teardown
+#     ./do-chromium-buildbox.sh restore          # create a droplet from the saved snapshot (fast incremental builds)
+#     ./do-chromium-buildbox.sh teardown         # destroy droplet (and volume); keeps the snapshot
 #     ./do-chromium-buildbox.sh status           # show recorded resources
 #
 #   Tunables (env vars):
 #     DROPLET_NAME   default: chromium-build
-#     REGION         default: nyc3   (must be one of: nyc3, sfo3)
-#     SIZE           default: c2-16vcpu-32gb  (CPU-Optimized, 16 vCPU / 32 GiB / 200 GiB SSD)
+#     REGION         default: nyc3   (pick a region that offers SIZE)
+#     SIZE           default: c2-16vcpu-32gb  (CPU-Optimized; override e.g. c2-48vcpu-96gb)
 #     IMAGE          default: ubuntu-24-04-x64
 #     SSH_KEY_FILE   default: ~/.ssh/id_ed25519.pub  (your PUBLIC key)
 #     ATTACH_VOLUME  default: 0   set to 1 to also attach a block-storage volume
@@ -101,25 +103,26 @@ state_get() {
   [ -f "$STATE_FILE" ] || { echo ""; return; }
   grep "^$1=" "$STATE_FILE" 2>/dev/null | head -n1 | cut -d= -f2- || echo ""
 }
+state_unset() {
+  [ -f "$STATE_FILE" ] || return 0
+  grep -v "^${1}=" "$STATE_FILE" > "${STATE_FILE}.tmp" 2>/dev/null || true
+  mv "${STATE_FILE}.tmp" "$STATE_FILE"
+}
 
-# --- commands ---------------------------------------------------------------
-
-cmd_provision() {
-  preflight
+# Upload the SSH public key (idempotent). Echoes the key id on stdout; records
+# SSH_KEY_ID / SSH_KEY_FPR in the state file. All chatter goes to stderr so the
+# caller can capture just the id.
+ensure_ssh_key() {
   [ -f "$SSH_KEY_FILE" ] || die "SSH public key not found: $SSH_KEY_FILE (set SSH_KEY_FILE=...)"
   case "$(cat "$SSH_KEY_FILE")" in
     ssh-rsa*|ssh-ed25519*|ecdsa-*) ;;
     *) die "$SSH_KEY_FILE does not look like an SSH PUBLIC key";;
   esac
-
-  # 1) Upload SSH key. If the key already exists, reuse it by fingerprint.
   info "Uploading SSH public key from $SSH_KEY_FILE ..."
   local pubkey keyname key_payload resp http tmp key_id key_fpr
   pubkey="$(cat "$SSH_KEY_FILE")"
   keyname="${DROPLET_NAME}-$(hostname -s 2>/dev/null || echo host)-$(date +%s)"
-  key_payload="$(jq -n --arg name "$keyname" --arg pk "$pubkey" \
-    '{name:$name, public_key:$pk}')"
-
+  key_payload="$(jq -n --arg name "$keyname" --arg pk "$pubkey" '{name:$name, public_key:$pk}')"
   tmp="$(mktemp)"
   http="$(curl -sS -o "$tmp" -w '%{http_code}' -X POST \
     -H "Authorization: Bearer $DO_TOKEN" -H "Content-Type: application/json" \
@@ -128,7 +131,6 @@ cmd_provision() {
     key_id="$(jq -r '.ssh_key.id' <"$tmp")"
     key_fpr="$(jq -r '.ssh_key.fingerprint' <"$tmp")"
   elif [ "$http" = "422" ]; then
-    # Key already in account: look it up by matching fingerprint.
     info "Key already present; looking it up by fingerprint ..."
     local local_fpr
     local_fpr="$(ssh-keygen -E md5 -lf "$SSH_KEY_FILE" | awk '{print $2}' | sed 's/^MD5://')"
@@ -144,6 +146,33 @@ cmd_provision() {
   state_set SSH_KEY_ID "$key_id"
   state_set SSH_KEY_FPR "$key_fpr"
   info "SSH key id=$key_id fingerprint=$key_fpr"
+  echo "$key_id"
+}
+
+# wait_active DROPLET_ID -> polls until status=active with a public IPv4; echoes the IP.
+wait_active() {
+  local droplet_id="$1" status ip i=0 max=180 droplet_resp
+  while :; do
+    droplet_resp="$(api GET "/droplets/$droplet_id")"
+    status="$(jq -r '.droplet.status' <<<"$droplet_resp")"
+    ip="$(jq -r '.droplet.networks.v4[]? | select(.type=="public") | .ip_address' <<<"$droplet_resp" | head -n1)"
+    if [ "$status" = "active" ] && [ -n "$ip" ] && [ "$ip" != "null" ]; then break; fi
+    i=$((i+1))
+    [ "$i" -ge "$max" ] && die "timed out waiting for droplet to become active (status=$status)"
+    printf '\r    status=%-12s elapsed=%ds' "$status" "$((i*5))" >&2
+    sleep 5
+  done
+  printf '\n' >&2
+  echo "$ip"
+}
+
+# --- commands ---------------------------------------------------------------
+
+cmd_provision() {
+  preflight
+
+  # 1) Upload SSH key (idempotent; reused by fingerprint if already present).
+  local key_id; key_id="$(ensure_ssh_key)"
 
   # 2) Optionally create a block-storage volume (only if ATTACH_VOLUME=1).
   local volume_id="" volumes_json="[]"
@@ -177,20 +206,7 @@ cmd_provision() {
   info "Droplet id=$droplet_id (waiting for it to become active) ..."
 
   # 4) Poll until status=active and a public IPv4 appears.
-  local status ip i=0 max=120
-  while :; do
-    droplet_resp="$(api GET "/droplets/$droplet_id")"
-    status="$(jq -r '.droplet.status' <<<"$droplet_resp")"
-    ip="$(jq -r '.droplet.networks.v4[]? | select(.type=="public") | .ip_address' <<<"$droplet_resp" | head -n1)"
-    if [ "$status" = "active" ] && [ -n "$ip" ] && [ "$ip" != "null" ]; then
-      break
-    fi
-    i=$((i+1))
-    [ "$i" -ge "$max" ] && die "timed out waiting for droplet to become active (status=$status)"
-    printf '\r    status=%-12s elapsed=%ds' "$status" "$((i*5))" >&2
-    sleep 5
-  done
-  printf '\n' >&2
+  local ip; ip="$(wait_active "$droplet_id")"
   state_set DROPLET_IP "$ip"
 
   info "Droplet is active."
@@ -200,7 +216,7 @@ cmd_provision() {
     name:    $DROPLET_NAME
     id:      $droplet_id
     region:  $REGION
-    size:    $SIZE  (16 vCPU / 32 GiB RAM / 200 GiB SSD)
+    size:    $SIZE
     image:   $IMAGE
     ip:      $ip
 $( [ -n "$volume_id" ] && echo "    volume:  $volume_id (${VOLUME_SIZE_GB} GiB, attached as /dev/disk/by-id/scsi-0DO_Volume_*)" )
@@ -240,8 +256,98 @@ cmd_teardown() {
     info "Volume $volume_id deleted."
   fi
 
-  rm -f "$STATE_FILE"
-  info "Teardown complete; state file removed."
+  # Keep the snapshot id (and the reusable SSH key) so a later `restore` works;
+  # only forget the now-deleted droplet/volume.
+  state_unset DROPLET_ID
+  state_unset DROPLET_IP
+  state_unset VOLUME_ID
+  local snap; snap="$(state_get SNAPSHOT_ID)"
+  if [ -n "$snap" ]; then
+    info "Teardown complete; kept snapshot $snap (restore with: $0 restore)."
+  else
+    rm -f "$STATE_FILE"
+    info "Teardown complete; state file removed."
+  fi
+}
+
+# Snapshot the build droplet's whole disk (warm Chromium checkout + out/ object
+# cache) so future builds restore in minutes instead of recompiling for hours.
+# Usage: cmd_snapshot [droplet_id]
+cmd_snapshot() {
+  preflight
+  local droplet_id snap_name action_id status i=0 max=900 resp
+  droplet_id="${2:-$(state_get DROPLET_ID)}"
+  [ -n "$droplet_id" ] || die "no droplet id (state empty; pass one: $0 snapshot <droplet_id>)"
+  snap_name="${SNAPSHOT_NAME:-${DROPLET_NAME}-snap-$(date +%Y%m%d-%H%M%S)}"
+  info "Snapshotting droplet $droplet_id as '$snap_name' (10-40 min for a large disk) ..."
+  resp="$(api POST "/droplets/$droplet_id/actions" \
+    "$(jq -n --arg n "$snap_name" '{type:"snapshot", name:$n}')")"
+  action_id="$(jq -r '.action.id' <<<"$resp")"
+  [ -n "$action_id" ] && [ "$action_id" != "null" ] || die "snapshot action returned no id"
+  info "Snapshot action id=$action_id; polling ..."
+  while :; do
+    resp="$(api GET "/actions/$action_id")"
+    status="$(jq -r '.action.status' <<<"$resp")"
+    case "$status" in
+      completed) break ;;
+      errored)   die "snapshot action errored" ;;
+    esac
+    i=$((i+1))
+    [ "$i" -ge "$max" ] && die "timed out waiting for snapshot (status=$status)"
+    printf '\r    snapshot status=%-10s elapsed=%dm%02ds' "$status" "$(((i*10)/60))" "$(((i*10)%60))" >&2
+    sleep 10
+  done
+  printf '\n' >&2
+  local snap_id
+  snap_id="$(api GET "/droplets/$droplet_id/snapshots?per_page=200" \
+    | jq -r '.snapshots | sort_by(.created_at) | last | .id')"
+  [ -n "$snap_id" ] && [ "$snap_id" != "null" ] || die "snapshot completed but id not found"
+  state_set SNAPSHOT_ID "$snap_id"
+  state_set SNAPSHOT_NAME "$snap_name"
+  info "Snapshot complete: id=$snap_id name=$snap_name"
+  cat <<EOF
+
+  Snapshot saved (kept across teardown).
+    id:    $snap_id
+    name:  $snap_name
+
+  Restore later (boots the warm checkout; then incremental build = minutes):
+    SNAPSHOT_ID=$snap_id $0 restore
+EOF
+}
+
+# Create a fresh droplet from a saved snapshot. Usage: cmd_restore [snapshot_id]
+cmd_restore() {
+  preflight
+  local snap_id key_id ip droplet_id droplet_payload droplet_resp
+  snap_id="${2:-${SNAPSHOT_ID:-$(state_get SNAPSHOT_ID)}}"
+  [ -n "$snap_id" ] || die "no snapshot id (set SNAPSHOT_ID=... or pass: $0 restore <snapshot_id>)"
+  key_id="$(ensure_ssh_key)"
+  info "Creating droplet $DROPLET_NAME from snapshot $snap_id ($SIZE, $REGION) ..."
+  droplet_payload="$(jq -n \
+    --arg name "$DROPLET_NAME" --arg region "$REGION" --arg size "$SIZE" \
+    --arg image "$snap_id" --argjson keys "[$key_id]" \
+    '{name:$name, region:$region, size:$size, image:($image|tonumber),
+      ssh_keys:$keys, ipv6:true, monitoring:true, tags:["chromium-build"]}')"
+  droplet_resp="$(api POST "/droplets" "$droplet_payload")"
+  droplet_id="$(jq -r '.droplet.id' <<<"$droplet_resp")"
+  [ -n "$droplet_id" ] && [ "$droplet_id" != "null" ] || die "droplet creation returned no id"
+  state_set DROPLET_ID "$droplet_id"
+  info "Droplet id=$droplet_id (waiting for active) ..."
+  ip="$(wait_active "$droplet_id")"
+  state_set DROPLET_IP "$ip"
+  cat <<EOF
+
+  Restored droplet ready.
+    name:  $DROPLET_NAME
+    id:    $droplet_id
+    from:  snapshot $snap_id
+    size:  $SIZE
+    ip:    $ip
+
+  Connect:  ssh root@$ip
+  Tear down (snapshot is kept):  $0 teardown
+EOF
 }
 
 cmd_status() {
@@ -255,16 +361,22 @@ cmd_status() {
 case "${1:-}" in
   provision) cmd_provision ;;
   teardown)  cmd_teardown ;;
+  snapshot)  cmd_snapshot "$@" ;;
+  restore)   cmd_restore "$@" ;;
   status)    cmd_status ;;
   *) cat >&2 <<EOF
-usage: $0 {provision|teardown|status}
+usage: $0 {provision|teardown|snapshot|restore|status}
 
-  provision   upload SSH key, create CPU-Optimized droplet (+ optional volume),
-              wait until active, print the ssh command
-  teardown    delete the droplet (and volume) recorded in $STATE_FILE
-  status      show recorded resource ids
+  provision           upload SSH key, create CPU-Optimized droplet (+ optional
+                      volume), wait until active, print the ssh command
+  snapshot [id]       snapshot the droplet's disk (warm checkout + out/ cache)
+                      so future builds restore in minutes; kept across teardown
+  restore  [snap_id]  create a fresh droplet from a saved snapshot
+  teardown            delete the droplet (and volume); keeps the snapshot
+  status              show recorded resource ids
 
 env: DO_TOKEN (required), REGION, SIZE, IMAGE, SSH_KEY_FILE,
+     SNAPSHOT_ID / SNAPSHOT_NAME (for restore/snapshot),
      ATTACH_VOLUME=1 VOLUME_SIZE_GB=200 to add block storage
 EOF
      exit 2 ;;
