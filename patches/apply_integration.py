@@ -326,6 +326,21 @@ def main(src: Path):
         grd.write_text(g)
         print(f"  edited (title formats): {grd}")
 
+    # Broad app-name rebrand: ~700 user-facing strings in chromium_strings.grd
+    # still hardcode "Chromium" (default-browser prompt, profile/startup errors,
+    # background-run, update nags, etc.) — the product-name rename only covered
+    # IDS_PRODUCT_NAME. Replace them all with Xplorer, preserving the legal
+    # "Chromium Authors" copyright. Risk-checked: no <message name="…"> IDs
+    # contain "Chromium", so this only touches text content + translator descs,
+    # never resource IDs. Guard: post-rebrand only the copyright keeps "Chromium".
+    g = grd.read_text()
+    if g.count("Chromium") > g.count("Chromium Authors"):
+        g = g.replace("Chromium Authors", "\x00AUTH\x00")
+        g = g.replace("Chromium", "Xplorer")
+        g = g.replace("\x00AUTH\x00", "Chromium Authors")
+        grd.write_text(g)
+        print(f"  edited (broad app-name rebrand): {grd}")
+
     # 5. Link Grok companion (side panel + AI Mode redirect).
     edit(
         browser_gn,

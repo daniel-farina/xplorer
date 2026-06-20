@@ -49,6 +49,17 @@ Each loop iteration: read this file + `git log`, do the next safe item, commit, 
 
 ## 🕓 later (verify-then-fix; need a build or checkout to confirm)
 
+- [x] **Broad app-name rebrand in chromium_strings.grd** — DONE + BUILD-VERIFIED (branding-phase2):
+  ~700 hardcoded "Chromium" user strings (default-browser prompt, profile/startup errors,
+  background-run, update nags) → Xplorer, preserving the "Chromium Authors" copyright. Risk-checked
+  (no message-name IDs contain "Chromium"); compiles clean (arm64, 3m12s); built pak confirms
+  "Make Xplorer the default" etc.
+- [ ] **Remaining "Chromium" strings live in OTHER grds** — the built locale.pak still shows
+  "Chromium blocks/sends/asks/uses/recommends…" sourced from generated_resources.grd + component
+  *_strings.grd files (NOT chromium_strings.grd). Apply the same risk-checked broad replace (preserve
+  message-name IDs + "Chromium Authors") to those grds. Biggest remaining branding surface.
+
+
 - [x] **Window/taskbar title says "… - Chromium"** — FIXED: the title-format messages
   (IDS_BROWSER_WINDOW_TITLE_FORMAT + accessible/channel + ChromeOS/captive-portal variants)
   hardcoded "- Chromium" rather than the renamed product; rebranded all to Xplorer. Was VISUALLY CONFIRMED on the test desktop
