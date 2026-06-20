@@ -62,7 +62,8 @@ Each loop iteration: read this file + `git log`, do the next safe item, commit, 
 - [ ] **Windows installer / ARP / shortcut strings** — grep `chrome/installer` after apply.
 - [ ] **AgentGateway port** — `search_url` hardcodes `127.0.0.1:9334`; confirm `Start(0)` pins 9334
   (else omnibox search 404s) and make `/omnibox` 302 even with an empty store.
-- [ ] **macOS `UTTypeDescription` = "Chromium Extension" / "Chromium Shortcut"** — VERIFIED in the
+- [x] **macOS `UTTypeDescription` = "Chromium Extension" / "Chromium Shortcut"** — FIXED (branding-phase2:
+  routed through `${CHROMIUM_SHORT_NAME}`; generated bundle now reads "Xplorer Extension/Shortcut"). Was VERIFIED in the
   shipped **v0.7.3** bundle (`/Applications/Xplorer.app/Contents/Info.plist`; user-visible in Finder
   Get-Info on `.crx`/app-shortcut files). Should read "Xplorer …". Source: the mac app Info.plist is
   generated from `chrome/app/app-Info.plist` / branding strings — fix via an `apply_integration.py`

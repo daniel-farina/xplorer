@@ -252,6 +252,21 @@ def main(src: Path):
         branding.write_text(b)
         print(f"  edited: {branding}")
 
+    # app-Info.plist hardcodes two UTTypeDescription strings as "Chromium
+    # Extension"/"Chromium Shortcut" (all the other fields use the substituted
+    # ${CHROMIUM_SHORT_NAME}, which resolves to "Xplorer"). Route these through
+    # the same variable so Finder's Get-Info on .crx/app-shortcut files reads
+    # "Xplorer …" instead of "Chromium …".
+    app_info = src / "chrome/app/app-Info.plist"
+    ai = app_info.read_text()
+    if "${CHROMIUM_SHORT_NAME} Extension" not in ai:
+        ai = ai.replace("<string>Chromium Extension</string>",
+                        "<string>${CHROMIUM_SHORT_NAME} Extension</string>")
+        ai = ai.replace("<string>Chromium Shortcut</string>",
+                        "<string>${CHROMIUM_SHORT_NAME} Shortcut</string>")
+        app_info.write_text(ai)
+        print(f"  edited: {app_info}")
+
     # The visible app name comes from IDS_PRODUCT_NAME / IDS_SHORT_PRODUCT_NAME
     # in the (non-Google, non-CfT) else branch of chromium_strings.grd.
     grd = src / "chrome/app/chromium_strings.grd"
