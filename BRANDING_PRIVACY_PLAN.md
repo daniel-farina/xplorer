@@ -36,13 +36,14 @@ Each loop iteration: read this file + `git log`, do the next safe item, commit, 
 
 ## 🔜 do_now (next iterations, in order)
 
-- [ ] **Disable Variations/Finch + component updater + What's New** via the existing
-  `chrome_main_delegate.cc` switch block (`apply_integration.py` ~217-233 / ~462-473).
-  Add `disable-component-update`, `disable-field-trial-config`, empty `variations-server-url` +
-  `variations-insecure-server-url`, and `ChromeWhatsNewUI` to disable-features.
-  **ANCHOR CONSTRAINT:** the second edit anchors on the literal
-  `AppendSwitchASCII("disable-features", "CalculateNativeWinOcclusion");` — if appending
-  `ChromeWhatsNewUI` to that value, update the string in BOTH blocks or the second `edit()` aborts.
+- [x] **Disable Variations/Finch + component updater** — DONE (branding-phase2): added
+  `disable-component-update`, `disable-field-trial-config`, and empty `variations-server-url` +
+  `variations-insecure-server-url` to the BasicStartupComplete switch block in
+  `chrome_main_delegate.cc`. Applies cleanly (both cmd_delegate edits intact) + built (arm64 compiles).
+- [ ] **Disable What's New (`ChromeWhatsNewUI`)** — split out of the above. Appending it to the
+  existing `disable-features` value is anchor-fragile: the second cmd_delegate `edit()` anchors on
+  `AppendSwitchASCII("disable-features", "CalculateNativeWinOcclusion");`, so the string must change
+  in BOTH blocks together or the second edit aborts. Do as its own careful step.
 
 ## 🕓 later (verify-then-fix; need a build or checkout to confirm)
 

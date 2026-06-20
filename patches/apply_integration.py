@@ -217,14 +217,24 @@ def main(src: Path):
     edit(
         cmd_delegate,
         "std::optional<int> ChromeMainDelegate::BasicStartupComplete() {",
-        f"\n  {MARKER}: AI-native defaults — never throttle backgrounded tabs.\n"
+        f"\n  {MARKER}: AI-native defaults (never throttle backgrounded tabs) +\n"
+        f"  {MARKER}: privacy — disable the component updater (Google pings), the\n"
+        f"  {MARKER}: Finch field-trial config, and the Variations seed fetch\n"
+        f"  {MARKER}: (empty server URLs). Brave/ungoogled-style: no phone-home.\n"
         "  {\n"
         "    base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();\n"
         '    for (const char* sw : {"disable-renderer-backgrounding",\n'
         '                           "disable-backgrounding-occluded-windows",\n'
-        '                           "disable-background-timer-throttling"}) {\n'
+        '                           "disable-background-timer-throttling",\n'
+        '                           "disable-component-update",\n'
+        '                           "disable-field-trial-config"}) {\n'
         "      if (!cmd->HasSwitch(sw))\n"
         "        cmd->AppendSwitch(sw);\n"
+        "    }\n"
+        '    for (const char* url_sw : {"variations-server-url",\n'
+        '                               "variations-insecure-server-url"}) {\n'
+        "      if (!cmd->HasSwitch(url_sw))\n"
+        '        cmd->AppendSwitchASCII(url_sw, "");\n'
         "    }\n"
         '    if (!cmd->HasSwitch("disable-features"))\n'
         '      cmd->AppendSwitchASCII("disable-features",\n'
