@@ -89,6 +89,11 @@ Each loop iteration: read this file + `git log`, do the next safe item, commit, 
 
 ## Notes
 
+- **2026-06-20 (phase2 build-verify):** the full phase2 overlay — UTType, Variations/Finch/
+  component-updater off, window-title rebrand, What's New off, UA brand token, + the merged v0.7.4
+  sidebar — **compiles clean on arm64 (7m16s)**. All previously apply-verified branding items are now
+  build-verified. Ready to ship in a v0.7.5.
+
 - Full audit reports (branding/search/privacy) captured by the `xplorer-branding-privacy-audit`
   workflow run `wf_6806647d-0ca`.
 - The current search hijack reuses Chromium's built-in `id==1` (Google) slot → renames it to Grok.
