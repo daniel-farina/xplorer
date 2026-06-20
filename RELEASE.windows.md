@@ -170,6 +170,11 @@ GlobalSign, Certum):
 - **OV (Organization Validation)** — cheaper (~$200–400/yr) but SmartScreen
   reputation accrues over downloads/time (early users still warned for a while).
   Now also delivered on a token/HSM (no more exportable PFX for new issuances).
+- **Open Source Code Signing (Certum)** — the cheapest legitimate option
+  (~$49/yr), issued to an *individual* developer for OSS projects. Cloud HSM via
+  **Certum SimplySign** (no USB token, no exportable PFX); OV-class reputation
+  (not instant like EV). **This is what Xplorer uses — see "Certum SimplySign
+  (cloud)" below.**
 
 **Signing** (`scripts/sign_win.ps1`, wraps `signtool` / `AzureSignTool` with
 SHA-256 + RFC-3161 timestamp). Sign in this order so the zip *and* installer
@@ -187,6 +192,54 @@ contain signed binaries:
 - PFX file: `-PfxPath cert.pfx -PfxPassword '…'`
 - Azure Key Vault (cloud HSM, CI-friendly): `-KeyVaultUrl … -KeyVaultCert … -KeyVaultClientId … -KeyVaultClientSecret … -KeyVaultTenantId …` (needs `dotnet tool install --global AzureSignTool`)
 - Hardware token: plug it in and omit the cert args — `signtool /a` auto-selects from the cert store.
+
+### Certum SimplySign (cloud) — Xplorer's setup
+
+Xplorer signs with **Certum "Open Source Code Signing"** (~$49/yr). The cert lives
+in **Certum SimplySign**, a cloud HSM — there is no PFX to point at; instead
+SimplySign bridges the cert into the Windows certificate store, and you sign via
+`signtool /a` (cert-store auto-select). Reputation is OV-class (accrues over time),
+not instant EV — but it removes the "unknown publisher" identity and the Defender
+quarantine.
+
+**One-time setup:**
+
+1. **Order + identity verification.** Buy "Open Source Code Signing" from Certum's
+   store and submit identity documents (government photo ID + a link to the OSS
+   project). Certum verifies manually — typically **1–7 days**.
+2. **Activate** the certificate into your SimplySign cloud account once
+   verification clears.
+3. **Install SimplySign on the signing machine:**
+   - **SimplySign Desktop** (Windows app) — bridges the cloud cert into the
+     Windows store / CryptoAPI.
+   - **SimplySign mobile app** (Android/iOS) — generates the OTP that approves
+     each signing session.
+   Log in to SimplySign Desktop; after login the code-signing cert appears under
+   **Current User ▸ Personal**. Verify with:
+   ```powershell
+   Get-ChildItem Cert:\CurrentUser\My | Format-List Subject, Thumbprint, NotAfter
+   ```
+
+**Sign each release** (SimplySign Desktop logged in + mobile OTP approved for the
+session). Because the key is in the store, pass **no cert args** — `sign_win.ps1`
+falls back to `signtool /a`:
+
+```powershell
+.\build.ps1 -Src C:\src\chromium\src                          # 1. build chrome
+.\scripts\sign_win.ps1 -OutDir ...\out\xplorer_x64            # 2. sign binaries (signtool /a)
+.\build.ps1 -Src C:\src\chromium\src -Installer               # 3. installer repacks signed bins
+.\scripts\sign_win.ps1 -OutDir ...\out\xplorer_x64 -InstallerOnly  # 4. sign installer
+.\scripts\package.ps1 -OutDir ...\out\xplorer_x64 -Installer  # 5. package
+signtool verify /pa /v .\out\xplorer_x64\Xplorer.exe          # 6. verify
+```
+
+If `/a` picks the wrong cert (several in the store), narrow it with signtool's
+`/n "<subject>"` or `/sha1 <thumbprint>`.
+
+> **Privacy:** the order-specific details (Order ID, identity documents, status)
+> are kept **out of this repo** — they live only in the local
+> `Xplorer-Certum-CodeSigning` folder, since they contain personal ID data and
+> must never be committed or published.
 
 ---
 
