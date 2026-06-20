@@ -20,6 +20,22 @@ for a in "$@"; do [ "$a" = "--sign-only" ] && SIGN_ONLY=1; done
 IDENTITY="Developer ID Application: Daniel Farina (ST6RKUS2KP)"
 ENT_DIR="$(cd "$(dirname "$0")" && pwd)/entitlements"
 
+# Notarization auth: prefer the App Store Connect API key (from env) — it works
+# non-interactively, whereas a keychain profile needs a one-time UI auth approval
+# that fails in scripts/cron ("No Keychain password item found ..."). Falls back
+# to the keychain profile when the env key isn't provided. No secrets live in the
+# repo; the key path/id/issuer come from the environment (see the local build doc).
+NOTARY_KEY="${XPLORER_NOTARY_KEY:-}"
+NOTARY_KEY_ID="${XPLORER_NOTARY_KEY_ID:-}"
+NOTARY_ISSUER="${XPLORER_NOTARY_ISSUER:-}"
+if [ -n "$NOTARY_KEY" ] && [ -f "$NOTARY_KEY" ] && [ -n "$NOTARY_KEY_ID" ] && [ -n "$NOTARY_ISSUER" ]; then
+  NOTARY_AUTH=(--key "$NOTARY_KEY" --key-id "$NOTARY_KEY_ID" --issuer "$NOTARY_ISSUER")
+  NOTARY_AUTH_DESC="API key $NOTARY_KEY_ID"
+else
+  NOTARY_AUTH=(--keychain-profile "$PROFILE")
+  NOTARY_AUTH_DESC="keychain profile $PROFILE"
+fi
+
 [ -d "$APP" ] || { echo "No app bundle at $APP" >&2; exit 1; }
 command -v xcrun >/dev/null || { echo "xcrun (Xcode CLT) required" >&2; exit 1; }
 
@@ -93,10 +109,10 @@ if [ -n "$SIGN_ONLY" ]; then
   exit 0
 fi
 
-echo "==> Notarizing (zip -> submit -> wait)"
+echo "==> Notarizing (zip -> submit -> wait) via $NOTARY_AUTH_DESC"
 ZIP="$(mktemp -d)/$(basename "${APP%.app}")-notarize.zip"
 ditto -c -k --keepParent "$APP" "$ZIP"
-xcrun notarytool submit "$ZIP" --keychain-profile "$PROFILE" --wait
+xcrun notarytool submit "$ZIP" "${NOTARY_AUTH[@]}" --wait
 rm -rf "$(dirname "$ZIP")"
 
 echo "==> Stapling the notarization ticket to the app"
