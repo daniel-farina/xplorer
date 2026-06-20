@@ -242,6 +242,20 @@ def main(src: Path):
         "  }\n",
     )
 
+    # User-Agent / Sec-CH-UA: advertise the Xplorer brand alongside Chromium
+    # (NEVER replace "Chromium"/"Google Chrome" or the Chrome/<ver> token —
+    # site-compat). Appended in the shared brand-list builder so it shows in both
+    # the low-entropy and full-version Sec-CH-UA brand lists. before=True with no
+    # restated return line so edit() splices (the whitespace heuristic would
+    # otherwise duplicate the return).
+    ua_utils = src / "components/embedder_support/user_agent_utils.cc"
+    edit(
+        ua_utils,
+        "  return ShuffleBrandList(brand_version_list, seed);",
+        '  brand_version_list.emplace_back("Xplorer", version);  // XPLORER\n',
+        before=True,
+    )
+
     # 4. Branding: rename the product from "Chromium" to "Xplorer".
     branding = src / "chrome/app/theme/chromium/BRANDING"
     b = branding.read_text()

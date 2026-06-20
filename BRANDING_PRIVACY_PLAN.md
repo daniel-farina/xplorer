@@ -54,7 +54,11 @@ Each loop iteration: read this file + `git log`, do the next safe item, commit, 
   hardcoded "- Chromium" rather than the renamed product; rebranded all to Xplorer. Was VISUALLY CONFIRMED on the test desktop
   (title bar read "Grok - Chromium"). Audit assumed handled; it is not. Find the residual product
   string / WM class.
-- [ ] **User-Agent + UA-CH brand list** still "Chromium"/"Google Chrome"; append a `Xplorer/0.7.0`
+- [x] **User-Agent + UA-CH brand list** — DONE (branding-phase2): append `{"Xplorer", version}` to
+  the shared brand-list builder in user_agent_utils.cc (before the ShuffleBrandList return), so both
+  the low-entropy and full-version Sec-CH-UA lists advertise Xplorer. Chromium kept, Chrome/<ver>
+  untouched (site-compat). Apply-verified (1 insert, Chromium intact); compile confirmed by the
+  next build. Was: append a `Xplorer/0.7.0`
   brand token (never replace `Chrome/<ver>` — site-compat). `chrome_content_client.cc` +
   `user_agent_utils.cc`; verify M151 signatures first.
 - [ ] **Force kill-switch prefs** in a PostBrowserStart hook: `kMetricsReportingEnabled=false`,
