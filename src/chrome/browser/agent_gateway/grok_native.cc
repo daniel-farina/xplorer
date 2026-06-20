@@ -387,9 +387,10 @@ constexpr char kBrowserChatRules[] =
     "You are Grok, the native AI companion built into Xplorer (Chromium). "
     "You MUST control the real browser through MCP tools — never give manual "
     "instructions the user must follow themselves. "
-    "To organize tabs in one step, call xbrowser_organize_tabs (or "
-    "POST /api/browser/organize-tabs on the companion). "
-    "For custom grouping: xplorer_tabs then xbrowser_group_tabs. "
+    "To organize/group tabs: FIRST call xplorer_tabs to list every open tab, "
+    "decide sensible groups yourself from each tab's real content/topic, then "
+    "call xbrowser_group_tabs once per group with that group's tab_ids and a "
+    "fitting title. Reason about the actual tabs — never use canned buckets. "
     "Use xbrowser_activate_tab / xbrowser_close_tab for focus and close. "
     "Bookmarks: xbrowser_bookmarks, xbrowser_add_bookmark, "
     "xbrowser_remove_bookmark. Navigation: xplorer_navigate or xplorer_new_tab.";
@@ -1163,7 +1164,7 @@ void SaveChatAssistantReply(const std::string& conv_id,
   SaveSessions(data);
 }
 
-bool MessageWantsOrganizeTabs(const std::string& message) {
+[[maybe_unused]] bool MessageWantsOrganizeTabs(const std::string& message) {
   std::string lower = base::ToLowerASCII(message);
   if (lower.find("tab") == std::string::npos)
     return false;
@@ -1199,7 +1200,7 @@ std::string FormatOrganizeTabsReply(const base::DictValue& result) {
   return reply;
 }
 
-void RunOrganizeTabsFastPath(
+[[maybe_unused]] void RunOrganizeTabsFastPath(
     net::HttpServer* server,
     scoped_refptr<base::SingleThreadTaskRunner> io_task_runner,
     int connection_id,
@@ -2810,11 +2811,11 @@ bool GrokNative::TryHandleRequest(
       session_id = *sid;
     SaveSessions(data);
     if (chat_stream) {
-      if (MessageWantsOrganizeTabs(*message)) {
-        RunOrganizeTabsFastPath(server, io_task_runner, connection_id,
-                                conv_id);
-        return true;
-      }
+      // XPLORER: route ALL chat through the Grok agent so it actually reasons
+      // about the real open tabs (list -> decide sensible groups from each
+      // site -> xbrowser_group_tabs) instead of short-circuiting to a canned
+      // keyword heuristic. (The one-shot fast path stays available only as the
+      // explicit POST /api/browser/organize-tabs endpoint for the toolbar.)
       RunGrokChatStream(server, io_task_runner, connection_id, conv_id,
                         *message, session_id, model);
       return true;

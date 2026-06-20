@@ -308,16 +308,15 @@ TOOLS = {
         {"type": "object", "properties": {"tab": TAB},
          "required": ["tab"]}, t_close_tab),
     "xbrowser_group_tabs": (
-        "Group tabs together with an optional title (native Chrome tab groups).",
+        "Group specific tabs into a native Chrome tab group with a title. This is "
+        "how you organize tabs: FIRST call xplorer_tabs to see every open tab, THEN "
+        "decide sensible groups yourself from each tab's real title/URL/topic, THEN "
+        "call this once per group with that group's tab_ids and a fitting title. Do "
+        "not use any canned/preset bucketing — reason about the actual tabs.",
         {"type": "object", "properties": {
             "tab_ids": {"type": "array", "items": {"type": "string"}},
             "title": {"type": "string"}},
          "required": ["tab_ids"]}, t_group_tabs),
-    "xbrowser_organize_tabs": (
-        "Organize all open tabs into logical native Chrome groups in one call "
-        "(Grok, Xplorer, News, Travel, Development, …). Prefer this over manual "
-        "grouping when the user asks to organize tabs.",
-        {"type": "object", "properties": {}}, t_organize_tabs),
     "xbrowser_split_tab": (
         "Open split view from a tab (side_by_side or stacked).",
         {"type": "object", "properties": {
