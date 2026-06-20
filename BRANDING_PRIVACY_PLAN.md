@@ -62,6 +62,20 @@ Each loop iteration: read this file + `git log`, do the next safe item, commit, 
 - [ ] **Windows installer / ARP / shortcut strings** — grep `chrome/installer` after apply.
 - [ ] **AgentGateway port** — `search_url` hardcodes `127.0.0.1:9334`; confirm `Start(0)` pins 9334
   (else omnibox search 404s) and make `/omnibox` 302 even with an empty store.
+- [ ] **macOS `UTTypeDescription` = "Chromium Extension" / "Chromium Shortcut"** — VERIFIED in the
+  shipped **v0.7.3** bundle (`/Applications/Xplorer.app/Contents/Info.plist`; user-visible in Finder
+  Get-Info on `.crx`/app-shortcut files). Should read "Xplorer …". Source: the mac app Info.plist is
+  generated from `chrome/app/app-Info.plist` / branding strings — fix via an `apply_integration.py`
+  Info.plist string replacement (needs a build to confirm the generated plist picks it up).
+- [ ] **macOS `CFBundleShortVersionString` = engine version (151.0.7897.0), not 0.7.3** — Finder
+  Get-Info shows the Chromium version. Cosmetic/conventional (Chrome does the same), but if we want
+  the Xplorer version surfaced here, set it from `XPLORER_VERSION` during apply. Low priority.
+
+## Audit log
+- **2026-06-20 (post-v0.7.3):** audited the shipped arm64 bundle. ✅ Correct: helper apps
+  ("Xplorer Helper (…)"), framework ("Xplorer Framework"), `CFBundleName`/`DisplayName` = Xplorer,
+  identifier `org.xplorer.Xplorer`. ❌ Residual: the two `UTTypeDescription` strings above. Internal
+  binaries `chrome_crashpad_handler` (+ `app_mode_loader`) keep Chromium names but are not user-visible.
 
 ## Notes
 
