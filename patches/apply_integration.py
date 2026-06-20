@@ -238,7 +238,7 @@ def main(src: Path):
         "    }\n"
         '    if (!cmd->HasSwitch("disable-features"))\n'
         '      cmd->AppendSwitchASCII("disable-features",\n'
-        '                             "CalculateNativeWinOcclusion");\n'
+        '                             "CalculateNativeWinOcclusion,ChromeWhatsNewUI");\n'
         "  }\n",
     )
 
@@ -501,10 +501,10 @@ def main(src: Path):
     edit(
         cmd_delegate,
         '      cmd->AppendSwitchASCII("disable-features",\n'
-        '                             "CalculateNativeWinOcclusion");\n'
+        '                             "CalculateNativeWinOcclusion,ChromeWhatsNewUI");\n'
         '  }\n',
         '      cmd->AppendSwitchASCII("disable-features",\n'
-        '                             "CalculateNativeWinOcclusion");\n'
+        '                             "CalculateNativeWinOcclusion,ChromeWhatsNewUI");\n'
         '    if (!cmd->HasSwitch("enable-features"))\n'
         '      cmd->AppendSwitchASCII("enable-features",\n'
         '                             "AiModeOmniboxEntryPoint");\n'

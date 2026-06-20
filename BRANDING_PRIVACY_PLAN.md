@@ -40,7 +40,9 @@ Each loop iteration: read this file + `git log`, do the next safe item, commit, 
   `disable-component-update`, `disable-field-trial-config`, and empty `variations-server-url` +
   `variations-insecure-server-url` to the BasicStartupComplete switch block in
   `chrome_main_delegate.cc`. Applies cleanly (both cmd_delegate edits intact) + built (arm64 compiles).
-- [ ] **Disable What's New (`ChromeWhatsNewUI`)** — split out of the above. Appending it to the
+- [x] **Disable What's New (`ChromeWhatsNewUI`)** — DONE (branding-phase2): added ChromeWhatsNewUI
+  to the disable-features value in all 3 places (block-1 insertion + block-2 anchor + insertion) so
+  both cmd_delegate edits stay matched; applies cleanly, AiMode enable-features intact. Was: split out of the above. Appending it to the
   existing `disable-features` value is anchor-fragile: the second cmd_delegate `edit()` anchors on
   `AppendSwitchASCII("disable-features", "CalculateNativeWinOcclusion");`, so the string must change
   in BOTH blocks together or the second edit aborts. Do as its own careful step.
