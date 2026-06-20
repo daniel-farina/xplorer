@@ -30,6 +30,13 @@ esac
 cd "$SRC"
 mkdir -p "out/$OUT_DIR"
 cp "$XPLORER/build/$ARGS_FILE" "out/$OUT_DIR/args.gn"
+# Xplorer privacy: never bake a developer's real Google key into the build.
+# Pairs with the empty google_* GN args in build/args.gn*. google_api_keys.cc
+# reads these env vars at gn-gen/compile time, so an exported key would
+# otherwise be compiled in. Empty = ungoogled (sign-in/sync already inert).
+export GOOGLE_API_KEY=""
+export GOOGLE_DEFAULT_CLIENT_ID=""
+export GOOGLE_DEFAULT_CLIENT_SECRET=""
 gn gen "out/$OUT_DIR"
 autoninja -C "out/$OUT_DIR" chrome
 if [ "$ARCH" = "linux" ]; then

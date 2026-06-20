@@ -25,3 +25,14 @@ use_lld = true
 # Local-only build (no Google RBE/reclient) — siso bails with "offline
 # mode" on Windows without this when it cannot auth to the RBE backend.
 use_remoteexec = false
+# === Xplorer privacy hardening (Brave/ungoogled-style) — see BRANDING_PRIVACY_PLAN.md ===
+# Compile out Google data channels. Net-new args (none previously set here).
+use_official_google_api_keys = false
+google_api_key = ""
+google_default_client_id = ""
+google_default_client_secret = ""
+enable_reporting = false            # drops UMA/UKM + crash-upload code paths
+safe_browsing_mode = 0              # compiles out Safe Browsing /v4 lookups + pings
+enable_hangout_services_extension = false
+enable_mdns = false                 # disables Cast/mDNS device discovery
+enable_rlz = false                  # no RLZ ping (also the unbranded default)

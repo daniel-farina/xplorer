@@ -626,16 +626,34 @@ def main(src: Path):
                     "prepopulated_engines.json")
     pp = prepop.read_text()
     if "127.0.0.1:9334/omnibox" not in pp:
-        pp = pp.replace(
-            '"name": "Google",\n      "keyword": "google.com",',
-            '"name": "Grok",\n      "keyword": "grok.com",')
+        # name + keyword: whitespace-tolerant regex with a hard assert. The old
+        # literal .replace() silently no-ops on any format drift (unlike edit()),
+        # which would ship Google as the default search engine. Fail LOUD here so
+        # an upstream format change is caught at patch time, not in the binary.
+        pp, n = re.subn(
+            r'"name":\s*"Google",\s*"keyword":\s*"google\.com",',
+            '"name": "Grok",\n      "keyword": "grok.com",', pp)
+        if n != 1:
+            sys.exit("prepopulated_engines.json: Google name/keyword anchor "
+                     f"matched {n}x (expected 1) — upstream format moved")
         pp = re.sub(
             r'"search_url": "\{google:baseURL\}search\?q=\{searchTerms\}[^"]*"',
             '"search_url": "http://127.0.0.1:9334/omnibox?q={searchTerms}"', pp)
         pp = re.sub(r'"suggest_url": "\{google:baseSuggestURL\}[^"]*"',
                     '"suggest_url": ""', pp)
-        pp = pp.replace('"kCurrentDataVersion": 206',
-                        '"kCurrentDataVersion": 207')
+        # The engine favicon was left pointing at Google; repoint it at Grok,
+        # scoped to the now-"Grok" block (count=1) so no other engine is touched.
+        pp = re.sub(
+            r'("name": "Grok",[\s\S]{0,400}?"favicon_url": )"[^"]*"',
+            r'\1"https://grok.com/favicon.ico"', pp, count=1)
+        # Bump kCurrentDataVersion to current+1 so existing profiles re-merge.
+        # (The old hardcoded "206"->"207" was a silent no-op on M151, which
+        # already ships 207 — read the live value and increment it instead.)
+        m = re.search(r'"kCurrentDataVersion":\s*(\d+)', pp)
+        if not m:
+            sys.exit("prepopulated_engines.json: kCurrentDataVersion not found")
+        pp = re.sub(r'"kCurrentDataVersion":\s*\d+',
+                    f'"kCurrentDataVersion": {int(m.group(1)) + 1}', pp, count=1)
         prepop.write_text(pp)
         print(f"  edited: {prepop}")
 
@@ -666,7 +684,7 @@ def main(src: Path):
     # (Developer Build) ..."). Prepend the Xplorer product version so users see
     # OUR version first. NOTE: bump XPLORER_VERSION here per release (or wire it
     # to the release version later).
-    XPLORER_VERSION = "0.7.1"
+    XPLORER_VERSION = "0.7.2"
     ss = src / "chrome/app/settings_strings.grdp"
     sst = ss.read_text()
     _ver_marker = "Xplorer " + XPLORER_VERSION + " · Chromium"
