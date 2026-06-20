@@ -507,7 +507,9 @@ def main(src: Path):
         '  // --- Section 1: Common tab helpers ---',
     )
 
-    # Toolbar Grok button (opens local search page; Grok logo icon).
+    # Toolbar Grok button (top-right icon that toggles the Grok agent side
+    # panel — the native sidebar where you chat with Grok and it drives the
+    # browser via MCP). Grok logo icon.
     toolbar = src / "chrome/browser/ui/views/toolbar/toolbar_view.cc"
     grok_btn_block = (
         '  // XPLORER: Grok companion toolbar button.\n'
@@ -515,11 +517,11 @@ def main(src: Path):
         '    auto grok_btn = std::make_unique<ToolbarButton>(base::BindRepeating(\n'
         '        [](Browser* b) {\n'
         '          if (b)\n'
-        '            grok_companion::OpenGrokSearchPage(b);\n'
+        '            grok_companion::ToggleGrokSidePanel(b);\n'
         '        },\n'
         '        base::Unretained(browser_)));\n'
-        '    grok_btn->SetTooltipText(u"Grok Search");\n'
-        '    grok_btn->SetAccessibleName(u"Grok Search");\n'
+        '    grok_btn->SetTooltipText(u"Ask Grok");\n'
+        '    grok_btn->SetAccessibleName(u"Ask Grok");\n'
         '    grok_btn->SetVectorIcon(kGrokIcon);\n'
         '    grok_btn->SetProperty(views::kElementIdentifierKey,\n'
         '                          kToolbarGrokButtonElementId);\n'
@@ -615,6 +617,28 @@ def main(src: Path):
         'DEFINE_ELEMENT_IDENTIFIER_VALUE(kToolbarGrokButtonElementId);\n',
     )
 
+    # Register an actions::ActionItem for the Grok companion side panel. The
+    # native side-panel header controller calls GetActionItem(entry->key()) and
+    # unconditionally AddActionChangedCallback() on it. For the reused
+    # kSearchCompanion id Chrome only registers that ActionItem when the (absent)
+    # companion feature is enabled, so without this the header derefs null and the
+    # browser SIGSEGVs the first time the Grok side panel opens (the "Ask Grok"
+    # toolbar button). Reuse the Grok icon + the branded "Grok" label.
+    browser_actions = src / "chrome/browser/ui/browser_actions.cc"
+    edit(
+        browser_actions,
+        "  BrowserWindowInterface* const bwi = base::to_address(bwi_);\n",
+        "  BrowserWindowInterface* const bwi = base::to_address(bwi_);\n\n"
+        "  // XPLORER: register the Grok companion side-panel action so the\n"
+        "  // side-panel header controller finds a non-null ActionItem.\n"
+        "  root_action_item_->AddChild(\n"
+        "      SidePanelAction(SidePanelEntryId::kSearchCompanion,\n"
+        "                      IDS_AI_MODE_ENTRYPOINT_LABEL,\n"
+        "                      IDS_AI_MODE_ENTRYPOINT_LABEL, kGrokIcon,\n"
+        "                      kActionSidePanelShowSearchCompanion, bwi, true)\n"
+        "          .Build());\n",
+    )
+
     # --- Grok as the default search engine --------------------------------
     # Repoint the prepopulated "google" fallback entry (the first-run default,
     # keyed on id==1) at the gateway GET /omnibox 302 handoff, so typing a
@@ -684,7 +708,7 @@ def main(src: Path):
     # (Developer Build) ..."). Prepend the Xplorer product version so users see
     # OUR version first. NOTE: bump XPLORER_VERSION here per release (or wire it
     # to the release version later).
-    XPLORER_VERSION = "0.7.3"
+    XPLORER_VERSION = "0.7.4"
     ss = src / "chrome/app/settings_strings.grdp"
     sst = ss.read_text()
     _ver_marker = "Xplorer " + XPLORER_VERSION + " · Chromium"

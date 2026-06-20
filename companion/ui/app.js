@@ -217,6 +217,7 @@ async function sendMessage(text, { retry = false } = {}) {
   messagesEl.appendChild(thinking);
   messagesEl.scrollTop = messagesEl.scrollHeight;
 
+  let reply = '';
   try {
     const res = await fetch(`/api/conversations/${activeId}/message/stream`, {
       method: 'POST',
@@ -232,7 +233,6 @@ async function sendMessage(text, { retry = false } = {}) {
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
-    let reply = '';
     let thoughtBuf = '';
 
     while (true) {
@@ -290,7 +290,16 @@ async function sendMessage(text, { retry = false } = {}) {
   } catch (e) {
     if (e.name === 'AbortError') {
       thinking.remove();
-      messagesEl.querySelector('.msg.assistant.streaming')?.remove();
+      // Keep whatever Grok generated before Stop instead of discarding it.
+      const partial = messagesEl.querySelector('.msg.assistant.streaming');
+      if (reply.trim()) {
+        if (partial) partial.remove();
+        conv.messages.push({ role: 'assistant', content: reply.trim() + '\n\n_(stopped)_' });
+        renderMessages(conv);
+        renderConvList();
+      } else if (partial) {
+        partial.remove();
+      }
       return;
     }
     thinking.classList.add('error');
