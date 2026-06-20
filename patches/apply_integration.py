@@ -298,6 +298,20 @@ def main(src: Path):
         grd.write_text(g)
         print(f"  edited: {grd}")
 
+    # The window/tab/accessible title formats hardcode "- Chromium" (they do NOT
+    # use the renamed product placeholder), so titles read "<page> - Chromium".
+    # Rebrand the title-format messages: covers the stable browser title, the
+    # macOS accessible title + channel variants (Beta/Dev/Canary), and the
+    # ChromeOS / captive-portal layouts.
+    g = grd.read_text()
+    if "</ph> - Xplorer" not in g:
+        g = g.replace("</ph> - Chromium", "</ph> - Xplorer")
+        g = g.replace("Chromium - <ph", "Xplorer - <ph")
+        g = g.replace("- Network Sign-in - Chromium", "- Network Sign-in - Xplorer")
+        g = g.replace("Chromium - Network Sign-in", "Xplorer - Network Sign-in")
+        grd.write_text(g)
+        print(f"  edited (title formats): {grd}")
+
     # 5. Link Grok companion (side panel + AI Mode redirect).
     edit(
         browser_gn,

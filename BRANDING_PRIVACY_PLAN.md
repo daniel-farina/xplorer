@@ -47,7 +47,9 @@ Each loop iteration: read this file + `git log`, do the next safe item, commit, 
 
 ## 🕓 later (verify-then-fix; need a build or checkout to confirm)
 
-- [ ] **Window/taskbar title says "… - Chromium"** — VISUALLY CONFIRMED on the test desktop
+- [x] **Window/taskbar title says "… - Chromium"** — FIXED: the title-format messages
+  (IDS_BROWSER_WINDOW_TITLE_FORMAT + accessible/channel + ChromeOS/captive-portal variants)
+  hardcoded "- Chromium" rather than the renamed product; rebranded all to Xplorer. Was VISUALLY CONFIRMED on the test desktop
   (title bar read "Grok - Chromium"). Audit assumed handled; it is not. Find the residual product
   string / WM class.
 - [ ] **User-Agent + UA-CH brand list** still "Chromium"/"Google Chrome"; append a `Xplorer/0.7.0`
