@@ -162,10 +162,8 @@
   // isHome pills carry data-home (=== id here) which drives /switch-home.
   var DEFAULT_PILLS = [
     { id: 'xchat', label: 'X Chat', icon: 'chat', href: 'https://x.com/i/chat', enabled: true },
-    { id: 'build', label: 'Grok Build', icon: 'wrench', href: '/switch-home?mode=build', enabled: true, isHome: true,
-      children: [{ label: 'Conversations', href: '/' }, { label: 'Apps', href: '/apps' }, { label: 'Logs', href: '/logs' }] },
-    { id: 'web', label: 'Grok Web', icon: 'globe', href: '/switch-home?mode=web', enabled: true, isHome: true,
-      children: [{ label: 'Search', href: '/search' }] },
+    { id: 'build', label: 'Grok Build', icon: 'wrench', href: '/apps', enabled: true },
+    { id: 'web', label: 'Grok Web', icon: 'globe', href: '/switch-home?mode=web', enabled: true, isHome: true },
     { id: 'imagine', label: 'Imagine', icon: 'image', href: 'https://grok.com/imagine', enabled: true },
     { id: 'wiki', label: 'Groki', icon: 'book', href: '/switch-home?mode=wiki', enabled: true, isHome: true },
     { id: 'xcom', label: 'x.com', icon: 'xmark', href: 'https://x.com/', enabled: true },

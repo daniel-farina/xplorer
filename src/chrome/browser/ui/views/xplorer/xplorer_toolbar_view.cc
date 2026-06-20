@@ -63,7 +63,7 @@ constexpr struct {
   bool is_home;
 } kDefaultPills[] = {
     {"xchat", "X Chat", "https://x.com/i/chat", "chat", false},
-    {"build", "Grok Build", "/switch-home?mode=build", "wrench", true},
+    {"build", "Grok Build", "/apps", "wrench", false},
     {"web", "Grok Web", "/switch-home?mode=web", "globe", true},
     {"imagine", "Imagine", "https://grok.com/imagine", "image", false},
     {"wiki", "Groki", "/switch-home?mode=wiki", "book", true},
@@ -137,6 +137,16 @@ XplorerToolbarView::XplorerToolbarView(BrowserWindowInterface* browser,
   toolbar_config_subscription_ =
       grok_companion::AddToolbarConfigChangedCallback(base::BindRepeating(
           &XplorerToolbarView::Reload, base::Unretained(this)));
+
+  // Track the foreground tab so the home-pill highlight follows the current
+  // page rather than the persisted search-home mode. Re-observe on every tab
+  // switch; PrimaryPageChanged handles in-tab navigations.
+  if (browser_) {
+    active_tab_subscription_ = browser_->RegisterActiveTabDidChange(
+        base::BindRepeating(&XplorerToolbarView::OnActiveTabChanged,
+                            base::Unretained(this)));
+    OnActiveTabChanged(browser_);
+  }
 }
 
 XplorerToolbarView::~XplorerToolbarView() = default;
@@ -144,6 +154,68 @@ XplorerToolbarView::~XplorerToolbarView() = default;
 void XplorerToolbarView::Reload() {
   LoadPills();
   RebuildButtons();
+}
+
+void XplorerToolbarView::OnActiveTabChanged(BrowserWindowInterface* browser) {
+  content::WebContents* contents = nullptr;
+  if (browser) {
+    if (tabs::TabInterface* tab = browser->GetActiveTabInterface()) {
+      contents = tab->GetContents();
+    }
+  }
+  Observe(contents);  // content::WebContentsObserver
+  UpdateActiveHighlight();
+}
+
+void XplorerToolbarView::PrimaryPageChanged(content::Page& /*page*/) {
+  UpdateActiveHighlight();
+}
+
+void XplorerToolbarView::UpdateActiveHighlight() {
+  content::WebContents* contents = web_contents();
+  const GURL current = contents ? contents->GetLastCommittedURL() : GURL();
+  const std::string active_mode = grok_companion::GetSearchHomeMode();
+  const GURL home = grok_companion::GetStartupHomeURL();
+
+  // Highlight the one pill that best matches the active tab's page: same host
+  // plus the longest matching path prefix wins (so x.com/i/chat lights "X Chat",
+  // not "x.com"). Home pills (mode switchers) target the Grok home itself,
+  // qualified by the active search-home mode. Pages matching no pill light none.
+  int best = -1;
+  size_t best_score = 0;
+  if (current.is_valid() && !current.host().empty()) {
+    for (size_t i = 0; i < pills_.size(); ++i) {
+      size_t score = 0;
+      bool match = false;
+      if (pills_[i].is_home) {
+        if (!home.host().empty() && current.host() == home.host() &&
+            current.path() == home.path() && !active_mode.empty() &&
+            ExtractMode(pills_[i].href) == active_mode) {
+          match = true;
+          score = home.path().size() + 1;  // edge out a bare host match
+        }
+      } else {
+        const GURL target = ResolveHref(pills_[i].href);
+        if (target.is_valid() && !target.host().empty() &&
+            current.host() == target.host() &&
+            base::StartsWith(current.path(), target.path(),
+                             base::CompareCase::SENSITIVE)) {
+          match = true;
+          score = target.path().size();
+        }
+      }
+      if (match && (best < 0 || score > best_score)) {
+        best = static_cast<int>(i);
+        best_score = score;
+      }
+    }
+  }
+
+  for (size_t i = 0; i < pills_.size() && i < pill_buttons_.size(); ++i) {
+    if (pill_buttons_[i].main) {
+      pill_buttons_[i].main->SetSelected(static_cast<int>(i) == best);
+    }
+  }
 }
 
 void XplorerToolbarView::LoadPills() {
@@ -193,13 +265,12 @@ void XplorerToolbarView::LoadPills() {
   if (pills_.empty()) {
     for (const auto& def : kDefaultPills) {
       ToolbarPill pill{def.id, def.label, def.href, def.icon, def.is_home};
-      // Default children mirror companion/ui/toolbar.js DEFAULT_PILLS.
+      // Grok Build keeps its useful submenu; Grok Web's redundant single-item
+      // "Search" dropdown is intentionally dropped.
       if (pill.id == "build") {
         pill.children = {{"Conversations", "/"},
                          {"Apps", "/apps"},
                          {"Logs", "/logs"}};
-      } else if (pill.id == "web") {
-        pill.children = {{"Search", "/search"}};
       }
       pills_.push_back(std::move(pill));
     }
@@ -209,10 +280,6 @@ void XplorerToolbarView::LoadPills() {
 void XplorerToolbarView::RebuildButtons() {
   pill_buttons_.clear();
   RemoveAllChildViews();
-
-  // The active "home" pill is the one whose mode matches the current search
-  // home mode; non-home pills are never selected.
-  const std::string active_mode = grok_companion::GetSearchHomeMode();
 
   for (size_t i = 0; i < pills_.size(); ++i) {
     PillViews views;
@@ -228,10 +295,6 @@ void XplorerToolbarView::RebuildButtons() {
     if (!pills_[i].children.empty()) {
       button->SetHasDropdownCaret(true);
     }
-    if (pills_[i].is_home && !active_mode.empty() &&
-        ExtractMode(pills_[i].href) == active_mode) {
-      button->SetSelected(true);
-    }
     // Right-click a pill -> context menu scoped to that pill (Edit/Remove).
     button->set_context_menu_controller(this);
     // Drag a pill to reorder; the toolbar view is the drag source controller.
@@ -240,6 +303,9 @@ void XplorerToolbarView::RebuildButtons() {
 
     pill_buttons_.push_back(views);
   }
+
+  // Selection tracks the active tab's page, not the persisted search-home mode.
+  UpdateActiveHighlight();
 }
 
 gfx::Size XplorerToolbarView::CalculatePreferredSize(

@@ -13,6 +13,7 @@
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/values.h"
+#include "content/public/browser/web_contents_observer.h"
 #include "ui/base/dragdrop/mojom/drag_drop_types.mojom-forward.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/menus/simple_menu_model.h"
@@ -73,7 +74,8 @@ struct ToolbarPill {
 class XplorerToolbarView : public views::AccessiblePaneView,
                            public ui::SimpleMenuModel::Delegate,
                            public views::ContextMenuController,
-                           public views::DragController {
+                           public views::DragController,
+                           public content::WebContentsObserver {
   METADATA_HEADER(XplorerToolbarView, views::AccessiblePaneView)
 
  public:
@@ -158,6 +160,17 @@ class XplorerToolbarView : public views::AccessiblePaneView,
   // Opens the toolbar customization surface (the /settings page).
   void OpenCustomizePage();
 
+  // Highlights the pill that best matches the active tab's current page, so the
+  // highlight tracks the foreground page rather than the persisted search-home
+  // mode. Re-run on tab switches and navigations.
+  void UpdateActiveHighlight();
+  // RegisterActiveTabDidChange callback: re-observe the newly-active tab's
+  // WebContents and refresh the highlight.
+  void OnActiveTabChanged(BrowserWindowInterface* browser);
+
+  // content::WebContentsObserver:
+  void PrimaryPageChanged(content::Page& page) override;
+
   // Drag-reorder helpers.
   // Returns the insertion index (0..pills_.size()) for a cursor at local |x|.
   int ComputeDropIndex(int x) const;
@@ -189,6 +202,9 @@ class XplorerToolbarView : public views::AccessiblePaneView,
 
   // Reloads the bar when toolbar config is persisted (settings page / gateway).
   base::CallbackListSubscription toolbar_config_subscription_;
+
+  // Fires on active-tab switches so the highlight can follow the foreground tab.
+  base::CallbackListSubscription active_tab_subscription_;
 
   // Drag-reorder state. |drop_index_| is the live insertion marker during a
   // drag (-1 when not dragging), used to paint the drop indicator.
