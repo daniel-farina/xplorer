@@ -41,5 +41,4 @@ google_default_client_secret = ""
 enable_reporting = false            # drops UMA/UKM + crash-upload code paths
 safe_browsing_mode = 0              # compiles out Safe Browsing /v4 lookups + pings
 enable_hangout_services_extension = false
-enable_mdns = false                 # disables Cast/mDNS device discovery
 enable_rlz = false                  # no RLZ ping (also the unbranded default)
