@@ -38,6 +38,28 @@ def edit(path: Path, anchor: str, insertion: str, before: bool = False):
     print(f"  edited: {path}")
 
 
+def rebrand_grd_strings(path: Path):
+    """Replace the hardcoded "Chromium" app name with "Xplorer" in a grit
+    strings file (.grd/.grdp), preserving the legal "Chromium Authors" copyright.
+    Skips the google_chrome branded variants (not compiled in our Chromium build)
+    and — as a safety net — any file whose <message name="…"> resource IDs contain
+    "Chromium" (replacing those would break the build). Idempotent: once only the
+    copyright keeps "Chromium", re-running is a no-op."""
+    if not path.exists() or "google_chrome" in path.name:
+        return
+    g = path.read_text()
+    if re.search(r'name="[^"]*Chromium', g):
+        print(f"  skip (Chromium in resource IDs): {path.name}")
+        return
+    if g.count("Chromium") <= g.count("Chromium Authors"):
+        return
+    g = g.replace("Chromium Authors", "\x00A\x00")
+    g = g.replace("Chromium", "Xplorer")
+    g = g.replace("\x00A\x00", "Chromium Authors")
+    path.write_text(g)
+    print(f"  rebranded grd: {path.name}")
+
+
 def patch_native_toolbar(src: Path):
     """SCAFFOLD: native browser-chrome Xplorer pill toolbar.
 
@@ -340,6 +362,18 @@ def main(src: Path):
         g = g.replace("\x00AUTH\x00", "Chromium Authors")
         grd.write_text(g)
         print(f"  edited (broad app-name rebrand): {grd}")
+
+    # Extend the same safe rebrand to every other user-facing strings file —
+    # settings (148), omnibox pedals (40), components, search-engine choice,
+    # privacy sandbox, password manager, page info, autofill, … ~300 more
+    # hardcoded "Chromium" app-name refs. Glob *strings.grd/.grdp only (skips
+    # resource/image grds); generated_resources.grd uses PRODUCT_NAME subst so
+    # only its few literals need touching.
+    for base, pat in (("chrome/app", "*strings.grd"), ("chrome/app", "*strings.grdp"),
+                      ("components", "**/*strings.grd"), ("components", "**/*strings.grdp")):
+        for f in sorted((src / base).glob(pat)):
+            rebrand_grd_strings(f)
+    rebrand_grd_strings(src / "chrome/app/generated_resources.grd")
 
     # 5. Link Grok companion (side panel + AI Mode redirect).
     edit(

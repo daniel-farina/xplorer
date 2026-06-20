@@ -54,7 +54,13 @@ Each loop iteration: read this file + `git log`, do the next safe item, commit, 
   background-run, update nags) → Xplorer, preserving the "Chromium Authors" copyright. Risk-checked
   (no message-name IDs contain "Chromium"); compiles clean (arm64, 3m12s); built pak confirms
   "Make Xplorer the default" etc.
-- [ ] **Remaining "Chromium" strings live in OTHER grds** — the built locale.pak still shows
+- [x] **Remaining "Chromium" strings in OTHER grds** — DONE + BUILD-VERIFIED (branding-phase2):
+  generalized the safe rebrand into `rebrand_grd_strings()` (skips google_chrome variants + any file
+  with "Chromium" in message-name IDs; preserves "Chromium Authors") and globbed all *strings.grd/.grdp
+  across chrome/app + components + generated_resources.grd. 22 files rebranded (~300 strings: settings,
+  omnibox pedals, privacy sandbox, password manager, page info, autofill, SSL/security interstitials,
+  version UI, …). Compiles clean (arm64, 3m15s). Only 3 "Chromium" left: 2 copyright + 1 intentional
+  about-page engine-version line ("Xplorer 0.7.4 · Chromium <ver>"). Was: the built locale.pak still shows
   "Chromium blocks/sends/asks/uses/recommends…" sourced from generated_resources.grd + component
   *_strings.grd files (NOT chromium_strings.grd). Apply the same risk-checked broad replace (preserve
   message-name IDs + "Chromium Authors") to those grds. Biggest remaining branding surface.
