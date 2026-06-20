@@ -573,11 +573,18 @@ def main(src: Path):
                 '#include "chrome/app/vector_icons/vector_icons.h"  // XPLORER\n',
             )
         else:
+            # Splice the Grok button BEFORE the overflow button — purely additive.
+            # Do NOT restate the overflow_button_ line in the insertion: edit()'s
+            # "rewrite vs splice" heuristic compares anchor.strip() (de-indented)
+            # against the insertion's still-indented lines, so the last-line match
+            # misses and it splices additively. Restating the line then leaves a
+            # SECOND, visible, controller-less OverflowButton whose RunMenu() calls
+            # ToolbarController::ShowMenu() on a null controller → crash on click.
             edit(
                 toolbar,
                 '  overflow_button_ = AddChildView(std::make_unique<OverflowButton>());',
-                grok_btn_block +
-                '  overflow_button_ = AddChildView(std::make_unique<OverflowButton>());',
+                grok_btn_block,
+                before=True,
             )
             edit(
                 toolbar,
