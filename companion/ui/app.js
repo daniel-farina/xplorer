@@ -312,7 +312,10 @@ async function sendMessage(text, { retry = false } = {}) {
           if (evt.reply) reply = evt.reply;
           if (evt.sessionId) conv.session_id = evt.sessionId;
         } else if (evt.type === 'error') {
-          throw new Error(evt.error || 'chat failed');
+          // The error event carries its text in `message` (the gateway) or
+          // `error` (the grok process) — read both so detection sees the real
+          // error, not the literal "chat failed" fallback.
+          throw new Error(evt.message || evt.error || 'chat failed');
         }
       }
     }
@@ -352,8 +355,9 @@ async function sendMessage(text, { retry = false } = {}) {
     const errText = document.createElement('div');
     if (needsLogin) {
       errText.className = 'auth-expired';
-      errText.innerHTML = '🔑 <b>Sign in to Grok to continue.</b><br>' +
-        "You're not connected. Run <code>grok login</code> in a terminal to sign in, then Retry.";
+      errText.innerHTML = '🔑 <b>Connect to Grok to continue.</b><br>' +
+        'In a terminal, make sure Grok Build is installed, then run ' +
+        '<code>grok login</code> to sign in — and Retry.';
     } else {
       errText.textContent = `Error: ${msg}`;
     }
