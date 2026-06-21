@@ -344,14 +344,16 @@ async function sendMessage(text, { retry = false } = {}) {
     thinking.classList.add('error');
     thinking.innerHTML = '';
     const msg = e.message || '';
-    // Grok CLI auth expired → show a clear "reconnect" prompt instead of a
-    // cryptic "chat failed" (the gateway surfaces the upstream 401 verbatim).
-    const authExpired = /Unauthorized \(401\)|expired credentials|no auth context|grok login|PermissionDenied/i.test(msg);
+    // Grok isn't authenticated → show a clear "sign in" prompt instead of a
+    // cryptic error. Covers BOTH cases: an expired token (upstream 401) and a
+    // logged-out state (no token → grok can't fetch models → "unknown model id"
+    // / "Couldn't set model").
+    const needsLogin = /Unauthorized \(401\)|expired credentials|no auth context|grok login|PermissionDenied|not logged in|unknown model id|Couldn't set model|Run 'grok models'/i.test(msg);
     const errText = document.createElement('div');
-    if (authExpired) {
+    if (needsLogin) {
       errText.className = 'auth-expired';
-      errText.innerHTML = '🔑 <b>Your Grok session expired.</b><br>' +
-        'Open a terminal and run <code>grok login</code> to reconnect, then Retry.';
+      errText.innerHTML = '🔑 <b>Sign in to Grok to continue.</b><br>' +
+        "You're not connected. Run <code>grok login</code> in a terminal to sign in, then Retry.";
     } else {
       errText.textContent = `Error: ${msg}`;
     }
