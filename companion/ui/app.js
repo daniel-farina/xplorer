@@ -420,3 +420,14 @@ initModels().then(() => refresh().then(() => {
     newChat();
   }
 }));
+
+// The side panel keeps its WebContents alive across close/open, so a stale
+// error / "thinking" bubble from a previous failed send lingers when reopened.
+// On reopen, re-render the active conversation from its saved messages (errors
+// aren't persisted, so they clear) — keeping the last conversation but clean.
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState !== 'visible' || streamAbort) return;
+  if (!activeId) return;
+  const conv = conversations.find((c) => c.id === activeId);
+  if (conv) renderMessages(conv);
+});
