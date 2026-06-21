@@ -105,7 +105,24 @@ function renderConvList() {
     del.textContent = '×';
     del.onclick = async (e) => {
       e.stopPropagation();
-      if (!confirm(`Delete "${c.title || 'Chat'}"?`)) return;
+      // window.confirm/alert/prompt are suppressed in the side-panel WebContents,
+      // so the old confirm() gate silently returned false and delete never ran.
+      // Inline two-click confirm instead: first click arms (×→✓), second deletes.
+      if (del.dataset.armed !== '1') {
+        del.dataset.armed = '1';
+        del.textContent = '✓';
+        del.classList.add('confirm');
+        del.title = 'Click again to delete';
+        setTimeout(() => {
+          if (del.dataset.armed === '1') {
+            del.dataset.armed = '0';
+            del.textContent = '×';
+            del.classList.remove('confirm');
+            del.title = 'Delete conversation';
+          }
+        }, 2500);
+        return;
+      }
       try {
         await deleteConversation(c.id);
         conversations = conversations.filter((x) => x.id !== c.id);
@@ -120,22 +137,44 @@ function renderConvList() {
         renderConvList();
         selectConv(activeId);
       } catch (err) {
-        alert(err.message);
+        del.dataset.armed = '0';
+        del.textContent = '×';
+        del.classList.remove('confirm');
+        console.error('delete failed:', err);
       }
     };
     li.appendChild(del);
 
-    li.ondblclick = async (e) => {
+    li.ondblclick = (e) => {
       e.preventDefault();
       e.stopPropagation();
-      const next = window.prompt('Rename conversation', c.title || 'Chat');
-      if (!next?.trim()) return;
-      try {
-        await renameConversation(c, next.trim());
+      // window.prompt is suppressed in the side panel too — edit the title
+      // inline instead (Enter saves, Esc cancels, blur saves).
+      title.contentEditable = 'true';
+      title.classList.add('editing');
+      title.focus();
+      const range = document.createRange();
+      range.selectNodeContents(title);
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+      let done = false;
+      const finish = async (save) => {
+        if (done) return;
+        done = true;
+        title.contentEditable = 'false';
+        title.classList.remove('editing');
+        const next = title.textContent.trim();
+        if (save && next && next !== (c.title || 'Chat')) {
+          try { await renameConversation(c, next); } catch (err) { console.error('rename failed:', err); }
+        }
         renderConvList();
-      } catch (err) {
-        alert(err.message);
-      }
+      };
+      title.onkeydown = (ev) => {
+        if (ev.key === 'Enter') { ev.preventDefault(); finish(true); }
+        else if (ev.key === 'Escape') { ev.preventDefault(); finish(false); }
+      };
+      title.onblur = () => finish(true);
     };
     convList.appendChild(li);
   }
