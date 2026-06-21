@@ -612,13 +612,52 @@ function highlightCodeLight(code, lang) {
 /** Lightweight markdown → HTML (escaped input). */
 function renderMarkdown(raw) {
   if (!raw) return '';
+  // Pull fenced code blocks out first so their contents aren't reformatted.
   const codeBlocks = [];
   let s = String(raw).replace(/```(\w*)\n?([\s\S]*?)```/g, (_, lang, code) => {
-    const idx = codeBlocks.length;
     codeBlocks.push({ lang: lang || '', code });
-    return `\x00CODE${idx}\x00`;
+    return `\x00CODE${codeBlocks.length - 1}\x00`;
   });
   s = escapeHtml(s);
+
+  // Inline spans: citations, links, inline code, bold, italic, strikethrough.
+  const inline = (t) => t
+    .replace(/\[\[(\d+)\]\]\((https?:\/\/[^)\s]+)\)/g, (m, n, url) => {
+      const h = safeUrl(url);
+      return h ? `<a href="${h}" target="_blank" rel="noopener" class="cite">[${n}]</a>` : m;
+    })
+    .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, (m, label, url) => {
+      const h = safeUrl(url);
+      return h ? `<a href="${h}" target="_blank" rel="noopener">${label}</a>` : m;
+    })
+    .replace(/`([^`\n]+)`/g, '<code>$1</code>')
+    .replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>')
+    .replace(/(^|[^*\w])\*([^*\n]+?)\*(?!\w)/g, '$1<em>$2</em>')
+    .replace(/(^|\s)_([^_\n]+?)_(?=\s|$|[.,!?;:])/g, '$1<em>$2</em>')
+    .replace(/~~([^~\n]+)~~/g, '<del>$1</del>');
+
+  // Block-level: parse line by line (headings, rules, quotes, lists, paragraphs).
+  const out = [];
+  let list = null;
+  let para = [];
+  const flushPara = () => { if (para.length) { out.push(`<p>${inline(para.join(' '))}</p>`); para = []; } };
+  const closeList = () => { if (list) { out.push(`</${list}>`); list = null; } };
+  for (const line of s.split('\n')) {
+    const t = line.trim();
+    let m;
+    if (!t) { flushPara(); closeList(); continue; }
+    if (/^\x00CODE\d+\x00$/.test(t)) { flushPara(); closeList(); out.push(t); continue; }
+    if ((m = t.match(/^(#{1,6})\s+(.+)$/))) { flushPara(); closeList(); out.push(`<h${m[1].length}>${inline(m[2])}</h${m[1].length}>`); continue; }
+    if (/^(-{3,}|\*{3,}|_{3,})$/.test(t)) { flushPara(); closeList(); out.push('<hr>'); continue; }
+    if ((m = t.match(/^&gt;\s?(.*)$/))) { flushPara(); closeList(); out.push(`<blockquote>${inline(m[1])}</blockquote>`); continue; }
+    if ((m = t.match(/^[-*+]\s+(.+)$/))) { flushPara(); if (list !== 'ul') { closeList(); out.push('<ul>'); list = 'ul'; } out.push(`<li>${inline(m[1])}</li>`); continue; }
+    if ((m = t.match(/^\d+[.)]\s+(.+)$/))) { flushPara(); if (list !== 'ol') { closeList(); out.push('<ol>'); list = 'ol'; } out.push(`<li>${inline(m[1])}</li>`); continue; }
+    para.push(t);
+  }
+  flushPara(); closeList();
+  s = out.join('\n');
+
+  // Restore fenced code blocks (highlighted, with copy button).
   s = s.replace(/\x00CODE(\d+)\x00/g, (_, n) => {
     const block = codeBlocks[Number(n)];
     if (!block) return '';
@@ -626,46 +665,6 @@ function renderMarkdown(raw) {
     const body = highlightCodeLight(block.code.trim(), block.lang);
     return `<pre class="code-block"><button type="button" class="code-copy-btn" title="Copy code (⌘⇧C)">Copy</button><code class="${lang.trim()}">${body}</code></pre>`;
   });
-
-  s = s.replace(
-    /\[\[(\d+)\]\]\((https?:\/\/[^)\s]+)\)/g,
-    (_, n, url) => {
-      const href = safeUrl(url);
-      return href
-        ? `<a href="${href}" target="_blank" rel="noopener" class="cite">[${n}]</a>`
-        : `[${n}](${url})`;
-    },
-  );
-
-  s = s.replace(
-    /\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g,
-    (_, label, url) => {
-      const href = safeUrl(url);
-      return href
-        ? `<a href="${href}" target="_blank" rel="noopener">${label}</a>`
-        : `[${label}](${url})`;
-    },
-  );
-
-  s = s.replace(/^### (.+)$/gm, '<h3>$1</h3>');
-  s = s.replace(/^## (.+)$/gm, '<h2>$1</h2>');
-  s = s.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');
-  s = s.replace(/`([^`\n]+)`/g, '<code>$1</code>');
-  s = s.replace(/^---$/gm, '<hr>');
-  s = s.replace(/^- (.+)$/gm, '<li>$1</li>');
-  s = s.replace(/(?:<li>[\s\S]*?<\/li>\n?)+/g, (block) => `<ul>${block}</ul>`);
-
-  const parts = s.split(/\n{2,}/);
-  s = parts
-    .map((p) => {
-      const t = p.trim();
-      if (!t) return '';
-      if (/^<(h[23]|ul|hr)/.test(t)) return t;
-      return `<p>${t.replace(/\n/g, '<br>')}</p>`;
-    })
-    .filter(Boolean)
-    .join('\n');
-
   return s;
 }
 
