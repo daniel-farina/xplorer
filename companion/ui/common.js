@@ -3,6 +3,10 @@
 const DEFAULT_MODEL = 'grok-composer-2.5-fast';
 /** Web/video search needs grok-build (Composer has no web search tools). */
 const SEARCH_DEFAULT_MODEL = 'grok-build';
+/** Chat defaults to grok-build: the agentic sidebar drives the browser via MCP
+ *  tools, which only exist under grok-build's grok-build-plan agent. Composer
+ *  (cursor agent, no tools) stays selectable for fast, tool-less Q&A. */
+const CHAT_DEFAULT_MODEL = 'grok-build';
 const MODEL_STORAGE_KEY = 'grok_model';
 const SEARCH_MODEL_STORAGE_KEY = 'grok_search_model';
 const SEARCH_HOME_STORAGE_KEY = 'grok_search_home';
@@ -14,9 +18,9 @@ const SEARCH_HOME_WIKI = 'wiki';
 
 function getStoredModel() {
   try {
-    return localStorage.getItem(MODEL_STORAGE_KEY) || DEFAULT_MODEL;
+    return localStorage.getItem(MODEL_STORAGE_KEY) || CHAT_DEFAULT_MODEL;
   } catch {
-    return DEFAULT_MODEL;
+    return CHAT_DEFAULT_MODEL;
   }
 }
 

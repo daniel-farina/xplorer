@@ -412,12 +412,22 @@ async function initModels() {
 }
 
 modelSelect?.addEventListener('change', async () => {
-  activeModel = modelSelect.value;
+  const next = modelSelect.value;
+  if (next === activeModel) return;
+  activeModel = next;
   persistModel(activeModel);
-  if (activeId) persistConvModel(activeId, activeModel);
   try {
     await saveSettings({ model: activeModel });
   } catch { /* local preference still applies */ }
+  // A grok conversation is locked to one model/agent — switching mid-chat is
+  // rejected (MODEL_SWITCH_INCOMPATIBLE_AGENT). If the current chat already has
+  // messages, start a fresh one on the newly chosen model; otherwise just apply
+  // it to the (still empty) current chat.
+  const cur = conversations.find((c) => c.id === activeId);
+  if (cur && (cur.messages?.length || 0) > 0) {
+    await newChat();
+  }
+  if (activeId) persistConvModel(activeId, activeModel);
 });
 
 convFilterInput?.addEventListener('input', () => {

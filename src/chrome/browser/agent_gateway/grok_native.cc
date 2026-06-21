@@ -509,18 +509,18 @@ bool MessageNeedsBrowserTools(const std::string& message) {
   return false;
 }
 
-// The grok-build-plan agent (pinned in BuildGrokChatCommand) carries the MCP
-// browser tools, so the model never has to change for browser tasks — Composer
-// keeps its speed and can still drive the browser. Honor whatever model the user
-// picked and NEVER auto-switch: switching the model mid-conversation also
-// switched the agent, which broke browser follow-ups (MODEL_SWITCH_INCOMPATIBLE_AGENT).
+// Honor the model the user picked in the sidebar. The browser MCP tools live
+// under the grok-build-plan agent, which only accepts grok-build; Composer is
+// hard-locked to the tool-less 'cursor' agent. We never auto-switch the model
+// within a conversation — grok locks a session to one agent and rejects a
+// mid-session switch in either direction — so the UI keeps each conversation on
+// one model (and starts a fresh chat when the user changes it). Default to
+// grok-build so a brand-new chat can drive the browser out of the box; an
+// explicit Composer pick is respected for fast, tool-less Q&A.
 std::string ResolveChatModel(const std::string& /*message*/,
-                             const std::string* /*request_model*/) {
-  // The agentic sidebar drives the browser via MCP tools, which only exist under
-  // the grok-build-plan agent — and that agent only accepts the grok-build model
-  // (Composer is hard-locked to the tool-less 'cursor' agent). So the whole
-  // conversation runs on grok-build: consistent agent across messages, no
-  // mid-session model/agent switch, browser follow-ups just work.
+                             const std::string* request_model) {
+  if (request_model && !request_model->empty())
+    return *request_model;
   return kSearchModel;
 }
 
