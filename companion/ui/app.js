@@ -105,7 +105,24 @@ function renderConvList() {
     del.textContent = '×';
     del.onclick = async (e) => {
       e.stopPropagation();
-      if (!confirm(`Delete "${c.title || 'Chat'}"?`)) return;
+      // window.confirm/alert/prompt are suppressed in the side-panel WebContents,
+      // so the old confirm() gate silently returned false and delete never ran.
+      // Inline two-click confirm instead: first click arms (×→✓), second deletes.
+      if (del.dataset.armed !== '1') {
+        del.dataset.armed = '1';
+        del.textContent = '✓';
+        del.classList.add('confirm');
+        del.title = 'Click again to delete';
+        setTimeout(() => {
+          if (del.dataset.armed === '1') {
+            del.dataset.armed = '0';
+            del.textContent = '×';
+            del.classList.remove('confirm');
+            del.title = 'Delete conversation';
+          }
+        }, 2500);
+        return;
+      }
       try {
         await deleteConversation(c.id);
         conversations = conversations.filter((x) => x.id !== c.id);
@@ -120,22 +137,44 @@ function renderConvList() {
         renderConvList();
         selectConv(activeId);
       } catch (err) {
-        alert(err.message);
+        del.dataset.armed = '0';
+        del.textContent = '×';
+        del.classList.remove('confirm');
+        console.error('delete failed:', err);
       }
     };
     li.appendChild(del);
 
-    li.ondblclick = async (e) => {
+    li.ondblclick = (e) => {
       e.preventDefault();
       e.stopPropagation();
-      const next = window.prompt('Rename conversation', c.title || 'Chat');
-      if (!next?.trim()) return;
-      try {
-        await renameConversation(c, next.trim());
+      // window.prompt is suppressed in the side panel too — edit the title
+      // inline instead (Enter saves, Esc cancels, blur saves).
+      title.contentEditable = 'true';
+      title.classList.add('editing');
+      title.focus();
+      const range = document.createRange();
+      range.selectNodeContents(title);
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+      let done = false;
+      const finish = async (save) => {
+        if (done) return;
+        done = true;
+        title.contentEditable = 'false';
+        title.classList.remove('editing');
+        const next = title.textContent.trim();
+        if (save && next && next !== (c.title || 'Chat')) {
+          try { await renameConversation(c, next); } catch (err) { console.error('rename failed:', err); }
+        }
         renderConvList();
-      } catch (err) {
-        alert(err.message);
-      }
+      };
+      title.onkeydown = (ev) => {
+        if (ev.key === 'Enter') { ev.preventDefault(); finish(true); }
+        else if (ev.key === 'Escape') { ev.preventDefault(); finish(false); }
+      };
+      title.onblur = () => finish(true);
     };
     convList.appendChild(li);
   }
@@ -273,7 +312,10 @@ async function sendMessage(text, { retry = false } = {}) {
           if (evt.reply) reply = evt.reply;
           if (evt.sessionId) conv.session_id = evt.sessionId;
         } else if (evt.type === 'error') {
-          throw new Error(evt.error || 'chat failed');
+          // The error event carries its text in `message` (the gateway) or
+          // `error` (the grok process) — read both so detection sees the real
+          // error, not the literal "chat failed" fallback.
+          throw new Error(evt.message || evt.error || 'chat failed');
         }
       }
     }
@@ -305,14 +347,17 @@ async function sendMessage(text, { retry = false } = {}) {
     thinking.classList.add('error');
     thinking.innerHTML = '';
     const msg = e.message || '';
-    // Grok CLI auth expired → show a clear "reconnect" prompt instead of a
-    // cryptic "chat failed" (the gateway surfaces the upstream 401 verbatim).
-    const authExpired = /Unauthorized \(401\)|expired credentials|no auth context|grok login|PermissionDenied/i.test(msg);
+    // Grok isn't authenticated → show a clear "sign in" prompt instead of a
+    // cryptic error. Covers BOTH cases: an expired token (upstream 401) and a
+    // logged-out state (no token → grok can't fetch models → "unknown model id"
+    // / "Couldn't set model").
+    const needsLogin = /Unauthorized \(401\)|expired credentials|no auth context|grok login|PermissionDenied|not logged in|unknown model id|Couldn't set model|Run 'grok models'/i.test(msg);
     const errText = document.createElement('div');
-    if (authExpired) {
+    if (needsLogin) {
       errText.className = 'auth-expired';
-      errText.innerHTML = '🔑 <b>Your Grok session expired.</b><br>' +
-        'Open a terminal and run <code>grok login</code> to reconnect, then Retry.';
+      errText.innerHTML = '🔑 <b>Connect to Grok to continue.</b><br>' +
+        'In a terminal, make sure Grok Build is installed, then run ' +
+        '<code>grok login</code> to sign in — and Retry.';
     } else {
       errText.textContent = `Error: ${msg}`;
     }
@@ -420,3 +465,14 @@ initModels().then(() => refresh().then(() => {
     newChat();
   }
 }));
+
+// The side panel keeps its WebContents alive across close/open, so a stale
+// error / "thinking" bubble from a previous failed send lingers when reopened.
+// On reopen, re-render the active conversation from its saved messages (errors
+// aren't persisted, so they clear) — keeping the last conversation but clean.
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState !== 'visible' || streamAbort) return;
+  if (!activeId) return;
+  const conv = conversations.find((c) => c.id === activeId);
+  if (conv) renderMessages(conv);
+});

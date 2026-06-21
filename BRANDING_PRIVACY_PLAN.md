@@ -87,8 +87,11 @@ Each loop iteration: read this file + `git log`, do the next safe item, commit, 
 - [ ] **First-run / Welcome / What's New** still say Chromium — prefer disabling the feature.
 - [ ] **macOS helper bundles / Info.plist / crashpad product** — verify against a build; likely
   already covered by product-name + bundle-id edits.
-- [ ] **Linux product_logo PNGs + About-page logo** — `apply.sh` skips logo regen on non-Darwin;
-  ship pre-rendered Xplorer PNGs.
+- [x] **Linux product_logo PNGs + About-page logo** — DONE (branding-phase3): pre-rendered the 11
+  Xplorer product_logo PNGs (base 16-256 + default_100/200_percent 16/32) from xplorer-mark-1024.png
+  and committed them verbatim into the overlay (src/chrome/app/theme/.../product_logo_*.png), so the
+  Linux build copies them and the About-page logo is Xplorer (not Chromium). macOS sips pass still
+  re-renders identical output. Build-verify deferred (Linux box torn down); copy mechanism is proven.
 - [ ] **Windows installer / ARP / shortcut strings** — grep `chrome/installer` after apply.
 - [ ] **AgentGateway port** — `search_url` hardcodes `127.0.0.1:9334`; confirm `Start(0)` pins 9334
   (else omnibox search 404s) and make `/omnibox` 302 even with an empty store.

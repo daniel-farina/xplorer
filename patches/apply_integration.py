@@ -633,7 +633,8 @@ def main(src: Path):
         '    AddChildView(std::move(grok_btn));\n'
         '  }\n\n'
     )
-    if "kGrokIcon" not in toolbar.read_text():
+    if False:  # XPLORER: explicit Grok button dropped; the default-pinned
+        # kSearchCompanion side-panel button is the single always-visible toggle.
         if "ToggleGrokSidePanel" in toolbar.read_text():
             edit(
                 toolbar,
@@ -744,6 +745,28 @@ def main(src: Path):
         "          .Build());\n",
     )
 
+    # XPLORER: pin the Grok side-panel button by default so it is the single,
+    # always-visible Grok toggle — shown in BOTH the inactive (panel closed) and
+    # active (panel open, highlighted) states. The native side-panel button is
+    # only shown ephemerally when active, so without this the button vanishes
+    # when the panel is closed. Inserted before the CanUpdate gate so it applies
+    # regardless of toolbar customization; UpdatePinnedState is idempotent.
+    pinned_model = src / ("chrome/browser/ui/toolbar/pinned_toolbar/"
+                          "pinned_toolbar_actions_model.cc")
+    edit(
+        pinned_model,
+        "void PinnedToolbarActionsModel::MaybeMigrateExistingPinnedStates() {\n"
+        "  if (!CanUpdate()) {\n"
+        "    return;\n"
+        "  }\n",
+        "void PinnedToolbarActionsModel::MaybeMigrateExistingPinnedStates() {\n"
+        "  // XPLORER: keep the Grok side-panel button pinned (always visible).\n"
+        "  UpdatePinnedState(kActionSidePanelShowSearchCompanion, true);\n"
+        "  if (!CanUpdate()) {\n"
+        "    return;\n"
+        "  }\n",
+    )
+
     # --- Grok as the default search engine --------------------------------
     # Repoint the prepopulated "google" fallback entry (the first-run default,
     # keyed on id==1) at the gateway GET /omnibox 302 handoff, so typing a
@@ -813,7 +836,7 @@ def main(src: Path):
     # (Developer Build) ..."). Prepend the Xplorer product version so users see
     # OUR version first. NOTE: bump XPLORER_VERSION here per release (or wire it
     # to the release version later).
-    XPLORER_VERSION = "0.7.5"
+    XPLORER_VERSION = "0.7.8"
     ss = src / "chrome/app/settings_strings.grdp"
     sst = ss.read_text()
     _ver_marker = "Xplorer " + XPLORER_VERSION + " · Chromium"
@@ -1023,6 +1046,21 @@ def main(src: Path):
             "\n[[maybe_unused]] void UpdateStatus(VersionUpdater::StatusCallback")
         vum.write_text(vm2)
         print(f"  edited (maybe_unused): {vum}")
+
+    # About-page "Learn more" link (shown next to our "update available" status,
+    # which we deliver as a FAILED status) pointed at Google's stock update-error
+    # help page. Repoint it to the Xplorer releases page so it links to our
+    # download, not Google. (The other two learn-more links in about_page.html are
+    # obsolete-OS and branded-only macOS promote — not shown in our build.)
+    about_page = src / "chrome/browser/resources/settings/about_page/about_page.html"
+    if about_page.exists():
+        ap = about_page.read_text()
+        if "github.com/daniel-farina/xplorer/releases/latest" not in ap:
+            ap = ap.replace(
+                'href="https://support.google.com/chrome?p=update_error"',
+                'href="https://github.com/daniel-farina/xplorer/releases/latest"')
+            about_page.write_text(ap)
+            print(f"  edited (update learn-more URL): {about_page}")
 
     # Windows (unbranded, is_chrome_branded=false) compiles version_updater_basic
     # .cc, NOT version_updater_mac.mm. The basic updater reports DISABLED on the

@@ -59,9 +59,11 @@ cp "$XPLORER/branding/grok.icon" "$SRC/chrome/app/vector_icons/grok.icon"
 # whose REAL grit sources are the scaled theme dirs (default_100_percent =NxN,
 # default_200_percent =2Nx2N), NOT chrome/app/theme/chromium/. We overwrite all
 # three from the transparent Xplorer mark.
-# macOS-only: product logos are regenerated with `sips` (not present on Linux).
-# On Linux the stock Chromium logos remain on the About page (cosmetic); the
-# Xplorer version string is still applied via apply_integration.py.
+# The same Xplorer product logos are committed verbatim into the overlay
+# (src/chrome/app/theme/.../product_logo_*.png), so EVERY platform — including
+# Linux, where `sips` isn't available — gets the Xplorer About-page logo when
+# apply.sh copies src/chrome. The macOS `sips` pass below just re-renders
+# identical output over those copied files (kept so the mark stays the source).
 if [ "$(uname)" = "Darwin" ]; then
 echo "Installing Xplorer product logos..."
 LOGO_SRC="$XPLORER/branding/xplorer-mark-1024.png"

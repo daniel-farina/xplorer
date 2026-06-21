@@ -476,3 +476,52 @@ html[data-theme="dark"] .markdown .hl-num { color: #fbbf24; }
   background: rgba(0,0,0,0.08); padding: 1px 5px; border-radius: 4px;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.92em;
 }
+
+/* Inline conversation delete-confirm + rename (window.confirm/prompt are
+   suppressed in the side panel). */
+.conv-delete.confirm { color: #e5484d; font-weight: 700; }
+.conv-title.editing {
+  outline: 1px solid var(--accent, #3b82f6); border-radius: 3px;
+  padding: 0 3px; background: rgba(127,127,127,0.12); cursor: text;
+}
+
+/* Rich markdown rendering in chat messages. */
+.messages .markdown { line-height: 1.55; }
+.messages .markdown > :first-child { margin-top: 0; }
+.messages .markdown > :last-child { margin-bottom: 0; }
+.messages .markdown p { margin: 0.5em 0; }
+.messages .markdown h1, .messages .markdown h2, .messages .markdown h3,
+.messages .markdown h4, .messages .markdown h5, .messages .markdown h6 {
+  margin: 0.85em 0 0.4em; line-height: 1.3; font-weight: 600;
+}
+.messages .markdown h1 { font-size: 1.32em; }
+.messages .markdown h2 { font-size: 1.18em; }
+.messages .markdown h3 { font-size: 1.07em; }
+.messages .markdown h4, .messages .markdown h5, .messages .markdown h6 { font-size: 1em; }
+.messages .markdown ul, .messages .markdown ol { margin: 0.5em 0; padding-left: 1.5em; }
+.messages .markdown li { margin: 0.25em 0; }
+.messages .markdown li > ul, .messages .markdown li > ol { margin: 0.25em 0; }
+.messages .markdown blockquote {
+  margin: 0.6em 0; padding: 0.15em 0.9em;
+  border-left: 3px solid var(--border, #d4d4d4); color: var(--text-secondary, #666);
+}
+.messages .markdown code:not(pre code) {
+  background: rgba(127,127,127,0.16); padding: 0.12em 0.36em; border-radius: 4px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.9em;
+}
+.messages .markdown a { color: var(--accent, #2563eb); text-decoration: none; }
+.messages .markdown a:hover { text-decoration: underline; }
+.messages .markdown hr { border: none; border-top: 1px solid var(--border, #e2e2e2); margin: 0.9em 0; }
+.messages .markdown strong { font-weight: 600; }
+
+/* Markdown tables in chat. */
+.messages .markdown table {
+  border-collapse: collapse; margin: 0.6em 0; font-size: 0.92em;
+  display: block; max-width: 100%; overflow-x: auto;
+}
+.messages .markdown th, .messages .markdown td {
+  border: 1px solid var(--border, #d8d8d8); padding: 0.35em 0.6em;
+  text-align: left; vertical-align: top; word-break: break-word;
+}
+.messages .markdown thead th { background: rgba(127,127,127,0.12); font-weight: 600; }
+.messages .markdown tbody tr:nth-child(even) { background: rgba(127,127,127,0.05); }
