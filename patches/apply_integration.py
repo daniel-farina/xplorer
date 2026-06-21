@@ -1024,6 +1024,21 @@ def main(src: Path):
         vum.write_text(vm2)
         print(f"  edited (maybe_unused): {vum}")
 
+    # About-page "Learn more" link (shown next to our "update available" status,
+    # which we deliver as a FAILED status) pointed at Google's stock update-error
+    # help page. Repoint it to the Xplorer releases page so it links to our
+    # download, not Google. (The other two learn-more links in about_page.html are
+    # obsolete-OS and branded-only macOS promote — not shown in our build.)
+    about_page = src / "chrome/browser/resources/settings/about_page/about_page.html"
+    if about_page.exists():
+        ap = about_page.read_text()
+        if "github.com/daniel-farina/xplorer/releases/latest" not in ap:
+            ap = ap.replace(
+                'href="https://support.google.com/chrome?p=update_error"',
+                'href="https://github.com/daniel-farina/xplorer/releases/latest"')
+            about_page.write_text(ap)
+            print(f"  edited (update learn-more URL): {about_page}")
+
     # Windows (unbranded, is_chrome_branded=false) compiles version_updater_basic
     # .cc, NOT version_updater_mac.mm. The basic updater reports DISABLED on the
     # About page; report up-to-date instead, matching the mac fix above. This is
