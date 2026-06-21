@@ -509,15 +509,14 @@ bool MessageNeedsBrowserTools(const std::string& message) {
   return false;
 }
 
-// Composer is fast for Q&A; browser control needs grok-build + MCP tools.
-std::string ResolveChatModel(const std::string& message,
+// The grok-build-plan agent (pinned in BuildGrokChatCommand) carries the MCP
+// browser tools, so the model never has to change for browser tasks — Composer
+// keeps its speed and can still drive the browser. Honor whatever model the user
+// picked and NEVER auto-switch: switching the model mid-conversation also
+// switched the agent, which broke browser follow-ups (MODEL_SWITCH_INCOMPATIBLE_AGENT).
+std::string ResolveChatModel(const std::string& /*message*/,
                              const std::string* request_model) {
-  std::string model = ResolveModel(request_model);
-  if (MessageNeedsBrowserTools(message) &&
-      (model == kComposerModel || model == kDefaultModel)) {
-    return kSearchModel;
-  }
-  return model;
+  return ResolveModel(request_model);
 }
 
 const char* ChatRulesForMessage(const std::string& message) {
@@ -1782,6 +1781,14 @@ base::CommandLine BuildGrokChatCommand(const std::string& message,
   cmd.AppendArg("--always-approve");
   cmd.AppendArg("-m");
   cmd.AppendArg(model);
+  // XPLORER: pin the tool-capable harness so MCP browser tools are available
+  // regardless of the model — Composer AND grok-build both run under the
+  // grok-build-plan agent. Without this, switching the model to grok-build for a
+  // browser follow-up also switches the agent (cursor -> grok-build-plan), which
+  // grok rejects mid-session (MODEL_SWITCH_INCOMPATIBLE_AGENT). With the agent
+  // fixed up front, the model never has to change.
+  cmd.AppendArg("--agent");
+  cmd.AppendArg("grok-build-plan");
   cmd.AppendArg("--max-turns");
   cmd.AppendArg("25");
   if (!rules.empty()) {
