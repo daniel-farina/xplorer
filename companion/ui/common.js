@@ -642,11 +642,28 @@ function renderMarkdown(raw) {
   let para = [];
   const flushPara = () => { if (para.length) { out.push(`<p>${inline(para.join(' '))}</p>`); para = []; } };
   const closeList = () => { if (list) { out.push(`</${list}>`); list = null; } };
-  for (const line of s.split('\n')) {
-    const t = line.trim();
+  const splitRow = (row) =>
+    row.replace(/^\s*\|/, '').replace(/\|\s*$/, '').split('|').map((cell) => inline(cell.trim()));
+  const lines = s.split('\n');
+  for (let i = 0; i < lines.length; i++) {
+    const t = lines[i].trim();
     let m;
     if (!t) { flushPara(); closeList(); continue; }
     if (/^\x00CODE\d+\x00$/.test(t)) { flushPara(); closeList(); out.push(t); continue; }
+    // Table: a "| ... |" header row immediately followed by a "|---|---|" rule.
+    if (/^\|.*\|$/.test(t) && i + 1 < lines.length &&
+        /^\|(\s*:?-+:?\s*\|)+$/.test(lines[i + 1].trim())) {
+      flushPara(); closeList();
+      const head = splitRow(t).map((c) => `<th>${c}</th>`).join('');
+      i++; // consume the separator row
+      const rows = [];
+      while (i + 1 < lines.length && /^\|.*\|$/.test(lines[i + 1].trim())) {
+        i++;
+        rows.push(`<tr>${splitRow(lines[i].trim()).map((c) => `<td>${c}</td>`).join('')}</tr>`);
+      }
+      out.push(`<table><thead><tr>${head}</tr></thead><tbody>${rows.join('')}</tbody></table>`);
+      continue;
+    }
     if ((m = t.match(/^(#{1,6})\s+(.+)$/))) { flushPara(); closeList(); out.push(`<h${m[1].length}>${inline(m[2])}</h${m[1].length}>`); continue; }
     if (/^(-{3,}|\*{3,}|_{3,})$/.test(t)) { flushPara(); closeList(); out.push('<hr>'); continue; }
     if ((m = t.match(/^&gt;\s?(.*)$/))) { flushPara(); closeList(); out.push(`<blockquote>${inline(m[1])}</blockquote>`); continue; }
