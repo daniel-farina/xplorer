@@ -633,7 +633,12 @@ def main(src: Path):
         '    AddChildView(std::move(grok_btn));\n'
         '  }\n\n'
     )
-    if "kGrokIcon" not in toolbar.read_text():
+    # XPLORER: the pinned kSearchCompanion side-panel action (registered below
+    # with is_pinnable=true) is now the single, always-visible Grok toggle button
+    # — it also shows the active state when the panel is open. Adding our own
+    # explicit toolbar button on top produced a SECOND Grok icon whenever the
+    # panel was open, so don't add it. (Block kept for reference / easy revert.)
+    if False:
         if "ToggleGrokSidePanel" in toolbar.read_text():
             edit(
                 toolbar,
@@ -740,7 +745,7 @@ def main(src: Path):
         "      SidePanelAction(SidePanelEntryId::kSearchCompanion,\n"
         "                      IDS_AI_MODE_ENTRYPOINT_LABEL,\n"
         "                      IDS_AI_MODE_ENTRYPOINT_LABEL, kGrokIcon,\n"
-        "                      kActionSidePanelShowSearchCompanion, bwi, false)\n"
+        "                      kActionSidePanelShowSearchCompanion, bwi, true)\n"
         "          .Build());\n",
     )
 

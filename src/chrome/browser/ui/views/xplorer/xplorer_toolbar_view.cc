@@ -445,12 +445,14 @@ void XplorerToolbarView::ExecuteCommand(int command_id, int event_flags) {
     const size_t child = static_cast<size_t>(command_id - kChildCmdBase);
     if (open_pill_ < pills_.size() &&
         child < pills_[open_pill_].children.size()) {
-      const std::string& href = pills_[open_pill_].children[child].href;
-      if (href == "#sidepanel") {
-        // Open the agentic Grok side panel instead of navigating a tab.
+      const ToolbarChild& kid = pills_[open_pill_].children[child];
+      // "Conversations" opens the agentic Grok side panel instead of navigating
+      // a tab. Match by sentinel href OR label so a saved toolbar config (whose
+      // children come from settings with href "/") is handled too.
+      if (kid.href == "#sidepanel" || kid.label == "Conversations") {
         grok_companion::ToggleGrokSidePanel(browser_);
       } else {
-        Navigate(ResolveHref(href));
+        Navigate(ResolveHref(kid.href));
       }
     }
     return;
