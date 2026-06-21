@@ -515,8 +515,13 @@ bool MessageNeedsBrowserTools(const std::string& message) {
 // picked and NEVER auto-switch: switching the model mid-conversation also
 // switched the agent, which broke browser follow-ups (MODEL_SWITCH_INCOMPATIBLE_AGENT).
 std::string ResolveChatModel(const std::string& /*message*/,
-                             const std::string* request_model) {
-  return ResolveModel(request_model);
+                             const std::string* /*request_model*/) {
+  // The agentic sidebar drives the browser via MCP tools, which only exist under
+  // the grok-build-plan agent — and that agent only accepts the grok-build model
+  // (Composer is hard-locked to the tool-less 'cursor' agent). So the whole
+  // conversation runs on grok-build: consistent agent across messages, no
+  // mid-session model/agent switch, browser follow-ups just work.
+  return kSearchModel;
 }
 
 const char* ChatRulesForMessage(const std::string& message) {
@@ -1781,14 +1786,6 @@ base::CommandLine BuildGrokChatCommand(const std::string& message,
   cmd.AppendArg("--always-approve");
   cmd.AppendArg("-m");
   cmd.AppendArg(model);
-  // XPLORER: pin the tool-capable harness so MCP browser tools are available
-  // regardless of the model — Composer AND grok-build both run under the
-  // grok-build-plan agent. Without this, switching the model to grok-build for a
-  // browser follow-up also switches the agent (cursor -> grok-build-plan), which
-  // grok rejects mid-session (MODEL_SWITCH_INCOMPATIBLE_AGENT). With the agent
-  // fixed up front, the model never has to change.
-  cmd.AppendArg("--agent");
-  cmd.AppendArg("grok-build-plan");
   cmd.AppendArg("--max-turns");
   cmd.AppendArg("25");
   if (!rules.empty()) {
