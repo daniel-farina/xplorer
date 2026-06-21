@@ -78,6 +78,10 @@ Each loop iteration: read this file + `git log`, do the next safe item, commit, 
   next build. Was: append a `Xplorer/0.7.0`
   brand token (never replace `Chrome/<ver>` — site-compat). `chrome_content_client.cc` +
   `user_agent_utils.cc`; verify M151 signatures first.
+- [x] **Additional privacy phone-home switches** — DONE + BUILD-VERIFIED (branding-phase2):
+  appended `disable-domain-reliability` (no network-error uploads to Google), `disable-sync` (no
+  Google sync), and `no-pings` (no <a ping> hyperlink-audit pings) to the BasicStartupComplete switch
+  block, alongside the existing component-update/Finch/variations kill switches. Compiles arm64.
 - [ ] **Force kill-switch prefs** in a PostBrowserStart hook: `kMetricsReportingEnabled=false`,
   `kDnsOverHttpsMode="off"`, `kNetworkPredictionOptions=2`, `kSigninAllowed=false`.
 - [ ] **First-run / Welcome / What's New** still say Chromium — prefer disabling the feature.

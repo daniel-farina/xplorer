@@ -249,7 +249,10 @@ def main(src: Path):
         '                           "disable-backgrounding-occluded-windows",\n'
         '                           "disable-background-timer-throttling",\n'
         '                           "disable-component-update",\n'
-        '                           "disable-field-trial-config"}) {\n'
+        '                           "disable-field-trial-config",\n'
+        '                           "disable-domain-reliability",\n'
+        '                           "disable-sync",\n'
+        '                           "no-pings"}) {\n'
         "      if (!cmd->HasSwitch(sw))\n"
         "        cmd->AppendSwitch(sw);\n"
         "    }\n"
