@@ -740,7 +740,7 @@ def main(src: Path):
         "      SidePanelAction(SidePanelEntryId::kSearchCompanion,\n"
         "                      IDS_AI_MODE_ENTRYPOINT_LABEL,\n"
         "                      IDS_AI_MODE_ENTRYPOINT_LABEL, kGrokIcon,\n"
-        "                      kActionSidePanelShowSearchCompanion, bwi, true)\n"
+        "                      kActionSidePanelShowSearchCompanion, bwi, false)\n"
         "          .Build());\n",
     )
 
