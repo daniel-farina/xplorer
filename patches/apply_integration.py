@@ -633,7 +633,8 @@ def main(src: Path):
         '    AddChildView(std::move(grok_btn));\n'
         '  }\n\n'
     )
-    if "kGrokIcon" not in toolbar.read_text():
+    if False:  # XPLORER: explicit Grok button dropped; the default-pinned
+        # kSearchCompanion side-panel button is the single always-visible toggle.
         if "ToggleGrokSidePanel" in toolbar.read_text():
             edit(
                 toolbar,
@@ -740,8 +741,30 @@ def main(src: Path):
         "      SidePanelAction(SidePanelEntryId::kSearchCompanion,\n"
         "                      IDS_AI_MODE_ENTRYPOINT_LABEL,\n"
         "                      IDS_AI_MODE_ENTRYPOINT_LABEL, kGrokIcon,\n"
-        "                      kActionSidePanelShowSearchCompanion, bwi, false)\n"
+        "                      kActionSidePanelShowSearchCompanion, bwi, true)\n"
         "          .Build());\n",
+    )
+
+    # XPLORER: pin the Grok side-panel button by default so it is the single,
+    # always-visible Grok toggle — shown in BOTH the inactive (panel closed) and
+    # active (panel open, highlighted) states. The native side-panel button is
+    # only shown ephemerally when active, so without this the button vanishes
+    # when the panel is closed. Inserted before the CanUpdate gate so it applies
+    # regardless of toolbar customization; UpdatePinnedState is idempotent.
+    pinned_model = src / ("chrome/browser/ui/toolbar/pinned_toolbar/"
+                          "pinned_toolbar_actions_model.cc")
+    edit(
+        pinned_model,
+        "void PinnedToolbarActionsModel::MaybeMigrateExistingPinnedStates() {\n"
+        "  if (!CanUpdate()) {\n"
+        "    return;\n"
+        "  }\n",
+        "void PinnedToolbarActionsModel::MaybeMigrateExistingPinnedStates() {\n"
+        "  // XPLORER: keep the Grok side-panel button pinned (always visible).\n"
+        "  UpdatePinnedState(kActionSidePanelShowSearchCompanion, true);\n"
+        "  if (!CanUpdate()) {\n"
+        "    return;\n"
+        "  }\n",
     )
 
     # --- Grok as the default search engine --------------------------------
