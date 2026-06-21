@@ -509,15 +509,19 @@ bool MessageNeedsBrowserTools(const std::string& message) {
   return false;
 }
 
-// Composer is fast for Q&A; browser control needs grok-build + MCP tools.
-std::string ResolveChatModel(const std::string& message,
+// Honor the model the user picked in the sidebar. The browser MCP tools live
+// under the grok-build-plan agent, which only accepts grok-build; Composer is
+// hard-locked to the tool-less 'cursor' agent. We never auto-switch the model
+// within a conversation — grok locks a session to one agent and rejects a
+// mid-session switch in either direction — so the UI keeps each conversation on
+// one model (and starts a fresh chat when the user changes it). Default to
+// grok-build so a brand-new chat can drive the browser out of the box; an
+// explicit Composer pick is respected for fast, tool-less Q&A.
+std::string ResolveChatModel(const std::string& /*message*/,
                              const std::string* request_model) {
-  std::string model = ResolveModel(request_model);
-  if (MessageNeedsBrowserTools(message) &&
-      (model == kComposerModel || model == kDefaultModel)) {
-    return kSearchModel;
-  }
-  return model;
+  if (request_model && !request_model->empty())
+    return *request_model;
+  return kSearchModel;
 }
 
 const char* ChatRulesForMessage(const std::string& message) {
