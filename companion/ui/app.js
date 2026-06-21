@@ -304,8 +304,18 @@ async function sendMessage(text, { retry = false } = {}) {
     }
     thinking.classList.add('error');
     thinking.innerHTML = '';
+    const msg = e.message || '';
+    // Grok CLI auth expired → show a clear "reconnect" prompt instead of a
+    // cryptic "chat failed" (the gateway surfaces the upstream 401 verbatim).
+    const authExpired = /Unauthorized \(401\)|expired credentials|no auth context|grok login|PermissionDenied/i.test(msg);
     const errText = document.createElement('div');
-    errText.textContent = `Error: ${e.message}`;
+    if (authExpired) {
+      errText.className = 'auth-expired';
+      errText.innerHTML = '🔑 <b>Your Grok session expired.</b><br>' +
+        'Open a terminal and run <code>grok login</code> to reconnect, then Retry.';
+    } else {
+      errText.textContent = `Error: ${msg}`;
+    }
     thinking.appendChild(errText);
     const retryBtn = document.createElement('button');
     retryBtn.type = 'button';

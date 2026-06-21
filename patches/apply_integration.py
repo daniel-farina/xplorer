@@ -38,6 +38,28 @@ def edit(path: Path, anchor: str, insertion: str, before: bool = False):
     print(f"  edited: {path}")
 
 
+def rebrand_grd_strings(path: Path):
+    """Replace the hardcoded "Chromium" app name with "Xplorer" in a grit
+    strings file (.grd/.grdp), preserving the legal "Chromium Authors" copyright.
+    Skips the google_chrome branded variants (not compiled in our Chromium build)
+    and — as a safety net — any file whose <message name="…"> resource IDs contain
+    "Chromium" (replacing those would break the build). Idempotent: once only the
+    copyright keeps "Chromium", re-running is a no-op."""
+    if not path.exists() or "google_chrome" in path.name:
+        return
+    g = path.read_text()
+    if re.search(r'name="[^"]*Chromium', g):
+        print(f"  skip (Chromium in resource IDs): {path.name}")
+        return
+    if g.count("Chromium") <= g.count("Chromium Authors"):
+        return
+    g = g.replace("Chromium Authors", "\x00A\x00")
+    g = g.replace("Chromium", "Xplorer")
+    g = g.replace("\x00A\x00", "Chromium Authors")
+    path.write_text(g)
+    print(f"  rebranded grd: {path.name}")
+
+
 def patch_native_toolbar(src: Path):
     """SCAFFOLD: native browser-chrome Xplorer pill toolbar.
 
@@ -217,19 +239,46 @@ def main(src: Path):
     edit(
         cmd_delegate,
         "std::optional<int> ChromeMainDelegate::BasicStartupComplete() {",
-        f"\n  {MARKER}: AI-native defaults — never throttle backgrounded tabs.\n"
+        f"\n  {MARKER}: AI-native defaults (never throttle backgrounded tabs) +\n"
+        f"  {MARKER}: privacy — disable the component updater (Google pings), the\n"
+        f"  {MARKER}: Finch field-trial config, and the Variations seed fetch\n"
+        f"  {MARKER}: (empty server URLs). Brave/ungoogled-style: no phone-home.\n"
         "  {\n"
         "    base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();\n"
         '    for (const char* sw : {"disable-renderer-backgrounding",\n'
         '                           "disable-backgrounding-occluded-windows",\n'
-        '                           "disable-background-timer-throttling"}) {\n'
+        '                           "disable-background-timer-throttling",\n'
+        '                           "disable-component-update",\n'
+        '                           "disable-field-trial-config",\n'
+        '                           "disable-domain-reliability",\n'
+        '                           "disable-sync",\n'
+        '                           "no-pings"}) {\n'
         "      if (!cmd->HasSwitch(sw))\n"
         "        cmd->AppendSwitch(sw);\n"
         "    }\n"
+        '    for (const char* url_sw : {"variations-server-url",\n'
+        '                               "variations-insecure-server-url"}) {\n'
+        "      if (!cmd->HasSwitch(url_sw))\n"
+        '        cmd->AppendSwitchASCII(url_sw, "");\n'
+        "    }\n"
         '    if (!cmd->HasSwitch("disable-features"))\n'
         '      cmd->AppendSwitchASCII("disable-features",\n'
-        '                             "CalculateNativeWinOcclusion");\n'
+        '                             "CalculateNativeWinOcclusion,ChromeWhatsNewUI");\n'
         "  }\n",
+    )
+
+    # User-Agent / Sec-CH-UA: advertise the Xplorer brand alongside Chromium
+    # (NEVER replace "Chromium"/"Google Chrome" or the Chrome/<ver> token —
+    # site-compat). Appended in the shared brand-list builder so it shows in both
+    # the low-entropy and full-version Sec-CH-UA brand lists. before=True with no
+    # restated return line so edit() splices (the whitespace heuristic would
+    # otherwise duplicate the return).
+    ua_utils = src / "components/embedder_support/user_agent_utils.cc"
+    edit(
+        ua_utils,
+        "  return ShuffleBrandList(brand_version_list, seed);",
+        '  brand_version_list.emplace_back("Xplorer", version);  // XPLORER\n',
+        before=True,
     )
 
     # 4. Branding: rename the product from "Chromium" to "Xplorer".
@@ -252,6 +301,21 @@ def main(src: Path):
         branding.write_text(b)
         print(f"  edited: {branding}")
 
+    # app-Info.plist hardcodes two UTTypeDescription strings as "Chromium
+    # Extension"/"Chromium Shortcut" (all the other fields use the substituted
+    # ${CHROMIUM_SHORT_NAME}, which resolves to "Xplorer"). Route these through
+    # the same variable so Finder's Get-Info on .crx/app-shortcut files reads
+    # "Xplorer …" instead of "Chromium …".
+    app_info = src / "chrome/app/app-Info.plist"
+    ai = app_info.read_text()
+    if "${CHROMIUM_SHORT_NAME} Extension" not in ai:
+        ai = ai.replace("<string>Chromium Extension</string>",
+                        "<string>${CHROMIUM_SHORT_NAME} Extension</string>")
+        ai = ai.replace("<string>Chromium Shortcut</string>",
+                        "<string>${CHROMIUM_SHORT_NAME} Shortcut</string>")
+        app_info.write_text(ai)
+        print(f"  edited: {app_info}")
+
     # The visible app name comes from IDS_PRODUCT_NAME / IDS_SHORT_PRODUCT_NAME
     # in the (non-Google, non-CfT) else branch of chromium_strings.grd.
     grd = src / "chrome/app/chromium_strings.grd"
@@ -272,6 +336,47 @@ def main(src: Path):
             )
         grd.write_text(g)
         print(f"  edited: {grd}")
+
+    # The window/tab/accessible title formats hardcode "- Chromium" (they do NOT
+    # use the renamed product placeholder), so titles read "<page> - Chromium".
+    # Rebrand the title-format messages: covers the stable browser title, the
+    # macOS accessible title + channel variants (Beta/Dev/Canary), and the
+    # ChromeOS / captive-portal layouts.
+    g = grd.read_text()
+    if "</ph> - Xplorer" not in g:
+        g = g.replace("</ph> - Chromium", "</ph> - Xplorer")
+        g = g.replace("Chromium - <ph", "Xplorer - <ph")
+        g = g.replace("- Network Sign-in - Chromium", "- Network Sign-in - Xplorer")
+        g = g.replace("Chromium - Network Sign-in", "Xplorer - Network Sign-in")
+        grd.write_text(g)
+        print(f"  edited (title formats): {grd}")
+
+    # Broad app-name rebrand: ~700 user-facing strings in chromium_strings.grd
+    # still hardcode "Chromium" (default-browser prompt, profile/startup errors,
+    # background-run, update nags, etc.) — the product-name rename only covered
+    # IDS_PRODUCT_NAME. Replace them all with Xplorer, preserving the legal
+    # "Chromium Authors" copyright. Risk-checked: no <message name="…"> IDs
+    # contain "Chromium", so this only touches text content + translator descs,
+    # never resource IDs. Guard: post-rebrand only the copyright keeps "Chromium".
+    g = grd.read_text()
+    if g.count("Chromium") > g.count("Chromium Authors"):
+        g = g.replace("Chromium Authors", "\x00AUTH\x00")
+        g = g.replace("Chromium", "Xplorer")
+        g = g.replace("\x00AUTH\x00", "Chromium Authors")
+        grd.write_text(g)
+        print(f"  edited (broad app-name rebrand): {grd}")
+
+    # Extend the same safe rebrand to every other user-facing strings file —
+    # settings (148), omnibox pedals (40), components, search-engine choice,
+    # privacy sandbox, password manager, page info, autofill, … ~300 more
+    # hardcoded "Chromium" app-name refs. Glob *strings.grd/.grdp only (skips
+    # resource/image grds); generated_resources.grd uses PRODUCT_NAME subst so
+    # only its few literals need touching.
+    for base, pat in (("chrome/app", "*strings.grd"), ("chrome/app", "*strings.grdp"),
+                      ("components", "**/*strings.grd"), ("components", "**/*strings.grdp")):
+        for f in sorted((src / base).glob(pat)):
+            rebrand_grd_strings(f)
+    rebrand_grd_strings(src / "chrome/app/generated_resources.grd")
 
     # 5. Link Grok companion (side panel + AI Mode redirect).
     edit(
@@ -462,10 +567,10 @@ def main(src: Path):
     edit(
         cmd_delegate,
         '      cmd->AppendSwitchASCII("disable-features",\n'
-        '                             "CalculateNativeWinOcclusion");\n'
+        '                             "CalculateNativeWinOcclusion,ChromeWhatsNewUI");\n'
         '  }\n',
         '      cmd->AppendSwitchASCII("disable-features",\n'
-        '                             "CalculateNativeWinOcclusion");\n'
+        '                             "CalculateNativeWinOcclusion,ChromeWhatsNewUI");\n'
         '    if (!cmd->HasSwitch("enable-features"))\n'
         '      cmd->AppendSwitchASCII("enable-features",\n'
         '                             "AiModeOmniboxEntryPoint");\n'
@@ -708,7 +813,7 @@ def main(src: Path):
     # (Developer Build) ..."). Prepend the Xplorer product version so users see
     # OUR version first. NOTE: bump XPLORER_VERSION here per release (or wire it
     # to the release version later).
-    XPLORER_VERSION = "0.7.4"
+    XPLORER_VERSION = "0.7.5"
     ss = src / "chrome/app/settings_strings.grdp"
     sst = ss.read_text()
     _ver_marker = "Xplorer " + XPLORER_VERSION + " · Chromium"

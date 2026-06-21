@@ -36,22 +36,52 @@ Each loop iteration: read this file + `git log`, do the next safe item, commit, 
 
 ## 🔜 do_now (next iterations, in order)
 
-- [ ] **Disable Variations/Finch + component updater + What's New** via the existing
-  `chrome_main_delegate.cc` switch block (`apply_integration.py` ~217-233 / ~462-473).
-  Add `disable-component-update`, `disable-field-trial-config`, empty `variations-server-url` +
-  `variations-insecure-server-url`, and `ChromeWhatsNewUI` to disable-features.
-  **ANCHOR CONSTRAINT:** the second edit anchors on the literal
-  `AppendSwitchASCII("disable-features", "CalculateNativeWinOcclusion");` — if appending
-  `ChromeWhatsNewUI` to that value, update the string in BOTH blocks or the second `edit()` aborts.
+- [x] **Disable Variations/Finch + component updater** — DONE (branding-phase2): added
+  `disable-component-update`, `disable-field-trial-config`, and empty `variations-server-url` +
+  `variations-insecure-server-url` to the BasicStartupComplete switch block in
+  `chrome_main_delegate.cc`. Applies cleanly (both cmd_delegate edits intact) + built (arm64 compiles).
+- [x] **Disable What's New (`ChromeWhatsNewUI`)** — DONE (branding-phase2): added ChromeWhatsNewUI
+  to the disable-features value in all 3 places (block-1 insertion + block-2 anchor + insertion) so
+  both cmd_delegate edits stay matched; applies cleanly, AiMode enable-features intact. Was: split out of the above. Appending it to the
+  existing `disable-features` value is anchor-fragile: the second cmd_delegate `edit()` anchors on
+  `AppendSwitchASCII("disable-features", "CalculateNativeWinOcclusion");`, so the string must change
+  in BOTH blocks together or the second edit aborts. Do as its own careful step.
 
 ## 🕓 later (verify-then-fix; need a build or checkout to confirm)
 
-- [ ] **Window/taskbar title says "… - Chromium"** — VISUALLY CONFIRMED on the test desktop
+- [x] **Broad app-name rebrand in chromium_strings.grd** — DONE + BUILD-VERIFIED (branding-phase2):
+  ~700 hardcoded "Chromium" user strings (default-browser prompt, profile/startup errors,
+  background-run, update nags) → Xplorer, preserving the "Chromium Authors" copyright. Risk-checked
+  (no message-name IDs contain "Chromium"); compiles clean (arm64, 3m12s); built pak confirms
+  "Make Xplorer the default" etc.
+- [x] **Remaining "Chromium" strings in OTHER grds** — DONE + BUILD-VERIFIED (branding-phase2):
+  generalized the safe rebrand into `rebrand_grd_strings()` (skips google_chrome variants + any file
+  with "Chromium" in message-name IDs; preserves "Chromium Authors") and globbed all *strings.grd/.grdp
+  across chrome/app + components + generated_resources.grd. 22 files rebranded (~300 strings: settings,
+  omnibox pedals, privacy sandbox, password manager, page info, autofill, SSL/security interstitials,
+  version UI, …). Compiles clean (arm64, 3m15s). Only 3 "Chromium" left: 2 copyright + 1 intentional
+  about-page engine-version line ("Xplorer 0.7.4 · Chromium <ver>"). Was: the built locale.pak still shows
+  "Chromium blocks/sends/asks/uses/recommends…" sourced from generated_resources.grd + component
+  *_strings.grd files (NOT chromium_strings.grd). Apply the same risk-checked broad replace (preserve
+  message-name IDs + "Chromium Authors") to those grds. Biggest remaining branding surface.
+
+
+- [x] **Window/taskbar title says "… - Chromium"** — FIXED: the title-format messages
+  (IDS_BROWSER_WINDOW_TITLE_FORMAT + accessible/channel + ChromeOS/captive-portal variants)
+  hardcoded "- Chromium" rather than the renamed product; rebranded all to Xplorer. Was VISUALLY CONFIRMED on the test desktop
   (title bar read "Grok - Chromium"). Audit assumed handled; it is not. Find the residual product
   string / WM class.
-- [ ] **User-Agent + UA-CH brand list** still "Chromium"/"Google Chrome"; append a `Xplorer/0.7.0`
+- [x] **User-Agent + UA-CH brand list** — DONE (branding-phase2): append `{"Xplorer", version}` to
+  the shared brand-list builder in user_agent_utils.cc (before the ShuffleBrandList return), so both
+  the low-entropy and full-version Sec-CH-UA lists advertise Xplorer. Chromium kept, Chrome/<ver>
+  untouched (site-compat). Apply-verified (1 insert, Chromium intact); compile confirmed by the
+  next build. Was: append a `Xplorer/0.7.0`
   brand token (never replace `Chrome/<ver>` — site-compat). `chrome_content_client.cc` +
   `user_agent_utils.cc`; verify M151 signatures first.
+- [x] **Additional privacy phone-home switches** — DONE + BUILD-VERIFIED (branding-phase2):
+  appended `disable-domain-reliability` (no network-error uploads to Google), `disable-sync` (no
+  Google sync), and `no-pings` (no <a ping> hyperlink-audit pings) to the BasicStartupComplete switch
+  block, alongside the existing component-update/Finch/variations kill switches. Compiles arm64.
 - [ ] **Force kill-switch prefs** in a PostBrowserStart hook: `kMetricsReportingEnabled=false`,
   `kDnsOverHttpsMode="off"`, `kNetworkPredictionOptions=2`, `kSigninAllowed=false`.
 - [ ] **First-run / Welcome / What's New** still say Chromium — prefer disabling the feature.
@@ -62,8 +92,28 @@ Each loop iteration: read this file + `git log`, do the next safe item, commit, 
 - [ ] **Windows installer / ARP / shortcut strings** — grep `chrome/installer` after apply.
 - [ ] **AgentGateway port** — `search_url` hardcodes `127.0.0.1:9334`; confirm `Start(0)` pins 9334
   (else omnibox search 404s) and make `/omnibox` 302 even with an empty store.
+- [x] **macOS `UTTypeDescription` = "Chromium Extension" / "Chromium Shortcut"** — FIXED (branding-phase2:
+  routed through `${CHROMIUM_SHORT_NAME}`; generated bundle now reads "Xplorer Extension/Shortcut"). Was VERIFIED in the
+  shipped **v0.7.3** bundle (`/Applications/Xplorer.app/Contents/Info.plist`; user-visible in Finder
+  Get-Info on `.crx`/app-shortcut files). Should read "Xplorer …". Source: the mac app Info.plist is
+  generated from `chrome/app/app-Info.plist` / branding strings — fix via an `apply_integration.py`
+  Info.plist string replacement (needs a build to confirm the generated plist picks it up).
+- [ ] **macOS `CFBundleShortVersionString` = engine version (151.0.7897.0), not 0.7.3** — Finder
+  Get-Info shows the Chromium version. Cosmetic/conventional (Chrome does the same), but if we want
+  the Xplorer version surfaced here, set it from `XPLORER_VERSION` during apply. Low priority.
+
+## Audit log
+- **2026-06-20 (post-v0.7.3):** audited the shipped arm64 bundle. ✅ Correct: helper apps
+  ("Xplorer Helper (…)"), framework ("Xplorer Framework"), `CFBundleName`/`DisplayName` = Xplorer,
+  identifier `org.xplorer.Xplorer`. ❌ Residual: the two `UTTypeDescription` strings above. Internal
+  binaries `chrome_crashpad_handler` (+ `app_mode_loader`) keep Chromium names but are not user-visible.
 
 ## Notes
+
+- **2026-06-20 (phase2 build-verify):** the full phase2 overlay — UTType, Variations/Finch/
+  component-updater off, window-title rebrand, What's New off, UA brand token, + the merged v0.7.4
+  sidebar — **compiles clean on arm64 (7m16s)**. All previously apply-verified branding items are now
+  build-verified. Ready to ship in a v0.7.5.
 
 - Full audit reports (branding/search/privacy) captured by the `xplorer-branding-privacy-audit`
   workflow run `wf_6806647d-0ca`.
