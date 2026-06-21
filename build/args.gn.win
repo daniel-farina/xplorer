@@ -39,3 +39,16 @@ google_api_key = ""
 google_default_client_id = ""
 google_default_client_secret = ""
 enable_rlz = false                  # no RLZ ping (also the unbranded default)
+
+# === ungoogled-chromium degoogling flags (vendored 149.0.7827.155-1) — see docs/UNGOOGLED.md ===
+# Build-safe subset of ungoogled's flags.gn: removes Google-connected services / phone-home
+# without requiring source patches. NOTE: safe_browsing_mode=0 is intentionally NOT set — it
+# needs the safe-browsing stub patches (patches/ungoogled/quarantine.series), which do not yet
+# apply to this Chromium pin; setting it alone would break the link.
+enable_reporting = false                  # no NEL / Reporting-API upload pipeline
+enable_remoting = false                   # no Chrome Remote Desktop (Google-account-tied)
+enable_mdns = false                       # no multicast-DNS local discovery
+enable_service_discovery = false          # no privet/Cast local service discovery (pairs with enable_mdns)
+enable_hangout_services_extension = false # no built-in Google Meet/Hangouts helper extension
+disable_fieldtrial_testing_config = true  # behave like stable: no baked-in Google experiment config
+exclude_unwind_tables = true              # smaller binary, less stack metadata (symbol_level=0 already)
