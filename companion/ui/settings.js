@@ -3,6 +3,7 @@ const searchHome = document.getElementById('search-home');
 const chatModel = document.getElementById('chat-model');
 const searchModel = document.getElementById('search-model');
 const browserTheme = document.getElementById('browser-theme');
+const maxTurns = document.getElementById('max-turns');
 
 function setStatus(msg, kind = '') {
   if (!statusEl) return;
@@ -41,6 +42,7 @@ async function init() {
   if (searchHome) searchHome.value = settings.search_home || SEARCH_HOME_BUILD;
   fillSelect(chatModel, models, settings.model || DEFAULT_MODEL);
   fillSelect(searchModel, models, settings.search_model || SEARCH_DEFAULT_MODEL);
+  if (maxTurns) maxTurns.value = settings.max_turns || 50;
 
   document.getElementById('info-companion')?.replaceChildren(
     document.createTextNode(settings.companion_url || location.origin),
@@ -82,6 +84,14 @@ chatModel?.addEventListener('change', () => {
 searchModel?.addEventListener('change', () => {
   persistSearchModel(searchModel.value);
   persist({ search_model: searchModel.value });
+});
+
+maxTurns?.addEventListener('change', () => {
+  let n = parseInt(maxTurns.value, 10);
+  if (!Number.isFinite(n)) n = 50;
+  n = Math.min(200, Math.max(1, n));
+  maxTurns.value = String(n);
+  persist({ max_turns: n });
 });
 
 browserTheme?.addEventListener('change', async () => {

@@ -50,6 +50,17 @@
         </section>
 
         <section class="settings-card">
+          <h2>Grok Build agent</h2>
+          <label class="settings-field">
+            <span>Max turns per request</span>
+            <input type="number" id="max-turns" min="1" max="200" step="1">
+            <small>How many tool/reasoning steps the agent may take to answer one
+              message. Raise it for bigger multi-step tasks (open &amp; organize
+              many tabs); lower it to cap cost/latency. 1–200, default 50.</small>
+          </label>
+        </section>
+
+        <section class="settings-card">
           <h2>Browser appearance</h2>
           <label class="settings-field">
             <span>Chrome color scheme</span>

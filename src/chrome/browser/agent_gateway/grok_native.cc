@@ -477,6 +477,27 @@ void SetSearchHomeMode(const std::string& mode) {
   SaveSettings(settings);
 }
 
+// Agent turn budget for a single chat/search request. 25 was too low for
+// multi-step browser tasks (open many tabs, then group) which ran out mid-task;
+// default higher and let the user tune it in Settings.
+constexpr int kDefaultMaxTurns = 50;
+
+int GetConfiguredMaxTurns() {
+  base::DictValue settings = LoadSettings();
+  if (const std::optional<int> n = settings.FindInt("max_turns")) {
+    if (*n >= 1 && *n <= 200)
+      return *n;
+  }
+  return kDefaultMaxTurns;
+}
+
+void SetConfiguredMaxTurns(int turns) {
+  base::DictValue settings = LoadSettings();
+  const int clamped = turns < 1 ? 1 : (turns > 200 ? 200 : turns);
+  settings.Set("max_turns", clamped);
+  SaveSettings(settings);
+}
+
 std::string ResolveModel(const std::string* request_model) {
   if (request_model && !request_model->empty())
     return *request_model;
@@ -550,6 +571,7 @@ void EnrichSettingsResponse(base::DictValue* d, int gateway_port) {
          "http://127.0.0.1:" + base::NumberToString(gateway_port));
   d->Set("search_model", GetConfiguredSearchModel());
   d->Set("search_model_label", ModelDisplayName(GetConfiguredSearchModel()));
+  d->Set("max_turns", GetConfiguredMaxTurns());
   d->Set("grok_bin", ResolveGrokBinary().AsUTF8Unsafe());
   std::string gw_json;
   if (base::ReadFileToString(xplorer_paths::Resolve("gateway.json"),
@@ -1792,7 +1814,7 @@ base::CommandLine BuildGrokChatCommand(const std::string& message,
   cmd.AppendArg("-m");
   cmd.AppendArg(model);
   cmd.AppendArg("--max-turns");
-  cmd.AppendArg("25");
+  cmd.AppendArg(base::NumberToString(GetConfiguredMaxTurns()));
   if (!rules.empty()) {
     cmd.AppendArg("--rules");
     cmd.AppendArg(rules);
@@ -2331,6 +2353,7 @@ bool GrokNative::TryHandleRequest(
     const std::string* home = body->FindString("search_home");
     const base::DictValue* toolbar = body->FindDict("toolbar");
     std::optional<bool> welcome = body->FindBool("welcome_completed");
+    std::optional<int> max_turns = body->FindInt("max_turns");
     bool updated = false;
     if (model && !model->empty()) {
       SetConfiguredModel(*model);
@@ -2349,6 +2372,10 @@ bool GrokNative::TryHandleRequest(
         return true;
       }
       SetSearchHomeMode(*home);
+      updated = true;
+    }
+    if (max_turns) {
+      SetConfiguredMaxTurns(*max_turns);
       updated = true;
     }
     if (welcome.has_value() && *welcome) {
