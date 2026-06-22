@@ -563,3 +563,10 @@ html[data-theme="dark"] .markdown .hl-num { color: #fbbf24; }
 .msg-meta .msg-model { font-size: 0.72em; opacity: 0.6; border: 1px solid var(--border, #d8d8d8); border-radius: 999px; padding: 1px 8px; }
 .msg-meta .msg-copy { border: none; background: transparent; color: inherit; cursor: pointer; font-size: 0.78em; opacity: 0.6; padding: 1px 6px; border-radius: 5px; }
 .msg-meta .msg-copy:hover { opacity: 1; background: rgba(127,127,127,0.15); }
+
+/* Xplorer: settings link in the chat-info panel */
+.chat-info .info-settings-link {
+  display: inline-block; margin-top: 10px; font-size: 0.92em; color: inherit;
+  opacity: 0.8; text-decoration: none; border-bottom: 1px dotted currentColor;
+}
+.chat-info .info-settings-link:hover { opacity: 1; }

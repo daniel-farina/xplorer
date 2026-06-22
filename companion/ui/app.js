@@ -514,6 +514,13 @@ function renderChatInfo() {
     actions.append(btn, code);
     el.appendChild(actions);
   }
+  const settingsLink = document.createElement('a');
+  settingsLink.className = 'info-settings-link';
+  settingsLink.href = '/settings';
+  settingsLink.target = '_blank';
+  settingsLink.rel = 'noopener';
+  settingsLink.textContent = 'Open Grok settings (models, max-turns, toolbar) →';
+  el.appendChild(settingsLink);
 }
 
 (function wireChatInfo() {
