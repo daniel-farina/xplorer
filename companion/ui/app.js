@@ -7,10 +7,11 @@ const modelSelect = $('#model-select');
 
 let conversations = [];
 let activeId = null;
-let busy = false;
-let streamAbort = null;
+const streams = {};   // convId -> { aborter, running, reply, status, error }
+const queues = {};    // convId -> [ {id, text} ]
 let models = [];
 let activeModel = getStoredModel();
+let queueSeq = 0;
 let convFilterQuery = '';
 
 const convFilterInput = document.getElementById('conv-filter');
@@ -40,11 +41,13 @@ function renderMessages(conv) {
       div.innerHTML = renderMarkdown(m.content || '');
       div.classList.add('markdown');
       wireCodeCopyButtons(div);
+      appendMsgMeta(div, m);
     } else {
       div.textContent = m.content || '';
     }
     messagesEl.appendChild(div);
   }
+  appendTail(conv.id);
   messagesEl.scrollTop = messagesEl.scrollHeight;
 }
 
@@ -96,6 +99,22 @@ function renderConvList() {
     title.className = 'conv-title';
     title.textContent = c.title || 'Chat';
     li.appendChild(title);
+
+    if (isRunning(c.id)) {
+      const dot = document.createElement('button');
+      dot.type = 'button';
+      dot.className = 'conv-running';
+      dot.title = 'Agent running — click to stop';
+      dot.textContent = '●';
+      dot.onclick = (e) => { e.stopPropagation(); stopChat(c.id); };
+      li.appendChild(dot);
+    } else if (queues[c.id] && queues[c.id].length) {
+      const q = document.createElement('span');
+      q.className = 'conv-queued';
+      q.title = queues[c.id].length + ' queued';
+      q.textContent = '⋯';
+      li.appendChild(q);
+    }
 
     const del = document.createElement('button');
     del.type = 'button';
@@ -187,6 +206,9 @@ function selectConv(id) {
   const conv = conversations.find((c) => c.id === id);
   renderConvList();
   renderMessages(conv);
+  setComposerRunning();
+  renderQueue();
+  updateActiveBadge();
 }
 
 async function refresh() {
@@ -210,11 +232,7 @@ async function newChat() {
   input.focus();
 }
 
-function setStreamingUi(active) {
-  busy = active;
-  sendBtn.disabled = active;
-  if (stopBtn) stopBtn.hidden = !active;
-}
+// (setStreamingUi replaced by setComposerRunning, defined below)
 
 function appendStatusLine(container, text) {
   const line = document.createElement('div');
@@ -227,53 +245,129 @@ function appendStatusLine(container, text) {
   messagesEl.scrollTop = messagesEl.scrollHeight;
 }
 
-async function sendMessage(text, { retry = false } = {}) {
-  if (!text.trim() || busy || !activeId) return;
-  const conv = conversations.find((c) => c.id === activeId);
-  if (!conv) return;
-  if (!(await ensureGrokReady())) return;  // Grok Build required to build/modify
+const currentConv = () => conversations.find((c) => c.id === activeId);
+function isRunning(convId) { return !!(streams[convId] && streams[convId].running); }
+function activeRunCount() { return Object.values(streams).filter((s) => s.running).length; }
 
-  const model = messageNeedsBrowserTools(text)
-    ? modelForSearchMode('web', activeModel, models)
-    : activeModel;
+function updateActiveBadge() {
+  const el = document.getElementById('active-count');
+  if (!el) return;
+  const n = activeRunCount();
+  el.textContent = n ? String(n) : '';
+  el.hidden = !n;
+  el.title = n ? (n + ' chat' + (n > 1 ? 's' : '') + ' running') : '';
+}
+
+// Send stays enabled (a 2nd message queues); Stop shows when the ACTIVE chat runs.
+function setComposerRunning() {
+  if (sendBtn) sendBtn.disabled = false;
+  if (stopBtn) stopBtn.hidden = !isRunning(activeId);
+}
+
+// Kill an agent: abort the UI stream AND terminate the grok process on the gateway.
+async function stopChat(convId) {
+  const st = streams[convId];
+  if (st && st.aborter) st.aborter.abort();
+  try { await api('/api/conversations/' + convId + '/stop', { method: 'POST' }); } catch (e) { /* best effort */ }
+}
+
+function appendError(convId) {
+  const st = streams[convId];
+  if (!st || !st.error) return;
+  const box = document.createElement('div');
+  box.className = 'msg assistant thinking error';
+  const errText = document.createElement('div');
+  if (st.error.needsLogin) {
+    errText.className = 'auth-expired';
+    errText.innerHTML = '\U0001F511 <b>Connect to Grok to continue.</b><br>' +
+      'In a terminal, make sure Grok Build is installed, then run ' +
+      '<code>grok login</code> to sign in — and Retry.';
+  } else {
+    errText.textContent = 'Error: ' + (st.error.msg || '');
+  }
+  box.appendChild(errText);
+  const retryBtn = document.createElement('button');
+  retryBtn.type = 'button';
+  retryBtn.className = 'retry-btn';
+  retryBtn.textContent = 'Retry';
+  const text = st.error.text;
+  retryBtn.onclick = () => { delete streams[convId]; renderMessages(currentConv()); sendMessage(text, { retry: true, convId }); };
+  box.appendChild(retryBtn);
+  messagesEl.appendChild(box);
+}
+
+// Streaming/error tail for a conversation (only painted when it is active).
+function appendTail(convId) {
+  const st = streams[convId];
+  if (!st) return;
+  if (st.running) {
+    const live = document.createElement('div');
+    live.className = 'msg assistant streaming markdown';
+    if (st.reply) { live.innerHTML = renderMarkdown(st.reply); wireCodeCopyButtons(live); } else { live.hidden = true; }
+    messagesEl.appendChild(live);
+    const think = document.createElement('div');
+    think.className = 'msg assistant thinking';
+    const s = document.createElement('div');
+    s.className = 'stream-status';
+    s.textContent = st.status || 'Grok is thinking…';
+    think.appendChild(s);
+    messagesEl.appendChild(think);
+  } else if (st.error) {
+    appendError(convId);
+  }
+}
+
+// Incremental update of the active tail during streaming (no full re-render).
+function updateTail(convId) {
+  if (convId !== activeId) return;
+  const st = streams[convId];
+  if (!st || !st.running) return;
+  const live = messagesEl.querySelector('.msg.assistant.streaming');
+  const think = messagesEl.querySelector('.msg.assistant.thinking');
+  if (!live || !think) { renderMessages(currentConv()); return; }
+  if (st.reply) { live.hidden = false; live.innerHTML = renderMarkdown(st.reply); wireCodeCopyButtons(live); }
+  const s = think.querySelector('.stream-status');
+  if (s) s.textContent = st.status || 'Grok is thinking…';
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+}
+
+// Each conversation streams independently — switching/closing never interrupts it.
+async function sendMessage(text, { retry = false, convId = activeId } = {}) {
+  text = (text || '').trim();
+  if (!text || !convId) return;
+  const conv = conversations.find((c) => c.id === convId);
+  if (!conv) return;
+  if (isRunning(convId)) { enqueueMessage(convId, text); if (convId === activeId) input.value = ''; return; }
+  if (!(await ensureGrokReady())) return;
+
+  const model = getConvModel(convId) || activeModel;
+  persistConvModel(convId, model);
 
   if (!retry) {
     conv.messages = conv.messages || [];
     conv.messages.push({ role: 'user', content: text });
-    renderMessages(conv);
-    input.value = '';
+    if (convId === activeId) input.value = '';
   }
 
-  setStreamingUi(true);
-  streamAbort = new AbortController();
-
-  const thinking = document.createElement('div');
-  thinking.className = 'msg assistant thinking';
-  const status = document.createElement('div');
-  status.className = 'stream-status';
-  status.textContent = 'Grok is thinking…';
-  thinking.appendChild(status);
-  messagesEl.appendChild(thinking);
-  messagesEl.scrollTop = messagesEl.scrollHeight;
+  const st = { aborter: new AbortController(), running: true, reply: '', status: 'Grok is thinking…', error: null, model };
+  streams[convId] = st;
+  if (convId === activeId) { renderMessages(conv); setComposerRunning(); }
+  updateActiveBadge();
+  renderConvList();
 
   let reply = '';
   try {
-    const res = await fetch(`/api/conversations/${activeId}/message/stream`, {
+    const res = await fetch('/api/conversations/' + convId + '/message/stream', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ message: text, model }),
-      signal: streamAbort.signal,
+      signal: st.aborter.signal,
     });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.error || res.statusText);
-    }
-
+    if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.error || res.statusText); }
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
     let thoughtBuf = '';
-
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
@@ -285,98 +379,207 @@ async function sendMessage(text, { retry = false } = {}) {
         if (!line) continue;
         const evt = parseStreamLine(line);
         if (!evt) continue;
-        if (evt.type === 'meta') {
-          if (evt.model_label) {
-            appendStatusLine(status, `Model: ${evt.model_label}`);
-          }
-        } else if (evt.type === 'thought') {
+        if (evt.type === 'thought') {
           thoughtBuf += evt.data || '';
           if (thoughtBuf.length > 120) thoughtBuf = thoughtBuf.slice(-120);
-          status.textContent = thoughtBuf || 'Grok is thinking…';
+          st.status = thoughtBuf || 'Grok is thinking…';
+          updateTail(convId);
         } else if (evt.type === 'tool' || evt.type === 'tool_use') {
           const name = evt.name || evt.tool || evt.data || 'tool';
-          appendStatusLine(status, `Using ${name}…`);
+          st.status = 'Using ' + name + '…';
+          updateTail(convId);
         } else if (evt.type === 'text') {
           reply += evt.data || '';
-          const div = messagesEl.querySelector('.msg.assistant.streaming') ||
-            (() => {
-              const el = document.createElement('div');
-              el.className = 'msg assistant streaming markdown';
-              messagesEl.insertBefore(el, thinking);
-              return el;
-            })();
-          div.innerHTML = renderMarkdown(reply);
-          wireCodeCopyButtons(div);
-          messagesEl.scrollTop = messagesEl.scrollHeight;
+          st.reply = reply;
+          updateTail(convId);
         } else if (evt.type === 'result') {
-          if (evt.reply) reply = evt.reply;
+          if (evt.reply) { reply = evt.reply; st.reply = reply; }
           if (evt.sessionId) conv.session_id = evt.sessionId;
         } else if (evt.type === 'error') {
-          // The error event carries its text in `message` (the gateway) or
-          // `error` (the grok process) — read both so detection sees the real
-          // error, not the literal "chat failed" fallback.
           throw new Error(evt.message || evt.error || 'chat failed');
         }
       }
     }
-
-    thinking.remove();
-    messagesEl.querySelector('.msg.assistant.streaming')?.remove();
-    if (reply.trim()) {
-      conv.messages.push({ role: 'assistant', content: reply });
-      renderMessages(conv);
-      renderConvList();
-    } else {
-      throw new Error('empty response from Grok');
-    }
+    if (reply.trim()) { conv.messages.push({ role: 'assistant', content: reply, model }); delete streams[convId]; }
+    else { throw new Error('empty response from Grok'); }
   } catch (e) {
     if (e.name === 'AbortError') {
-      thinking.remove();
-      // Keep whatever Grok generated before Stop instead of discarding it.
-      const partial = messagesEl.querySelector('.msg.assistant.streaming');
-      if (reply.trim()) {
-        if (partial) partial.remove();
-        conv.messages.push({ role: 'assistant', content: reply.trim() + '\n\n_(stopped)_' });
-        renderMessages(conv);
-        renderConvList();
-      } else if (partial) {
-        partial.remove();
-      }
-      return;
-    }
-    thinking.classList.add('error');
-    thinking.innerHTML = '';
-    const msg = e.message || '';
-    // Grok isn't authenticated → show a clear "sign in" prompt instead of a
-    // cryptic error. Covers BOTH cases: an expired token (upstream 401) and a
-    // logged-out state (no token → grok can't fetch models → "unknown model id"
-    // / "Couldn't set model").
-    const needsLogin = /Unauthorized \(401\)|expired credentials|no auth context|grok login|PermissionDenied|not logged in|unknown model id|Couldn't set model|Run 'grok models'/i.test(msg);
-    const errText = document.createElement('div');
-    if (needsLogin) {
-      errText.className = 'auth-expired';
-      errText.innerHTML = '🔑 <b>Connect to Grok to continue.</b><br>' +
-        'In a terminal, make sure Grok Build is installed, then run ' +
-        '<code>grok login</code> to sign in — and Retry.';
+      if (reply.trim()) conv.messages.push({ role: 'assistant', content: reply.trim() + '\n\n_(stopped)_', model });
+      delete streams[convId];
     } else {
-      errText.textContent = `Error: ${msg}`;
+      const msg = e.message || '';
+      const needsLogin = /Unauthorized \(401\)|expired credentials|no auth context|grok login|PermissionDenied|not logged in|unknown model id|Couldn't set model|Run 'grok models'/i.test(msg);
+      st.error = { msg, needsLogin, text };
     }
-    thinking.appendChild(errText);
-    const retryBtn = document.createElement('button');
-    retryBtn.type = 'button';
-    retryBtn.className = 'retry-btn';
-    retryBtn.textContent = 'Retry';
-    retryBtn.onclick = () => {
-      thinking.remove();
-      sendMessage(text, { retry: true });
-    };
-    thinking.appendChild(retryBtn);
   } finally {
-    streamAbort = null;
-    setStreamingUi(false);
-    input.focus();
+    if (streams[convId]) streams[convId].running = false;
+    updateActiveBadge();
+    renderConvList();
+    if (convId === activeId) { renderMessages(currentConv()); setComposerRunning(); input.focus(); }
+    drainQueue(convId);
   }
 }
+
+// ---- Xplorer: message queue + per-chat info panel -------------------------
+function enqueueMessage(convId, text) {
+  const t = (text || '').trim();
+  if (!t) return;
+  (queues[convId] = queues[convId] || []).push({ id: ++queueSeq, text: t });
+  if (convId === activeId) renderQueue();
+  renderConvList();
+}
+
+function drainQueue(convId) {
+  if (isRunning(convId)) return;
+  const q = queues[convId];
+  if (!q || !q.length) return;
+  const next = q.shift();
+  if (convId === activeId) renderQueue();
+  renderConvList();
+  if (next) sendMessage(next.text, { convId });
+}
+
+function cancelQueued(id) {
+  const q = queues[activeId];
+  if (!q) return;
+  queues[activeId] = q.filter((m) => m.id !== id);
+  renderQueue();
+  renderConvList();
+}
+
+function interruptWith(id) {
+  const q = queues[activeId];
+  if (!q) return;
+  const item = q.find((m) => m.id === id);
+  if (!item) return;
+  queues[activeId] = q.filter((m) => m.id !== id);
+  queues[activeId].unshift(item);
+  renderQueue();
+  if (isRunning(activeId)) stopChat(activeId);  // finally -> drainQueue sends it next
+  else drainQueue(activeId);
+}
+
+function renderQueue() {
+  const el = document.getElementById('msg-queue');
+  if (!el) return;
+  el.innerHTML = '';
+  const q = queues[activeId] || [];
+  if (!q.length) { el.hidden = true; return; }
+  el.hidden = false;
+  for (const item of q) {
+    const chip = document.createElement('div');
+    chip.className = 'queue-chip';
+    chip.title = item.text;
+    const txt = document.createElement('span');
+    txt.className = 'queue-text';
+    txt.textContent = item.text;
+    const send = document.createElement('button');
+    send.type = 'button';
+    send.className = 'queue-send';
+    send.title = 'Send now (interrupt current)';
+    send.textContent = '↩';
+    send.addEventListener('click', () => interruptWith(item.id));
+    const del = document.createElement('button');
+    del.type = 'button';
+    del.className = 'queue-del';
+    del.title = 'Remove from queue';
+    del.textContent = '×';
+    del.addEventListener('click', () => cancelQueued(item.id));
+    chip.append(txt, send, del);
+    el.appendChild(chip);
+  }
+}
+
+function appendMsgMeta(div, m) {
+  const meta = document.createElement('div');
+  meta.className = 'msg-meta';
+  if (m.model) {
+    const badge = document.createElement('span');
+    badge.className = 'msg-model';
+    badge.textContent = modelLabel(m.model, models);
+    meta.appendChild(badge);
+  }
+  const copy = document.createElement('button');
+  copy.type = 'button';
+  copy.className = 'msg-copy';
+  copy.textContent = 'Copy';
+  copy.title = 'Copy response';
+  copy.addEventListener('click', () => {
+    navigator.clipboard?.writeText(m.content || '');
+    copy.textContent = 'Copied ✓';
+    setTimeout(() => { copy.textContent = 'Copy'; }, 1200);
+  });
+  meta.appendChild(copy);
+  div.appendChild(meta);
+}
+
+function renderChatInfo() {
+  const el = document.getElementById('chat-info');
+  if (!el) return;
+  el.innerHTML = '';
+  const conv = conversations.find((c) => c.id === activeId);
+  if (!conv) {
+    const e = document.createElement('div');
+    e.className = 'info-empty';
+    e.textContent = 'No active chat.';
+    el.appendChild(e);
+    return;
+  }
+  const sid = conv.session_id || '';
+  const rows = [
+    ['Model', modelLabel(getConvModel(conv.id), models)],
+    ['Messages', String((conv.messages || []).length)],
+    ['Conversation ID', conv.id],
+    ['Grok session', sid || '— (send a message first)'],
+  ];
+  const dl = document.createElement('dl');
+  dl.className = 'info-grid';
+  for (const [k, v] of rows) {
+    const dt = document.createElement('dt'); dt.textContent = k;
+    const dd = document.createElement('dd'); dd.textContent = v;
+    dl.append(dt, dd);
+  }
+  el.appendChild(dl);
+  if (sid) {
+    const cmd = `grok -r ${sid}`;
+    const actions = document.createElement('div');
+    actions.className = 'info-actions';
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'info-copy';
+    btn.textContent = 'Copy CLI resume';
+    btn.addEventListener('click', () => {
+      navigator.clipboard?.writeText(cmd);
+      btn.textContent = 'Copied ✓';
+      setTimeout(() => { btn.textContent = 'Copy CLI resume'; }, 1500);
+    });
+    const code = document.createElement('code');
+    code.className = 'info-cmd';
+    code.textContent = cmd;
+    actions.append(btn, code);
+    el.appendChild(actions);
+  }
+  const settingsLink = document.createElement('a');
+  settingsLink.className = 'info-settings-link';
+  settingsLink.href = '/settings';
+  settingsLink.target = '_blank';
+  settingsLink.rel = 'noopener';
+  settingsLink.textContent = 'Open Grok settings (models, max-turns, toolbar) →';
+  el.appendChild(settingsLink);
+}
+
+(function wireChatInfo() {
+  const btn = document.getElementById('chat-info-btn');
+  const panel = document.getElementById('chat-info');
+  if (!btn || !panel) return;
+  btn.addEventListener('click', () => {
+    const show = panel.hidden;
+    if (show) renderChatInfo();
+    panel.hidden = !show;
+    btn.setAttribute('aria-expanded', show ? 'true' : 'false');
+  });
+})();
+// ---------------------------------------------------------------------------
 
 $('#composer').onsubmit = (e) => {
   e.preventDefault();
@@ -386,7 +589,7 @@ $('#composer').onsubmit = (e) => {
 $('#new-chat').onclick = newChat;
 
 stopBtn?.addEventListener('click', () => {
-  streamAbort?.abort();
+  if (activeId) stopChat(activeId);
 });
 
 input.addEventListener('keydown', (e) => {
@@ -481,7 +684,7 @@ initModels().then(() => refresh().then(() => {
 // On reopen, re-render the active conversation from its saved messages (errors
 // aren't persisted, so they clear) — keeping the last conversation but clean.
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState !== 'visible' || streamAbort) return;
+  if (document.visibilityState !== 'visible' || isRunning(activeId)) return;
   if (!activeId) return;
   const conv = conversations.find((c) => c.id === activeId);
   if (conv) renderMessages(conv);

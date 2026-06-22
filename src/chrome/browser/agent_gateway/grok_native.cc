@@ -384,8 +384,13 @@ constexpr char kChatRules[] =
     "control the browser through MCP tools.";
 
 constexpr char kBrowserChatRules[] =
-    "You are Grok, the native AI companion built into Xplorer (Chromium). "
-    "You MUST control the real browser through MCP tools — never give manual "
+    "You are Grok, the native AI companion built into Xplorer, an AI-native web "
+    "browser. Your browser-control tools (tabs, navigation, bookmarks, history, "
+    "tab groups, click/type, screenshots, theme) are ALREADY loaded and ready in "
+    "this session — call them directly and immediately. Do NOT announce that you "
+    "are checking what tools are available, and do NOT run a tool-discovery/list "
+    "step first; just act. "
+    "You MUST control the real browser through these tools — never give manual "
     "instructions the user must follow themselves. "
     "To organize/group tabs: FIRST call xplorer_tabs to list every open tab, "
     "decide sensible groups yourself from each tab's real content/topic, then "
@@ -472,6 +477,27 @@ void SetSearchHomeMode(const std::string& mode) {
   SaveSettings(settings);
 }
 
+// Agent turn budget for a single chat/search request. 25 was too low for
+// multi-step browser tasks (open many tabs, then group) which ran out mid-task;
+// default higher and let the user tune it in Settings.
+constexpr int kDefaultMaxTurns = 50;
+
+int GetConfiguredMaxTurns() {
+  base::DictValue settings = LoadSettings();
+  if (const std::optional<int> n = settings.FindInt("max_turns")) {
+    if (*n >= 1 && *n <= 200)
+      return *n;
+  }
+  return kDefaultMaxTurns;
+}
+
+void SetConfiguredMaxTurns(int turns) {
+  base::DictValue settings = LoadSettings();
+  const int clamped = turns < 1 ? 1 : (turns > 200 ? 200 : turns);
+  settings.Set("max_turns", clamped);
+  SaveSettings(settings);
+}
+
 std::string ResolveModel(const std::string* request_model) {
   if (request_model && !request_model->empty())
     return *request_model;
@@ -545,6 +571,7 @@ void EnrichSettingsResponse(base::DictValue* d, int gateway_port) {
          "http://127.0.0.1:" + base::NumberToString(gateway_port));
   d->Set("search_model", GetConfiguredSearchModel());
   d->Set("search_model_label", ModelDisplayName(GetConfiguredSearchModel()));
+  d->Set("max_turns", GetConfiguredMaxTurns());
   d->Set("grok_bin", ResolveGrokBinary().AsUTF8Unsafe());
   std::string gw_json;
   if (base::ReadFileToString(xplorer_paths::Resolve("gateway.json"),
@@ -1255,6 +1282,47 @@ std::string FormatOrganizeTabsReply(const base::DictValue& result) {
           server, io_task_runner, connection_id, std::move(conv_id)));
 }
 
+// Registry of in-flight grok runs keyed by conversation id, so a chat's agent
+// can be stopped on demand (kill switch) even after its UI stream is closed.
+// Touched from many PumpGrokStream sequences AND the request thread → locked.
+base::Lock& ActiveRunsLock() {
+  static base::NoDestructor<base::Lock> lock;
+  return *lock;
+}
+std::map<std::string, base::ProcessId>& ActiveRuns() {
+  static base::NoDestructor<std::map<std::string, base::ProcessId>> runs;
+  return *runs;
+}
+void RegisterActiveRun(const std::string& conv_id, base::ProcessId pid) {
+  if (conv_id.empty())
+    return;
+  base::AutoLock l(ActiveRunsLock());
+  ActiveRuns()[conv_id] = pid;
+}
+void UnregisterActiveRun(const std::string& conv_id) {
+  if (conv_id.empty())
+    return;
+  base::AutoLock l(ActiveRunsLock());
+  ActiveRuns().erase(conv_id);
+}
+// Terminate the grok process for |conv_id| if one is running. Returns whether a
+// run was found. Cross-platform via base::Process::Open(pid).Terminate().
+bool StopActiveRun(const std::string& conv_id) {
+  base::ProcessId pid = base::kNullProcessId;
+  {
+    base::AutoLock l(ActiveRunsLock());
+    auto it = ActiveRuns().find(conv_id);
+    if (it == ActiveRuns().end())
+      return false;
+    pid = it->second;
+    ActiveRuns().erase(it);
+  }
+  base::Process p = base::Process::Open(pid);
+  if (p.IsValid())
+    p.Terminate(/*exit_code=*/0, /*wait=*/false);
+  return true;
+}
+
 void PumpGrokStream(net::HttpServer* server,
                     scoped_refptr<base::SingleThreadTaskRunner> io_task_runner,
                     int connection_id,
@@ -1369,6 +1437,9 @@ void PumpGrokStream(net::HttpServer* server,
     return;  // read_handle / read_file RAII-close the read end here.
   }
 
+  // Track this run so the kill switch / per-chat Stop can terminate it.
+  RegisterActiveRun(conv_id, process.Pid());
+
   RecordGatewayLog("info", log_source, app_id, "start",
                    log_source == "build" ? "app build started"
                                          : "grok run started",
@@ -1433,6 +1504,7 @@ void PumpGrokStream(net::HttpServer* server,
 
   int exit_code = -1;
   process.WaitForExit(&exit_code);
+  UnregisterActiveRun(conv_id);
 
   // Recover the otherwise-discarded stderr so failures show a real reason.
   std::string stderr_tail;
@@ -1787,7 +1859,7 @@ base::CommandLine BuildGrokChatCommand(const std::string& message,
   cmd.AppendArg("-m");
   cmd.AppendArg(model);
   cmd.AppendArg("--max-turns");
-  cmd.AppendArg("25");
+  cmd.AppendArg(base::NumberToString(GetConfiguredMaxTurns()));
   if (!rules.empty()) {
     cmd.AppendArg("--rules");
     cmd.AppendArg(rules);
@@ -1861,7 +1933,19 @@ void RunGrokChatStream(
     std::string message,
     std::string session_id,
     std::string model) {
-  const char* rules = ChatRulesForMessage(message);
+  // Tell the model who it is. Otherwise it digs through ~/.grok session files to
+  // answer "what model are you", or misreports itself and name-drops Cursor
+  // (Composer is Cursor's model, agent type 'cursor') — confusing in a browser.
+  std::string rules =
+      std::string(ChatRulesForMessage(message)) +
+      "\n\nIDENTITY: You are Grok, the AI assistant built into Xplorer — an "
+      "AI-native web browser (NOT Cursor or any code editor). You are running as "
+      "the \"" +
+      ModelDisplayName(model) + "\" model (" + model +
+      "). If the user asks which model or assistant you are, answer \"" +
+      ModelDisplayName(model) +
+      "\" directly and concisely — do not read files or session metadata to find "
+      "out, and never describe yourself as being inside Cursor or an IDE.";
   base::ThreadPool::CreateSequencedTaskRunner(
       {base::MayBlock(), base::TaskPriority::USER_VISIBLE})
       ->PostTask(FROM_HERE,
@@ -2314,6 +2398,7 @@ bool GrokNative::TryHandleRequest(
     const std::string* home = body->FindString("search_home");
     const base::DictValue* toolbar = body->FindDict("toolbar");
     std::optional<bool> welcome = body->FindBool("welcome_completed");
+    std::optional<int> max_turns = body->FindInt("max_turns");
     bool updated = false;
     if (model && !model->empty()) {
       SetConfiguredModel(*model);
@@ -2332,6 +2417,10 @@ bool GrokNative::TryHandleRequest(
         return true;
       }
       SetSearchHomeMode(*home);
+      updated = true;
+    }
+    if (max_turns) {
+      SetConfiguredMaxTurns(*max_turns);
       updated = true;
     }
     if (welcome.has_value() && *welcome) {
@@ -2750,6 +2839,21 @@ bool GrokNative::TryHandleRequest(
     convs->Append(conv.Clone());
     SaveSessions(data);
     SendJson(server, connection_id, net::HTTP_OK, std::move(conv));
+    return true;
+  }
+
+  // Kill switch: stop the running grok agent for a chat.
+  // POST /api/conversations/{id}/stop
+  if (info.method == "POST" && base::StartsWith(path, "/api/conversations/") &&
+      base::EndsWith(path, "/stop")) {
+    const std::string prefix = "/api/conversations/";
+    std::string id = path.substr(prefix.size());
+    id = id.substr(0, id.size() - std::string("/stop").size());
+    const bool stopped = StopActiveRun(id);
+    base::DictValue d;
+    d.Set("ok", true);
+    d.Set("stopped", stopped);
+    SendJson(server, connection_id, net::HTTP_OK, std::move(d));
     return true;
   }
 

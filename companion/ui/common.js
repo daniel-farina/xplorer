@@ -18,9 +18,9 @@ const SEARCH_HOME_WIKI = 'wiki';
 
 function getStoredModel() {
   try {
-    return localStorage.getItem(MODEL_STORAGE_KEY) || CHAT_DEFAULT_MODEL;
+    return localStorage.getItem(MODEL_STORAGE_KEY) || DEFAULT_MODEL;
   } catch {
-    return CHAT_DEFAULT_MODEL;
+    return DEFAULT_MODEL;
   }
 }
 

@@ -3,6 +3,7 @@
 
 #include "chrome/browser/agent_gateway/browser_api.h"
 
+#include <algorithm>
 #include <map>
 #include <optional>
 #include <string>
@@ -289,6 +290,26 @@ tab_groups::TabGroupColorId ColorForCategory(const std::string& category) {
   return tab_groups::TabGroupColorId::kOrange;
 }
 
+namespace {
+// TabStripModel::AddToNewGroup() CHECK-aborts the entire browser process on
+// duplicate or out-of-range indices. A model driving the browser can easily pass
+// repeated, reordered, or stale tab ids (especially after opening many tabs), so
+// always dedupe, drop anything no longer in the strip, and sort ascending before
+// grouping — a bad tool argument must degrade gracefully, never crash.
+std::vector<int> SanitizeTabIndices(TabStripModel* model,
+                                    std::vector<int> indices) {
+  std::vector<int> clean;
+  for (int i : indices) {
+    if (model->ContainsIndex(i) &&
+        std::find(clean.begin(), clean.end(), i) == clean.end()) {
+      clean.push_back(i);
+    }
+  }
+  std::sort(clean.begin(), clean.end());
+  return clean;
+}
+}  // namespace
+
 void BrowserApi::OrganizeTabs(DictCallback callback) {
   base::DictValue result;
   base::ListValue groups_out;
@@ -309,6 +330,7 @@ void BrowserApi::OrganizeTabs(DictCallback callback) {
       buckets[category].push_back(i);
     }
     for (auto& [category, indices] : buckets) {
+      indices = SanitizeTabIndices(model, std::move(indices));
       if (indices.empty())
         continue;
       tab_groups::TabGroupId group = model->AddToNewGroup(indices);
@@ -365,6 +387,12 @@ void BrowserApi::GroupTabs(const std::vector<std::string>& tab_ids,
       return;
     }
     indices.push_back(index);
+  }
+  indices = SanitizeTabIndices(model, std::move(indices));
+  if (indices.empty()) {
+    result.Set("error", "no valid tabs to group");
+    std::move(callback).Run(std::move(result));
+    return;
   }
   tab_groups::TabGroupId group = model->AddToNewGroup(indices);
   if (!title.empty()) {
