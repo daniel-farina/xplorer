@@ -31,6 +31,15 @@ echo "==> [$ARCH] Applying overlay"
 echo "==> [$ARCH] Building"
 "$XPLORER/build.sh" "$SRC" "$ARCH"
 
+# The build does not refresh the bundled companion UI (it persists across builds),
+# so copy the current companion/ui into the bundle BEFORE signing — otherwise the
+# release ships stale sidebar UI.
+echo "==> [$ARCH] Refreshing bundled companion UI"
+UI_DST="$APP/Contents/Resources/companion/ui"
+mkdir -p "$(dirname "$UI_DST")"
+rm -rf "$UI_DST"
+cp -R "$XPLORER/companion/ui" "$UI_DST"
+
 echo "==> [$ARCH] Signing app"
 if [ -n "$SIGN_ONLY" ]; then
   "$XPLORER/scripts/sign_and_notarize.sh" "$APP" xplorer-notary --sign-only
