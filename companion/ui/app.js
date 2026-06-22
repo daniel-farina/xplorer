@@ -233,9 +233,11 @@ async function sendMessage(text, { retry = false } = {}) {
   if (!conv) return;
   if (!(await ensureGrokReady())) return;  // Grok Build required to build/modify
 
-  const model = messageNeedsBrowserTools(text)
-    ? modelForSearchMode('web', activeModel, models)
-    : activeModel;
+  // Use the model the user picked — EVERY model can call the browser MCP tools
+  // (they come from the global `xplorer` MCP server, not a specific model/agent).
+  // No auto-upgrade: that silently turned Composer chats into grok-build.
+  const model = activeModel;
+  if (activeId) persistConvModel(activeId, model);  // record the chat's real model
 
   if (!retry) {
     conv.messages = conv.messages || [];
