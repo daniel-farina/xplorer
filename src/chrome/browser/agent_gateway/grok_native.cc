@@ -1282,6 +1282,47 @@ std::string FormatOrganizeTabsReply(const base::DictValue& result) {
           server, io_task_runner, connection_id, std::move(conv_id)));
 }
 
+// Registry of in-flight grok runs keyed by conversation id, so a chat's agent
+// can be stopped on demand (kill switch) even after its UI stream is closed.
+// Touched from many PumpGrokStream sequences AND the request thread → locked.
+base::Lock& ActiveRunsLock() {
+  static base::NoDestructor<base::Lock> lock;
+  return *lock;
+}
+std::map<std::string, base::ProcessId>& ActiveRuns() {
+  static base::NoDestructor<std::map<std::string, base::ProcessId>> runs;
+  return *runs;
+}
+void RegisterActiveRun(const std::string& conv_id, base::ProcessId pid) {
+  if (conv_id.empty())
+    return;
+  base::AutoLock l(ActiveRunsLock());
+  ActiveRuns()[conv_id] = pid;
+}
+void UnregisterActiveRun(const std::string& conv_id) {
+  if (conv_id.empty())
+    return;
+  base::AutoLock l(ActiveRunsLock());
+  ActiveRuns().erase(conv_id);
+}
+// Terminate the grok process for |conv_id| if one is running. Returns whether a
+// run was found. Cross-platform via base::Process::Open(pid).Terminate().
+bool StopActiveRun(const std::string& conv_id) {
+  base::ProcessId pid = base::kNullProcessId;
+  {
+    base::AutoLock l(ActiveRunsLock());
+    auto it = ActiveRuns().find(conv_id);
+    if (it == ActiveRuns().end())
+      return false;
+    pid = it->second;
+    ActiveRuns().erase(it);
+  }
+  base::Process p = base::Process::Open(pid);
+  if (p.IsValid())
+    p.Terminate(/*exit_code=*/0, /*wait=*/false);
+  return true;
+}
+
 void PumpGrokStream(net::HttpServer* server,
                     scoped_refptr<base::SingleThreadTaskRunner> io_task_runner,
                     int connection_id,
@@ -1396,6 +1437,9 @@ void PumpGrokStream(net::HttpServer* server,
     return;  // read_handle / read_file RAII-close the read end here.
   }
 
+  // Track this run so the kill switch / per-chat Stop can terminate it.
+  RegisterActiveRun(conv_id, process.Pid());
+
   RecordGatewayLog("info", log_source, app_id, "start",
                    log_source == "build" ? "app build started"
                                          : "grok run started",
@@ -1460,6 +1504,7 @@ void PumpGrokStream(net::HttpServer* server,
 
   int exit_code = -1;
   process.WaitForExit(&exit_code);
+  UnregisterActiveRun(conv_id);
 
   // Recover the otherwise-discarded stderr so failures show a real reason.
   std::string stderr_tail;
@@ -2794,6 +2839,21 @@ bool GrokNative::TryHandleRequest(
     convs->Append(conv.Clone());
     SaveSessions(data);
     SendJson(server, connection_id, net::HTTP_OK, std::move(conv));
+    return true;
+  }
+
+  // Kill switch: stop the running grok agent for a chat.
+  // POST /api/conversations/{id}/stop
+  if (info.method == "POST" && base::StartsWith(path, "/api/conversations/") &&
+      base::EndsWith(path, "/stop")) {
+    const std::string prefix = "/api/conversations/";
+    std::string id = path.substr(prefix.size());
+    id = id.substr(0, id.size() - std::string("/stop").size());
+    const bool stopped = StopActiveRun(id);
+    base::DictValue d;
+    d.Set("ok", true);
+    d.Set("stopped", stopped);
+    SendJson(server, connection_id, net::HTTP_OK, std::move(d));
     return true;
   }
 
