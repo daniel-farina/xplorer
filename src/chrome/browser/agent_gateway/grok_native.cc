@@ -1861,7 +1861,19 @@ void RunGrokChatStream(
     std::string message,
     std::string session_id,
     std::string model) {
-  const char* rules = ChatRulesForMessage(message);
+  // Tell the model who it is. Otherwise it digs through ~/.grok session files to
+  // answer "what model are you", or misreports itself and name-drops Cursor
+  // (Composer is Cursor's model, agent type 'cursor') — confusing in a browser.
+  std::string rules =
+      std::string(ChatRulesForMessage(message)) +
+      "\n\nIDENTITY: You are Grok, the AI assistant built into Xplorer — an "
+      "AI-native web browser (NOT Cursor or any code editor). You are running as "
+      "the \"" +
+      ModelDisplayName(model) + "\" model (" + model +
+      "). If the user asks which model or assistant you are, answer \"" +
+      ModelDisplayName(model) +
+      "\" directly and concisely — do not read files or session metadata to find "
+      "out, and never describe yourself as being inside Cursor or an IDE.";
   base::ThreadPool::CreateSequencedTaskRunner(
       {base::MayBlock(), base::TaskPriority::USER_VISIBLE})
       ->PostTask(FROM_HERE,
