@@ -93,7 +93,13 @@ function renderConvList() {
     const li = document.createElement('li');
     li.className = c.id === activeId ? 'active' : '';
     li.title = 'Double-click to rename';
-    li.onclick = () => selectConv(c.id);
+    li.onclick = () => {
+      if (c.kind === 'app' && c.app_id) {
+        window.location.href = '/app?id=' + encodeURIComponent(c.app_id);
+      } else {
+        selectConv(c.id);
+      }
+    };
 
     const title = document.createElement('span');
     title.className = 'conv-title';
