@@ -570,3 +570,18 @@ html[data-theme="dark"] .markdown .hl-num { color: #fbbf24; }
   opacity: 0.8; text-decoration: none; border-bottom: 1px dotted currentColor;
 }
 .chat-info .info-settings-link:hover { opacity: 1; }
+
+/* ---- Xplorer: concurrent-chat indicators ---- */
+.chat-bar .active-count {
+  min-width: 20px; height: 20px; padding: 0 6px; border: none; border-radius: 10px;
+  background: #2ecc71; color: #06281a; font-size: 0.72em; font-weight: 700; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center; flex: none;
+}
+.chat-bar .active-count:hover { filter: brightness(1.08); }
+#conv-list .conv-running {
+  border: none; background: transparent; color: #2ecc71; cursor: pointer; flex: none;
+  font-size: 0.7em; line-height: 1; padding: 0 4px; animation: xpl-pulse 1.4s ease-in-out infinite;
+}
+#conv-list .conv-running:hover { color: #e74c3c; animation: none; }  /* hover = will stop */
+#conv-list .conv-queued { opacity: 0.55; font-size: 0.95em; padding: 0 4px; flex: none; }
+@keyframes xpl-pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
