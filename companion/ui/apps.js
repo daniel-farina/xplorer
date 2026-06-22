@@ -376,9 +376,18 @@ async function refresh() {
   }
 }
 
-function openAppBuild(appId, prompt) {
-  sessionStorage.setItem('xplorer_app_build', JSON.stringify({ id: appId, prompt }));
-  window.location.href = `/app?id=${encodeURIComponent(appId)}&autobuild=1`;
+function openAppBuild(appId, convId, prompt) {
+  // Hand the conv id + prompt to the persistent companion side panel (same
+  // gateway origin -> shared localStorage). Write BEFORE opening the panel.
+  try {
+    localStorage.setItem('xplorer_pending_app', JSON.stringify({
+      conv: convId, prompt, ts: Date.now(),
+    }));
+  } catch (e) { /* ignore */ }
+  // Open (idempotent) the native side panel; it drives the build via build/stream.
+  fetch('/api/sidepanel/open', { method: 'POST' }).catch(() => {});
+  // This tab shows the canvas-only live preview (in-page chat hidden).
+  window.location.href = `/app?id=${encodeURIComponent(appId)}&nochat=1`;
 }
 
 $('#create-prompt')?.addEventListener('keydown', (e) => {
@@ -405,8 +414,8 @@ createBtn.onclick = async () => {
     $('#create-prompt').value = '';
     $('#create-name').value = '';
     if (data.app?.id) {
-      // Open the app view: canvas (live preview) + chat as a right sidebar.
-      openAppBuild(data.app.id, prompt);
+      // Side panel drives the build; this tab shows the canvas only.
+      openAppBuild(data.app.id, data.app.conversation_id, prompt);
       return;
     }
     goToView('/apps');

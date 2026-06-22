@@ -2489,6 +2489,32 @@ bool GrokNative::TryHandleRequest(
     return true;
   }
 
+  // POST /api/sidepanel/open -> ensure the native Grok side panel is OPEN on the
+  // active window (idempotent; never closes). Triggered by the /apps create flow.
+  if (info.method == "POST" &&
+      (path == "/api/sidepanel/open" || path == "/sidepanel/open")) {
+    content::GetUIThreadTaskRunner({})->PostTask(
+        FROM_HERE, base::BindOnce([]() {
+          BrowserWindowInterface* target = nullptr;
+          for (BrowserWindowInterface* browser :
+               GetAllBrowserWindowInterfaces()) {
+            if (!target)
+              target = browser;
+            if (browser->GetTabStripModel() &&
+                browser->GetTabStripModel()->GetActiveWebContents()) {
+              target = browser;
+              break;
+            }
+          }
+          if (target)
+            grok_companion::OpenGrokSidePanel(target);
+        }));
+    base::DictValue out;
+    out.Set("ok", true);
+    SendJson(server, connection_id, net::HTTP_OK, std::move(out));
+    return true;
+  }
+
   // POST /toolbar  body {"pills":[...]} or {"toolbar":{"pills":[...]}} -> replace.
   if (info.method == "POST" && (path == "/toolbar" || path == "/api/toolbar")) {
     auto body = base::JSONReader::ReadDict(info.data, base::JSON_PARSE_RFC);

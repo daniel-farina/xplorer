@@ -93,13 +93,7 @@ function renderConvList() {
     const li = document.createElement('li');
     li.className = c.id === activeId ? 'active' : '';
     li.title = 'Double-click to rename';
-    li.onclick = () => {
-      if (c.kind === 'app' && c.app_id) {
-        window.location.href = '/app?id=' + encodeURIComponent(c.app_id);
-      } else {
-        selectConv(c.id);
-      }
-    };
+    li.onclick = () => selectConv(c.id);
 
     const title = document.createElement('span');
     title.className = 'conv-title';
@@ -692,16 +686,10 @@ initModels().then(() => refresh().then(() => {
   if (convParam && conversations.some((c) => c.id === convParam)) {
     selectConv(convParam);
     input.focus();
-    try {
-      const pend = JSON.parse(sessionStorage.getItem('xplorer_pending_app') || 'null');
-      if (pend && pend.conv === convParam && pend.prompt) {
-        sessionStorage.removeItem('xplorer_pending_app');
-        sendMessage(pend.prompt, { convId: convParam });
-      }
-    } catch (e) { /* ignore */ }
   } else if (!chatConversations().length) {
     newChat();
   }
+  consumePendingApp();
 }));
 
 // The side panel keeps its WebContents alive across close/open, so a stale
@@ -713,4 +701,40 @@ document.addEventListener('visibilitychange', () => {
   if (!activeId) return;
   const conv = conversations.find((c) => c.id === activeId);
   if (conv) renderMessages(conv);
+});
+
+// ---- App handoff: auto-select + auto-send a freshly created app conversation ----
+// /apps (same gateway origin, separate persistent WebContents) writes
+//   localStorage['xplorer_pending_app'] = { conv, prompt, ts }
+// The side panel WebContents persists and loads '/' only once, so we pick it up
+// via localStorage + 'storage'/visibilitychange, not a per-open URL param.
+const PENDING_APP_KEY = 'xplorer_pending_app';
+let consumingPendingApp = false;
+async function consumePendingApp() {
+  if (consumingPendingApp) return;
+  let pend;
+  try { pend = JSON.parse(localStorage.getItem(PENDING_APP_KEY) || 'null'); }
+  catch { pend = null; }
+  if (!pend || !pend.conv || !pend.prompt) return;
+  consumingPendingApp = true;
+  try {
+    if (!conversations.some((c) => c.id === pend.conv)) {
+      await refresh();
+    }
+    if (!conversations.some((c) => c.id === pend.conv)) return;
+    localStorage.removeItem(PENDING_APP_KEY);  // claim BEFORE sending -> dedupe
+    selectConv(pend.conv);
+    input.focus();
+    sendMessage(pend.prompt, { convId: pend.conv });  // kind=app -> build/stream
+  } finally {
+    consumingPendingApp = false;
+  }
+}
+window.addEventListener('storage', (e) => {
+  if (e.key && e.key !== PENDING_APP_KEY) return;
+  if (e.newValue == null) return;
+  consumePendingApp();
+});
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') consumePendingApp();
 });

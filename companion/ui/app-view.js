@@ -1,6 +1,7 @@
 const $ = (s) => document.querySelector(s);
 const params = new URLSearchParams(location.search);
 const appId = params.get('id');
+const CANVAS_ONLY = params.get('nochat') === '1' || params.get('panel') === 'side';
 
 const CHAT_OPEN_KEY = 'grok_app_chat_open';
 
@@ -82,6 +83,13 @@ function setChatOpen(open) {
 
 function initChatToggle() {
   const toggle = $('#chat-toggle');
+  if (CANVAS_ONLY) {
+    // Build is driven from the native side panel; hide the in-page chat entirely.
+    document.body.classList.add('canvas-only');
+    setChatOpen(false);
+    if (toggle) toggle.remove();
+    return;
+  }
   if (!toggle) return;
   let open = true;
   try {
@@ -546,9 +554,15 @@ loadApp().catch((e) => {
   location.href = '/apps';
 });
 
+let __lastStatus = null;
 setInterval(async () => {
   if (!appId || busy) return;
   try {
     await refreshApp();
+    const status = app?.status;
+    if (__lastStatus === 'building' && status !== 'building') {
+      await loadPreview();  // side-panel-driven build finished -> reload canvas
+    }
+    __lastStatus = status;
   } catch { /* ignore */ }
 }, 3000);
