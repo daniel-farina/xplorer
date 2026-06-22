@@ -18,7 +18,7 @@ const convFilterInput = document.getElementById('conv-filter');
 const stopBtn = document.getElementById('stop');
 
 function chatConversations() {
-  return conversations.filter((c) => c.kind !== 'app');
+  return conversations;  // include app-build conversations in the sidebar
 }
 
 async function api(path, opts = {}) {
@@ -98,7 +98,15 @@ function renderConvList() {
     const title = document.createElement('span');
     title.className = 'conv-title';
     title.textContent = c.title || 'Chat';
+    if (c.kind === 'app') li.classList.add('conv-app');
     li.appendChild(title);
+    if (c.kind === 'app') {
+      const tag = document.createElement('span');
+      tag.className = 'conv-app-tag';
+      tag.textContent = '\u{1F527}';
+      tag.title = 'App build';
+      li.appendChild(tag);
+    }
 
     if (isRunning(c.id)) {
       const dot = document.createElement('button');
@@ -357,7 +365,11 @@ async function sendMessage(text, { retry = false, convId = activeId } = {}) {
 
   let reply = '';
   try {
-    const res = await fetch('/api/conversations/' + convId + '/message/stream', {
+    const appBuild = conv.kind === 'app' && conv.app_id;
+    const url = appBuild
+      ? '/api/apps/' + conv.app_id + '/build/stream'
+      : '/api/conversations/' + convId + '/message/stream';
+    const res = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ message: text, model }),
@@ -674,6 +686,13 @@ initModels().then(() => refresh().then(() => {
   if (convParam && conversations.some((c) => c.id === convParam)) {
     selectConv(convParam);
     input.focus();
+    try {
+      const pend = JSON.parse(sessionStorage.getItem('xplorer_pending_app') || 'null');
+      if (pend && pend.conv === convParam && pend.prompt) {
+        sessionStorage.removeItem('xplorer_pending_app');
+        sendMessage(pend.prompt, { convId: convParam });
+      }
+    } catch (e) { /* ignore */ }
   } else if (!chatConversations().length) {
     newChat();
   }

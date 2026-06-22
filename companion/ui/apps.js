@@ -405,6 +405,22 @@ createBtn.onclick = async () => {
     $('#create-prompt').value = '';
     $('#create-name').value = '';
     if (data.app?.id) {
+      // Unified: build in the sidebar, not a separate app view. Open the app's
+      // sidebar conversation with the prompt queued.
+      let convId = data.app.conversation_id;
+      if (!convId) {
+        try {
+          const cr = await fetch('/api/conversations');
+          const cd = await cr.json();
+          const m = (cd.conversations || []).find((c) => c.app_id === data.app.id);
+          convId = m && m.id;
+        } catch (e) { /* fall through */ }
+      }
+      if (convId) {
+        sessionStorage.setItem('xplorer_pending_app', JSON.stringify({ conv: convId, prompt }));
+        window.location.href = '/?conv=' + encodeURIComponent(convId);
+        return;
+      }
       openAppBuild(data.app.id, prompt);
       return;
     }
