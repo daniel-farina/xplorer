@@ -525,3 +525,41 @@ html[data-theme="dark"] .markdown .hl-num { color: #fbbf24; }
 }
 .messages .markdown thead th { background: rgba(127,127,127,0.12); font-weight: 600; }
 .messages .markdown tbody tr:nth-child(even) { background: rgba(127,127,127,0.05); }
+
+/* ---- Xplorer: per-chat info panel (gear) ---- */
+.chat-info {
+  border-bottom: 1px solid var(--border, #d8d8d8);
+  padding: 10px 14px; font-size: 0.85em; background: rgba(127,127,127,0.06);
+}
+.chat-info .info-empty { opacity: 0.7; }
+.chat-info .info-grid { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; margin: 0; }
+.chat-info .info-grid dt { opacity: 0.6; white-space: nowrap; }
+.chat-info .info-grid dd { margin: 0; word-break: break-all; font-variant-numeric: tabular-nums; }
+.chat-info .info-actions { display: flex; align-items: center; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+.chat-info .info-copy {
+  border: 1px solid var(--border, #d8d8d8); background: transparent; color: inherit;
+  border-radius: 6px; padding: 3px 10px; cursor: pointer; font-size: 0.95em;
+}
+.chat-info .info-copy:hover { background: rgba(127,127,127,0.12); }
+.chat-info .info-cmd { font-family: ui-monospace, monospace; opacity: 0.75; word-break: break-all; }
+
+/* ---- Xplorer: queued messages ---- */
+.msg-queue { display: flex; flex-direction: column; gap: 4px; padding: 6px 12px; border-top: 1px solid var(--border, #d8d8d8); }
+.queue-chip {
+  display: flex; align-items: center; gap: 6px; background: rgba(127,127,127,0.1);
+  border-radius: 8px; padding: 4px 6px 4px 10px; font-size: 0.88em;
+}
+.queue-chip .queue-text { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; opacity: 0.85; }
+.queue-chip .queue-send, .queue-chip .queue-del {
+  border: none; background: transparent; color: inherit; cursor: pointer; border-radius: 5px;
+  width: 22px; height: 22px; line-height: 1; font-size: 1em; opacity: 0; flex: none;
+}
+.queue-chip:hover .queue-send, .queue-chip:hover .queue-del { opacity: 0.7; }
+.queue-chip .queue-send:hover, .queue-chip .queue-del:hover { opacity: 1; background: rgba(127,127,127,0.2); }
+
+/* ---- Xplorer: per-message model badge + copy ---- */
+.msg.assistant .msg-meta { display: flex; align-items: center; gap: 8px; margin-top: 6px; opacity: 0; transition: opacity 0.12s; }
+.msg.assistant:hover .msg-meta { opacity: 1; }
+.msg-meta .msg-model { font-size: 0.72em; opacity: 0.6; border: 1px solid var(--border, #d8d8d8); border-radius: 999px; padding: 1px 8px; }
+.msg-meta .msg-copy { border: none; background: transparent; color: inherit; cursor: pointer; font-size: 0.78em; opacity: 0.6; padding: 1px 6px; border-radius: 5px; }
+.msg-meta .msg-copy:hover { opacity: 1; background: rgba(127,127,127,0.15); }

@@ -11,6 +11,8 @@ let busy = false;
 let streamAbort = null;
 let models = [];
 let activeModel = getStoredModel();
+let messageQueue = [];
+let queueSeq = 0;
 let convFilterQuery = '';
 
 const convFilterInput = document.getElementById('conv-filter');
@@ -40,6 +42,7 @@ function renderMessages(conv) {
       div.innerHTML = renderMarkdown(m.content || '');
       div.classList.add('markdown');
       wireCodeCopyButtons(div);
+      appendMsgMeta(div, m);
     } else {
       div.textContent = m.content || '';
     }
@@ -212,7 +215,7 @@ async function newChat() {
 
 function setStreamingUi(active) {
   busy = active;
-  sendBtn.disabled = active;
+  sendBtn.disabled = false;  // stays enabled so a 2nd message queues
   if (stopBtn) stopBtn.hidden = !active;
 }
 
@@ -228,7 +231,8 @@ function appendStatusLine(container, text) {
 }
 
 async function sendMessage(text, { retry = false } = {}) {
-  if (!text.trim() || busy || !activeId) return;
+  if (!text.trim() || !activeId) return;
+  if (busy) { enqueueMessage(text); input.value = ''; return; }
   const conv = conversations.find((c) => c.id === activeId);
   if (!conv) return;
   if (!(await ensureGrokReady())) return;  // Grok Build required to build/modify
@@ -325,7 +329,7 @@ async function sendMessage(text, { retry = false } = {}) {
     thinking.remove();
     messagesEl.querySelector('.msg.assistant.streaming')?.remove();
     if (reply.trim()) {
-      conv.messages.push({ role: 'assistant', content: reply });
+      conv.messages.push({ role: 'assistant', content: reply, model });
       renderMessages(conv);
       renderConvList();
     } else {
@@ -338,7 +342,7 @@ async function sendMessage(text, { retry = false } = {}) {
       const partial = messagesEl.querySelector('.msg.assistant.streaming');
       if (reply.trim()) {
         if (partial) partial.remove();
-        conv.messages.push({ role: 'assistant', content: reply.trim() + '\n\n_(stopped)_' });
+        conv.messages.push({ role: 'assistant', content: reply.trim() + '\n\n_(stopped)_', model });
         renderMessages(conv);
         renderConvList();
       } else if (partial) {
@@ -376,9 +380,154 @@ async function sendMessage(text, { retry = false } = {}) {
   } finally {
     streamAbort = null;
     setStreamingUi(false);
+    drainQueue();
     input.focus();
   }
 }
+
+// ---- Xplorer: message queue + per-chat info panel -------------------------
+function enqueueMessage(text) {
+  const t = (text || '').trim();
+  if (!t) return;
+  messageQueue.push({ id: ++queueSeq, text: t });
+  renderQueue();
+}
+
+function drainQueue() {
+  if (busy || !messageQueue.length) return;
+  const next = messageQueue.shift();
+  renderQueue();
+  if (next) sendMessage(next.text);
+}
+
+function cancelQueued(id) {
+  messageQueue = messageQueue.filter((m) => m.id !== id);
+  renderQueue();
+}
+
+function interruptWith(id) {
+  const item = messageQueue.find((m) => m.id === id);
+  if (!item) return;
+  messageQueue = messageQueue.filter((m) => m.id !== id);
+  messageQueue.unshift(item);        // jump to the front of the queue
+  renderQueue();
+  if (busy) streamAbort?.abort();    // finally -> drainQueue sends it next
+  else drainQueue();
+}
+
+function renderQueue() {
+  const el = document.getElementById('msg-queue');
+  if (!el) return;
+  el.innerHTML = '';
+  if (!messageQueue.length) { el.hidden = true; return; }
+  el.hidden = false;
+  for (const item of messageQueue) {
+    const chip = document.createElement('div');
+    chip.className = 'queue-chip';
+    chip.title = item.text;
+    const txt = document.createElement('span');
+    txt.className = 'queue-text';
+    txt.textContent = item.text;
+    const send = document.createElement('button');
+    send.type = 'button';
+    send.className = 'queue-send';
+    send.title = 'Send now (interrupt current)';
+    send.textContent = '↩';
+    send.addEventListener('click', () => interruptWith(item.id));
+    const del = document.createElement('button');
+    del.type = 'button';
+    del.className = 'queue-del';
+    del.title = 'Remove from queue';
+    del.textContent = '×';
+    del.addEventListener('click', () => cancelQueued(item.id));
+    chip.append(txt, send, del);
+    el.appendChild(chip);
+  }
+}
+
+function appendMsgMeta(div, m) {
+  const meta = document.createElement('div');
+  meta.className = 'msg-meta';
+  if (m.model) {
+    const badge = document.createElement('span');
+    badge.className = 'msg-model';
+    badge.textContent = modelLabel(m.model, models);
+    meta.appendChild(badge);
+  }
+  const copy = document.createElement('button');
+  copy.type = 'button';
+  copy.className = 'msg-copy';
+  copy.textContent = 'Copy';
+  copy.title = 'Copy response';
+  copy.addEventListener('click', () => {
+    navigator.clipboard?.writeText(m.content || '');
+    copy.textContent = 'Copied ✓';
+    setTimeout(() => { copy.textContent = 'Copy'; }, 1200);
+  });
+  meta.appendChild(copy);
+  div.appendChild(meta);
+}
+
+function renderChatInfo() {
+  const el = document.getElementById('chat-info');
+  if (!el) return;
+  el.innerHTML = '';
+  const conv = conversations.find((c) => c.id === activeId);
+  if (!conv) {
+    const e = document.createElement('div');
+    e.className = 'info-empty';
+    e.textContent = 'No active chat.';
+    el.appendChild(e);
+    return;
+  }
+  const sid = conv.session_id || '';
+  const rows = [
+    ['Model', modelLabel(getConvModel(conv.id), models)],
+    ['Messages', String((conv.messages || []).length)],
+    ['Conversation ID', conv.id],
+    ['Grok session', sid || '— (send a message first)'],
+  ];
+  const dl = document.createElement('dl');
+  dl.className = 'info-grid';
+  for (const [k, v] of rows) {
+    const dt = document.createElement('dt'); dt.textContent = k;
+    const dd = document.createElement('dd'); dd.textContent = v;
+    dl.append(dt, dd);
+  }
+  el.appendChild(dl);
+  if (sid) {
+    const cmd = `grok -r ${sid}`;
+    const actions = document.createElement('div');
+    actions.className = 'info-actions';
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'info-copy';
+    btn.textContent = 'Copy CLI resume';
+    btn.addEventListener('click', () => {
+      navigator.clipboard?.writeText(cmd);
+      btn.textContent = 'Copied ✓';
+      setTimeout(() => { btn.textContent = 'Copy CLI resume'; }, 1500);
+    });
+    const code = document.createElement('code');
+    code.className = 'info-cmd';
+    code.textContent = cmd;
+    actions.append(btn, code);
+    el.appendChild(actions);
+  }
+}
+
+(function wireChatInfo() {
+  const btn = document.getElementById('chat-info-btn');
+  const panel = document.getElementById('chat-info');
+  if (!btn || !panel) return;
+  btn.addEventListener('click', () => {
+    const show = panel.hidden;
+    if (show) renderChatInfo();
+    panel.hidden = !show;
+    btn.setAttribute('aria-expanded', show ? 'true' : 'false');
+  });
+})();
+// ---------------------------------------------------------------------------
 
 $('#composer').onsubmit = (e) => {
   e.preventDefault();
