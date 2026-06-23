@@ -157,6 +157,9 @@ void AgentSession::Eval(const std::string& expression, ResultCallback cb) {
   params.Set("expression", expression);
   params.Set("returnByValue", true);
   params.Set("awaitPromise", true);
+  // Abort runaway scripts (e.g. while(true){}) after 15s with an error instead
+  // of wedging the tab's renderer forever.
+  params.Set("timeout", 15000);
   SendCommand("Runtime.evaluate", std::move(params), std::move(cb));
 }
 
