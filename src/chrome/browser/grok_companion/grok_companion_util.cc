@@ -322,4 +322,17 @@ void ToggleGrokSidePanel(BrowserWindowInterface* browser) {
              SidePanelOpenTrigger::kToolbarButton);
 }
 
+void OpenGrokSidePanel(BrowserWindowInterface* browser) {
+  if (!browser)
+    return;
+  RegisterGrokSidePanel(browser);
+  SidePanelUI* ui = browser->GetFeatures().side_panel_ui();
+  if (!ui)
+    return;
+  // Show() is idempotent-open: opens if closed, re-shows if already active —
+  // unlike Toggle() it never closes the panel.
+  ui->Show(SidePanelEntry::Key(SidePanelEntry::Id::kSearchCompanion),
+           SidePanelOpenTrigger::kToolbarButton);
+}
+
 }  // namespace grok_companion

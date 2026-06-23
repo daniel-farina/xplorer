@@ -428,3 +428,14 @@ html[data-theme="dark"] .app-chat-messages .msg.error {
     height: 32px;
   }
 }
+
+/* Canvas-only mode: chat is driven from the native side panel. */
+body.canvas-only .app-workspace,
+body.canvas-only .app-workspace.chat-collapsed { grid-template-columns: 1fr; }
+body.canvas-only .app-chat { display: none; }
+body.canvas-only .chat-toggle { display: none; }
+body.canvas-only .app-preview { border-right: none; }
+@media (max-width: 900px) {
+  body.canvas-only .app-workspace,
+  body.canvas-only .app-workspace.chat-collapsed { grid-template-rows: 1fr; }
+}

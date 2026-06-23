@@ -115,6 +115,10 @@ void AskGrokAboutPage(content::WebContents* web_contents);
 // Toggle the Grok side panel (chat UI). Called from the toolbar Grok button.
 void ToggleGrokSidePanel(BrowserWindowInterface* browser);
 
+// Ensure the Grok side panel (chat UI) is OPEN. Idempotent: shows it if closed,
+// no-op if already open; never closes. Used by /api/sidepanel/open (app-create).
+void OpenGrokSidePanel(BrowserWindowInterface* browser);
+
 // Register the Grok side panel entry on the global side panel registry.
 void RegisterGrokSidePanel(BrowserWindowInterface* browser);
 

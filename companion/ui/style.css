@@ -585,3 +585,7 @@ html[data-theme="dark"] .markdown .hl-num { color: #fbbf24; }
 #conv-list .conv-running:hover { color: #e74c3c; animation: none; }  /* hover = will stop */
 #conv-list .conv-queued { opacity: 0.55; font-size: 0.95em; padding: 0 4px; flex: none; }
 @keyframes xpl-pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+/* Xplorer: app-build conversations in the sidebar list */
+#conv-list .conv-app-tag { font-size: 0.85em; opacity: 0.65; flex: none; padding: 0 3px; }
+#conv-list li.conv-app .conv-title { font-style: italic; }

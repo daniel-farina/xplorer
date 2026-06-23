@@ -18,7 +18,7 @@ const convFilterInput = document.getElementById('conv-filter');
 const stopBtn = document.getElementById('stop');
 
 function chatConversations() {
-  return conversations.filter((c) => c.kind !== 'app');
+  return conversations;  // include app-build conversations in the sidebar
 }
 
 async function api(path, opts = {}) {
@@ -98,7 +98,15 @@ function renderConvList() {
     const title = document.createElement('span');
     title.className = 'conv-title';
     title.textContent = c.title || 'Chat';
+    if (c.kind === 'app') li.classList.add('conv-app');
     li.appendChild(title);
+    if (c.kind === 'app') {
+      const tag = document.createElement('span');
+      tag.className = 'conv-app-tag';
+      tag.textContent = '\u{1F527}';
+      tag.title = 'App build';
+      li.appendChild(tag);
+    }
 
     if (isRunning(c.id)) {
       const dot = document.createElement('button');
@@ -357,7 +365,11 @@ async function sendMessage(text, { retry = false, convId = activeId } = {}) {
 
   let reply = '';
   try {
-    const res = await fetch('/api/conversations/' + convId + '/message/stream', {
+    const appBuild = conv.kind === 'app' && conv.app_id;
+    const url = appBuild
+      ? '/api/apps/' + conv.app_id + '/build/stream'
+      : '/api/conversations/' + convId + '/message/stream';
+    const res = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ message: text, model }),
@@ -677,6 +689,7 @@ initModels().then(() => refresh().then(() => {
   } else if (!chatConversations().length) {
     newChat();
   }
+  consumePendingApp();
 }));
 
 // The side panel keeps its WebContents alive across close/open, so a stale
@@ -688,4 +701,40 @@ document.addEventListener('visibilitychange', () => {
   if (!activeId) return;
   const conv = conversations.find((c) => c.id === activeId);
   if (conv) renderMessages(conv);
+});
+
+// ---- App handoff: auto-select + auto-send a freshly created app conversation ----
+// /apps (same gateway origin, separate persistent WebContents) writes
+//   localStorage['xplorer_pending_app'] = { conv, prompt, ts }
+// The side panel WebContents persists and loads '/' only once, so we pick it up
+// via localStorage + 'storage'/visibilitychange, not a per-open URL param.
+const PENDING_APP_KEY = 'xplorer_pending_app';
+let consumingPendingApp = false;
+async function consumePendingApp() {
+  if (consumingPendingApp) return;
+  let pend;
+  try { pend = JSON.parse(localStorage.getItem(PENDING_APP_KEY) || 'null'); }
+  catch { pend = null; }
+  if (!pend || !pend.conv || !pend.prompt) return;
+  consumingPendingApp = true;
+  try {
+    if (!conversations.some((c) => c.id === pend.conv)) {
+      await refresh();
+    }
+    if (!conversations.some((c) => c.id === pend.conv)) return;
+    localStorage.removeItem(PENDING_APP_KEY);  // claim BEFORE sending -> dedupe
+    selectConv(pend.conv);
+    input.focus();
+    sendMessage(pend.prompt, { convId: pend.conv });  // kind=app -> build/stream
+  } finally {
+    consumingPendingApp = false;
+  }
+}
+window.addEventListener('storage', (e) => {
+  if (e.key && e.key !== PENDING_APP_KEY) return;
+  if (e.newValue == null) return;
+  consumePendingApp();
+});
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') consumePendingApp();
 });

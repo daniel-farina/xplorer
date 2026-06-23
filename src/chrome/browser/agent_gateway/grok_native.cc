@@ -390,6 +390,12 @@ constexpr char kBrowserChatRules[] =
     "this session — call them directly and immediately. Do NOT announce that you "
     "are checking what tools are available, and do NOT run a tool-discovery/list "
     "step first; just act. "
+    "Be efficient — act directly and minimize tool round-trips. To open or visit "
+    "sites, call xplorer_new_tab / xplorer_navigate straight away; do NOT take "
+    "screenshots, run xplorer_eval, or read page text just to 'look around'. Only "
+    "inspect a page (read_text / observe / screenshot / eval) when the task "
+    "genuinely needs its on-page content. For a batch task (e.g. 'open N sites'), "
+    "just issue the N new_tab/navigate calls — don't inspect each one. "
     "You MUST control the real browser through these tools — never give manual "
     "instructions the user must follow themselves. "
     "To organize/group tabs: FIRST call xplorer_tabs to list every open tab, "
@@ -2479,6 +2485,32 @@ bool GrokNative::TryHandleRequest(
       empty.Set("pills", base::ListValue());
       out.Set("toolbar", std::move(empty));
     }
+    SendJson(server, connection_id, net::HTTP_OK, std::move(out));
+    return true;
+  }
+
+  // POST /api/sidepanel/open -> ensure the native Grok side panel is OPEN on the
+  // active window (idempotent; never closes). Triggered by the /apps create flow.
+  if (info.method == "POST" &&
+      (path == "/api/sidepanel/open" || path == "/sidepanel/open")) {
+    content::GetUIThreadTaskRunner({})->PostTask(
+        FROM_HERE, base::BindOnce([]() {
+          BrowserWindowInterface* target = nullptr;
+          for (BrowserWindowInterface* browser :
+               GetAllBrowserWindowInterfaces()) {
+            if (!target)
+              target = browser;
+            if (browser->GetTabStripModel() &&
+                browser->GetTabStripModel()->GetActiveWebContents()) {
+              target = browser;
+              break;
+            }
+          }
+          if (target)
+            grok_companion::OpenGrokSidePanel(target);
+        }));
+    base::DictValue out;
+    out.Set("ok", true);
     SendJson(server, connection_id, net::HTTP_OK, std::move(out));
     return true;
   }
