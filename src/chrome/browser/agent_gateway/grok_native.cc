@@ -2960,6 +2960,19 @@ bool GrokNative::TryHandleRequest(
       SendJson(server, connection_id, net::HTTP_NOT_FOUND, std::move(err));
       return true;
     }
+    // Reject a message to a conversation that is already streaming a reply: a
+    // concurrent run would race the load/modify/save of the session store and
+    // scramble saved messages. The UI serializes via its client-side queue;
+    // this guards direct API callers. (Returns 409 so the client can retry.)
+    {
+      base::AutoLock l(ActiveRunsLock());
+      if (ActiveRuns().count(conv_id)) {
+        base::DictValue err;
+        err.Set("error", "conversation is busy (a reply is still streaming)");
+        SendJson(server, connection_id, net::HTTP_CONFLICT, std::move(err));
+        return true;
+      }
+    }
     base::ListValue* msgs = conv->FindList("messages");
     if (!msgs) {
       conv->Set("messages", base::ListValue());
