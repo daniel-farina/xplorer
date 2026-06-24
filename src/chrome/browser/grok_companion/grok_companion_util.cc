@@ -37,6 +37,10 @@
 #include "ui/base/page_transition_types.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/views/controls/webview/webview.h"
+#include "ui/views/controls/webview/unhandled_keyboard_event_handler.h"  // XPLORER
+#include "content/public/browser/web_contents_delegate.h"  // XPLORER
+#include "components/input/native_web_keyboard_event.h"  // XPLORER
+#include "base/memory/raw_ptr.h"  // XPLORER
 #include "url/gurl.h"
 
 namespace grok_companion {
@@ -91,19 +95,59 @@ void SaveGrokSettings(const base::DictValue& settings) {
     base::WriteFile(path, json);
 }
 
+// The side-panel companion hosts an http page in a views::WebView. A bare
+// WebView leaves its WebContents with no delegate, so the focused input never
+// receives the macOS edit commands (Cut/Copy/Paste) — plain typing works but
+// ⌘C/⌘V/⌘X don't. Give the contents a delegate (the piece WebUI side panels get
+// from WebUIContentsWrapper) and forward unhandled keys to the focus manager so
+// browser accelerators keep working from the panel too.
+class CompanionWebView : public views::WebView {
+ public:
+  explicit CompanionWebView(Profile* profile)
+      : views::WebView(profile), delegate_(this) {}
+  CompanionWebView(const CompanionWebView&) = delete;
+  CompanionWebView& operator=(const CompanionWebView&) = delete;
+  ~CompanionWebView() override {
+    if (web_contents())
+      web_contents()->SetDelegate(nullptr);
+  }
+
+  void AttachContents(std::unique_ptr<content::WebContents> contents) {
+    contents->SetDelegate(&delegate_);
+    SetOwnedWebContents(std::move(contents));
+  }
+
+ private:
+  class Delegate : public content::WebContentsDelegate {
+   public:
+    explicit Delegate(CompanionWebView* owner) : owner_(owner) {}
+    bool HandleKeyboardEvent(
+        content::WebContents* source,
+        const input::NativeWebKeyboardEvent& event) override {
+      return handler_.HandleKeyboardEvent(event, owner_->GetFocusManager());
+    }
+
+   private:
+    const raw_ptr<CompanionWebView> owner_;
+    views::UnhandledKeyboardEventHandler handler_;
+  };
+
+  Delegate delegate_;
+};
+
 std::unique_ptr<views::View> CreateGrokCompanionView(
     BrowserWindowInterface* browser,
     Profile* profile,
     SidePanelEntryScope& scope,
     const GURL& url) {
-  auto web_view = std::make_unique<views::WebView>(profile);
+  auto web_view = std::make_unique<CompanionWebView>(profile);
   web_view->SetID(SidePanelWebUIView::kSidePanelWebViewId);
   content::WebContents::CreateParams params(profile);
   auto contents = content::WebContents::Create(params);
   content::NavigationController::LoadURLParams load(url);
   load.transition_type = ui::PAGE_TRANSITION_AUTO_TOPLEVEL;
   contents->GetController().LoadURLWithParams(load);
-  web_view->SetOwnedWebContents(std::move(contents));
+  web_view->AttachContents(std::move(contents));
   web_view->SetPreferredSize(
       gfx::Size(SidePanelEntry::kSidePanelDefaultContentWidth, 0));
   return web_view;

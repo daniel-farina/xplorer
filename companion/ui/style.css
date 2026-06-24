@@ -642,6 +642,7 @@ html[data-theme="dark"] .markdown .hl-num { color: #fbbf24; }
   background: #2ecc71; color: #06281a; font-size: 0.72em; font-weight: 700; cursor: pointer;
   display: inline-flex; align-items: center; justify-content: center; flex: none;
 }
+.chat-bar .active-count[hidden] { display: none; }  /* hide the pill at 0 running */
 .chat-bar .active-count:hover { filter: brightness(1.08); }
 #conv-list .conv-running {
   border: none; background: transparent; color: #2ecc71; cursor: pointer; flex: none;
