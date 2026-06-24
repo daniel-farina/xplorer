@@ -95,12 +95,33 @@ void SaveGrokSettings(const base::DictValue& settings) {
     base::WriteFile(path, json);
 }
 
-// The side-panel companion hosts an http page in a views::WebView. A bare
-// WebView leaves its WebContents with no delegate, so the focused input never
-// receives the macOS edit commands (Cut/Copy/Paste) — plain typing works but
-// ⌘C/⌘V/⌘X don't. Give the contents a delegate (the piece WebUI side panels get
-// from WebUIContentsWrapper) and forward unhandled keys to the focus manager so
-// browser accelerators keep working from the panel too.
+// The side-panel companion hosts an http page in a raw views::WebView.
+//
+// macOS clipboard root cause: on Mac, ⌘C/⌘V/⌘X (and the Edit-menu Cut/Copy/
+// Paste items) are plain Cocoa selectors `cut:`/`copy:`/`paste:` dispatched to
+// the *NSWindow first responder* — via `[NSApp sendAction:@selector(paste:)
+// to:nil]` in remote_cocoa::ApplicationBridge::ForwardCutCopyPasteToNSApp(),
+// reached from BrowserView::CutCopyPaste(). They are NOT routed by TabStripModel
+// membership or the Browser/WebContents delegate. RenderWidgetHostViewCocoa's
+// -performKeyEquivalent: and the menu's sendAction both require
+// `[[self window] firstResponder] == self`
+// (content/app_shim_remote_cocoa/render_widget_host_view_cocoa.mm).
+//
+// A standalone WebContents that is never WasShown() keeps its
+// RenderWidgetHostViewCocoa NSView created with `hidden = YES`
+// (render_widget_host_ns_view_bridge.mm), and AppKit refuses to make a hidden
+// view the first responder. Plain typing still works (key events are routed via
+// the renderer-host focus path, which does not require AppKit first-responder
+// status), but command-key equivalents and Edit-menu actions never reach the
+// view — exactly the reported symptom.
+//
+// The fix mirrors what every WebUI side panel gets for free via
+// SidePanelWebUIView::ViewHierarchyChanged(): drive the contents to the shown/
+// visible state once it is in the widget hierarchy (so SetVisible(true) ->
+// cocoa_view_.hidden = NO), then focus it so its RWHV becomes first responder.
+// This is cross-platform safe; WasShown()/RequestFocus() are no-ops or correct
+// on Win/Linux. We also keep a delegate that forwards unhandled keys to the
+// focus manager so browser accelerators keep working from the panel.
 class CompanionWebView : public views::WebView {
  public:
   explicit CompanionWebView(Profile* profile)
@@ -115,6 +136,20 @@ class CompanionWebView : public views::WebView {
   void AttachContents(std::unique_ptr<content::WebContents> contents) {
     contents->SetDelegate(&delegate_);
     SetOwnedWebContents(std::move(contents));
+  }
+
+  // views::WebView:
+  void ViewHierarchyChanged(
+      const views::ViewHierarchyChangedDetails& details) override {
+    views::WebView::ViewHierarchyChanged(details);
+    // Once added to the widget, mark the contents shown so its
+    // RenderWidgetHostView (and, on macOS, its RenderWidgetHostViewCocoa NSView)
+    // becomes visible and thus eligible to be the NSWindow first responder. This
+    // is what makes ⌘C/⌘V/⌘X reach the focused input. Mirrors
+    // SidePanelWebUIView::ViewHierarchyChanged().
+    if (details.is_add && details.child == this && web_contents()) {
+      web_contents()->WasShown();
+    }
   }
 
  private:
