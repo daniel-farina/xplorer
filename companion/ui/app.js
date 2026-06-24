@@ -315,6 +315,18 @@ function appendTail(convId) {
     messagesEl.appendChild(live);
     const think = document.createElement('div');
     think.className = 'msg assistant thinking';
+    const panel = document.createElement('details');
+    panel.className = 'thinking-panel';
+    panel.open = true;
+    const sum = document.createElement('summary');
+    sum.textContent = '✦ Thinking';
+    panel.appendChild(sum);
+    const tt = document.createElement('div');
+    tt.className = 'thinking-text';
+    tt.textContent = st.thinking || '';
+    panel.appendChild(tt);
+    if (!st.thinking) panel.hidden = true;
+    think.appendChild(panel);
     const s = document.createElement('div');
     s.className = 'stream-status';
     s.textContent = st.status || 'Grok is thinking…';
@@ -334,6 +346,12 @@ function updateTail(convId) {
   const think = messagesEl.querySelector('.msg.assistant.thinking');
   if (!live || !think) { renderMessages(currentConv()); return; }
   if (st.reply) { live.hidden = false; live.innerHTML = renderMarkdown(st.reply); wireCodeCopyButtons(live); }
+  const panel = think.querySelector('.thinking-panel');
+  const tt = think.querySelector('.thinking-text');
+  if (panel && tt) {
+    if (st.thinking) { panel.hidden = false; tt.textContent = st.thinking; tt.scrollTop = tt.scrollHeight; }
+    else { panel.hidden = true; }
+  }
   const s = think.querySelector('.stream-status');
   if (s) s.textContent = st.status || 'Grok is thinking…';
   messagesEl.scrollTop = messagesEl.scrollHeight;
@@ -357,7 +375,7 @@ async function sendMessage(text, { retry = false, convId = activeId } = {}) {
     if (convId === activeId) input.value = '';
   }
 
-  const st = { aborter: new AbortController(), running: true, reply: '', status: 'Grok is thinking…', error: null, model };
+  const st = { aborter: new AbortController(), running: true, reply: '', status: 'Grok is thinking…', thinking: '', error: null, model };
   streams[convId] = st;
   if (convId === activeId) { renderMessages(conv); setComposerRunning(); }
   updateActiveBadge();
@@ -392,9 +410,7 @@ async function sendMessage(text, { retry = false, convId = activeId } = {}) {
         const evt = parseStreamLine(line);
         if (!evt) continue;
         if (evt.type === 'thought') {
-          thoughtBuf += evt.data || '';
-          if (thoughtBuf.length > 120) thoughtBuf = thoughtBuf.slice(-120);
-          st.status = thoughtBuf || 'Grok is thinking…';
+          st.thinking += evt.data || '';
           updateTail(convId);
         } else if (evt.type === 'tool' || evt.type === 'tool_use') {
           const name = evt.name || evt.tool || evt.data || 'tool';
@@ -610,6 +626,31 @@ input.addEventListener('keydown', (e) => {
     sendMessage(input.value);
   }
 });
+
+// Response-settings gear: effort + max turns, persisted via /api/settings.
+(function setupEffortGear() {
+  const gear = $('#effort-gear');
+  const pop = $('#effort-popover');
+  const effortSel = $('#effort-select');
+  const maxturns = $('#maxturns-input');
+  if (!gear || !pop) return;
+  gear.addEventListener('click', (e) => { e.stopPropagation(); pop.hidden = !pop.hidden; });
+  document.addEventListener('click', (e) => {
+    if (!pop.hidden && !pop.contains(e.target) && !gear.contains(e.target)) pop.hidden = true;
+  });
+  const save = async () => {
+    const body = {};
+    if (effortSel) body.effort = effortSel.value;
+    if (maxturns && maxturns.value) body.max_turns = parseInt(maxturns.value, 10);
+    try { await saveSettings(body); } catch { /* local-only */ }
+  };
+  effortSel?.addEventListener('change', save);
+  maxturns?.addEventListener('change', save);
+  fetchSettings().then((s) => {
+    if (s && s.effort && effortSel) effortSel.value = s.effort;
+    if (s && s.max_turns && maxturns) maxturns.value = s.max_turns;
+  }).catch(() => {});
+})();
 
 async function initModels() {
   try {
