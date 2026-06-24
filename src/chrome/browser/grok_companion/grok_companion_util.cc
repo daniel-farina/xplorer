@@ -154,6 +154,19 @@ GURL GetStartupHomeURL() {
   return GetDefaultSearchHomeURL();
 }
 
+bool IsGrokHomeURL(const GURL& url) {
+  if (!url.is_valid())
+    return false;
+  // Match origin + path against the gateway home pages, ignoring query/ref so
+  // e.g. /search?q=... still counts as the home.
+  GURL::Replacements clear;
+  clear.ClearQuery();
+  clear.ClearRef();
+  const GURL bare = url.ReplaceComponents(clear);
+  return bare == GetSearchURL() || bare == GetCompanionURL() ||
+         bare == GetWelcomeURL();
+}
+
 std::string GetSearchHomeMode() {
   base::DictValue settings = LoadGrokSettings();
   if (const std::string* mode = settings.FindString("search_home")) {

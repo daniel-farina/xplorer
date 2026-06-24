@@ -68,6 +68,11 @@ GURL GetSearchURL();
 GURL GetWelcomeURL();
 GURL GetStartupHomeURL();
 
+// True if `url` is one of Xplorer's own gateway home pages (the new-tab home:
+// search / companion / welcome). Such pages render with a blank omnibox, like
+// the NTP, instead of exposing the internal gateway URL.
+bool IsGrokHomeURL(const GURL& url);
+
 bool HasCompletedWelcome();
 void MarkWelcomeCompleted();
 
