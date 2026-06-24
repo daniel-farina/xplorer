@@ -120,10 +120,12 @@ if (modeParam && ['web', 'imagine'].includes(modeParam)) {
 } else {
   setMode(getStoredSearchMode() === 'imagine' ? 'imagine' : 'web');
 }
+// A fresh new tab opens a blank Grok home — only honor an explicit ?q= in the
+// URL; do NOT auto-restore the last search (that made every new tab reopen the
+// previous query, e.g. /search?q=xcnn).
 const urlQuery = urlParams.get('q');
-const initialQuery = urlQuery || getStoredSearchQuery();
-if (initialQuery) {
-  input.value = initialQuery;
+if (urlQuery) {
+  input.value = urlQuery;
   syncUrl();
 }
 if (urlQuery) {

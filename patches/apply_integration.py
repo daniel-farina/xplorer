@@ -563,6 +563,35 @@ def main(src: Path):
         '  return grok_companion::GetStartupHomeURL();\n}',
     )
 
+    # New tabs land on the Grok home (an http gateway page). Render it with a
+    # blank omnibox like the NTP instead of exposing the internal gateway URL.
+    loc_delegate = (
+        src / "chrome/browser/ui/toolbar/chrome_location_bar_model_delegate.cc")
+    edit(
+        loc_delegate,
+        '#include "components/search/ntp_features.h"',
+        '#include "components/search/ntp_features.h"\n'
+        '#include "chrome/browser/grok_companion/grok_companion_util.h"  // XPLORER',
+    )
+    edit(
+        loc_delegate,
+        '  GURL url = entry->GetURL();\n'
+        '  if (is_ntp(entry->GetVirtualURL()) || is_ntp(url)) {\n'
+        '    return false;\n'
+        '  }',
+        '  GURL url = entry->GetURL();\n'
+        '  if (is_ntp(entry->GetVirtualURL()) || is_ntp(url)) {\n'
+        '    return false;\n'
+        '  }\n'
+        '\n'
+        '  // XPLORER: our own gateway home pages (the new-tab home) get a blank\n'
+        '  // omnibox, just like the NTP.\n'
+        '  if (grok_companion::IsGrokHomeURL(url) ||\n'
+        '      grok_companion::IsGrokHomeURL(entry->GetVirtualURL())) {\n'
+        '    return false;\n'
+        '  }',
+    )
+
     # Enable AI Mode omnibox entrypoint feature flag.
     edit(
         cmd_delegate,
@@ -836,7 +865,7 @@ def main(src: Path):
     # (Developer Build) ..."). Prepend the Xplorer product version so users see
     # OUR version first. NOTE: bump XPLORER_VERSION here per release (or wire it
     # to the release version later).
-    XPLORER_VERSION = "0.8.2"
+    XPLORER_VERSION = "0.8.3"
     ss = src / "chrome/app/settings_strings.grdp"
     sst = ss.read_text()
     _ver_marker = "Xplorer " + XPLORER_VERSION + " · Chromium"

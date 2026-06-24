@@ -122,10 +122,30 @@ bool AgentGateway::CheckAuth(const net::HttpServerRequestInfo& info) {
   return it != info.headers.end() && it->second == "Bearer " + token_;
 }
 
-void AgentGateway::OnConnect(int connection_id) {}
+namespace {
+// Max accepted request body. Larger bodies get a 413 in OnHttpRequest; the
+// per-connection read buffer is bounded just above this so anything past it
+// closes cleanly instead of wedging the connection (the default 1 MB read
+// buffer could hang on an oversized body).
+constexpr int kMaxRequestBodyBytes = 1024 * 1024;
+}  // namespace
+
+void AgentGateway::OnConnect(int connection_id) {
+  server_->SetReceiveBufferSize(connection_id,
+                                kMaxRequestBodyBytes + 128 * 1024);
+}
 
 void AgentGateway::OnHttpRequest(int connection_id,
                                  const net::HttpServerRequestInfo& info) {
+  // Reject oversized request bodies up front: return 413 instead of slow-
+  // processing or persisting garbage (pairs with the bounded read buffer).
+  if (info.data.size() > static_cast<size_t>(kMaxRequestBodyBytes)) {
+    net::HttpServerResponseInfo resp(net::HTTP_REQUEST_ENTITY_TOO_LARGE);
+    resp.SetBody("{\"error\":\"request body too large\"}", "application/json");
+    server_->SendResponse(connection_id, resp, TRAFFIC_ANNOTATION_FOR_TESTS);
+    return;
+  }
+
   // Native Grok UI + search/chat API (no auth — localhost browser UI only).
   if (GrokNative::TryHandleRequest(connection_id, info, server_.get(), port_,
                                    server_thread_->task_runner()))

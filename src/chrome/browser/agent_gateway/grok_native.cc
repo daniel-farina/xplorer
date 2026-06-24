@@ -2406,6 +2406,33 @@ bool GrokNative::TryHandleRequest(
     std::optional<bool> welcome = body->FindBool("welcome_completed");
     std::optional<int> max_turns = body->FindInt("max_turns");
     bool updated = false;
+    // Validate model ids against the known list before persisting — these are
+    // the global default chat/search models, so an unvalidated value (e.g. a
+    // bogus or huge string) would corrupt live config for every new session.
+    if ((model && !model->empty()) || (search_model && !search_model->empty())) {
+      base::ListValue known = ListGrokModels();
+      auto is_known = [&known](const std::string& id) {
+        for (const base::Value& m : known) {
+          const auto* md = m.GetIfDict();
+          const std::string* mid = md ? md->FindString("id") : nullptr;
+          if (mid && *mid == id)
+            return true;
+        }
+        return false;
+      };
+      if (model && !model->empty() && !is_known(*model)) {
+        base::DictValue err;
+        err.Set("error", "unknown model id");
+        SendJson(server, connection_id, net::HTTP_BAD_REQUEST, std::move(err));
+        return true;
+      }
+      if (search_model && !search_model->empty() && !is_known(*search_model)) {
+        base::DictValue err;
+        err.Set("error", "unknown search_model id");
+        SendJson(server, connection_id, net::HTTP_BAD_REQUEST, std::move(err));
+        return true;
+      }
+    }
     if (model && !model->empty()) {
       SetConfiguredModel(*model);
       updated = true;
@@ -2932,6 +2959,19 @@ bool GrokNative::TryHandleRequest(
       err.Set("error", "conversation not found");
       SendJson(server, connection_id, net::HTTP_NOT_FOUND, std::move(err));
       return true;
+    }
+    // Reject a message to a conversation that is already streaming a reply: a
+    // concurrent run would race the load/modify/save of the session store and
+    // scramble saved messages. The UI serializes via its client-side queue;
+    // this guards direct API callers. (Returns 409 so the client can retry.)
+    {
+      base::AutoLock l(ActiveRunsLock());
+      if (ActiveRuns().count(conv_id)) {
+        base::DictValue err;
+        err.Set("error", "conversation is busy (a reply is still streaming)");
+        SendJson(server, connection_id, net::HTTP_CONFLICT, std::move(err));
+        return true;
+      }
     }
     base::ListValue* msgs = conv->FindList("messages");
     if (!msgs) {
