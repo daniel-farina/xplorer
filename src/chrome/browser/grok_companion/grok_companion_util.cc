@@ -37,6 +37,12 @@
 #include "ui/base/page_transition_types.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/views/controls/webview/webview.h"
+#include "ui/views/controls/webview/unhandled_keyboard_event_handler.h"  // XPLORER
+#include "content/public/browser/web_contents_delegate.h"  // XPLORER
+#include "components/input/native_web_keyboard_event.h"  // XPLORER
+#include "base/memory/raw_ptr.h"  // XPLORER
+#include "base/memory/weak_ptr.h"  // XPLORER
+#include "base/task/sequenced_task_runner.h"  // XPLORER
 #include "url/gurl.h"
 
 namespace grok_companion {
@@ -91,19 +97,127 @@ void SaveGrokSettings(const base::DictValue& settings) {
     base::WriteFile(path, json);
 }
 
+// The side-panel companion hosts an http page in a raw views::WebView.
+//
+// macOS clipboard root cause: Cut/Copy/Paste/Select-All (⌘C/⌘V/⌘X/⌘A and the
+// Edit menu) are Cocoa selectors dispatched to the NSWindow *first responder*
+// (`[NSApp sendAction:@selector(paste:) to:nil]` from BrowserView::CutCopyPaste,
+// and RenderWidgetHostViewCocoa -performKeyEquivalent: which requires
+// `[[self window] firstResponder] == self`). They are NOT routed by the tab
+// strip, the Browser, or the WebContentsDelegate — so the side panel's RWHV
+// NSView must literally BE the window first responder.
+//
+// Two pieces were missing:
+//  (a) WasShown() un-hides the RWHV NSView (cocoa_view_.hidden = NO) — necessary
+//      (AppKit won't make a hidden view first responder) but NOT sufficient: it
+//      never calls makeFirstResponder. Plain typing worked anyway via the
+//      renderer page-focus path (no first-responder guard) — hence the symptom.
+//  (b) The actual focus: web_contents()->Focus() -> RWHVMac::Focus() ->
+//      MakeFirstResponder(). For a views::WebView the only entry is OnFocus(),
+//      which fires on RequestFocus(). We drive it after the view is shown+drawn
+//      (deferred + retried, since the side panel opens animated), and again on
+//      OnFocus / OnWebContentsFocused so clicking back in re-acquires it.
+// Also: SetDelegate() MUST run after SetOwnedWebContents() (which itself calls
+// SetDelegate(this)), or the key-forwarding delegate is silently clobbered.
+// Cross-platform safe — WasShown()/Focus() are correct no-ops on Win/Linux,
+// where clipboard isn't first-responder-gated.
+class CompanionWebView : public views::WebView {
+ public:
+  explicit CompanionWebView(Profile* profile)
+      : views::WebView(profile), delegate_(this) {}
+  CompanionWebView(const CompanionWebView&) = delete;
+  CompanionWebView& operator=(const CompanionWebView&) = delete;
+  ~CompanionWebView() override {
+    if (web_contents())
+      web_contents()->SetDelegate(nullptr);
+  }
+
+  void AttachContents(std::unique_ptr<content::WebContents> contents) {
+    // Delegate AFTER SetOwnedWebContents(): the latter calls
+    // wc_owner_->SetDelegate(this), which would clobber a delegate set first.
+    SetOwnedWebContents(std::move(contents));
+    web_contents()->SetDelegate(&delegate_);
+  }
+
+  // views::WebView:
+  void ViewHierarchyChanged(
+      const views::ViewHierarchyChangedDetails& details) override {
+    views::WebView::ViewHierarchyChanged(details);
+    if (details.is_add && details.child == this && web_contents()) {
+      web_contents()->WasShown();  // un-hide the RWHV NSView (precondition)
+      FocusContentsSoon(8);        // then make it the window first responder
+    }
+  }
+
+  void OnFocus() override {
+    // Whenever this view is focused by any path, ensure the contents is shown
+    // before it is focused (never ask a hidden NSView to be first responder).
+    if (web_contents())
+      web_contents()->WasShown();
+    views::WebView::OnFocus();
+  }
+
+  void OnWebContentsFocused(
+      content::RenderWidgetHost* render_widget_host) override {
+    views::WebView::OnWebContentsFocused(render_widget_host);
+    // Clicking back into the panel keeps this WebView views-focused so the RWHV
+    // stays the window first responder and clipboard keeps working.
+    RequestFocus();
+  }
+
+ private:
+  void FocusContentsSoon(int tries) {
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE, base::BindOnce(&CompanionWebView::FocusContentsNow,
+                                  weak_factory_.GetWeakPtr(), tries));
+  }
+
+  void FocusContentsNow(int tries) {
+    if (!web_contents())
+      return;
+    // RequestFocus() only takes once the view is drawn (visible in the tree).
+    // The side panel opens animated, so retry a few turns if not ready yet.
+    if (!GetWidget() || !IsDrawn()) {
+      if (tries > 0)
+        FocusContentsSoon(tries - 1);
+      return;
+    }
+    // Routes WebView::OnFocus() -> web_contents()->Focus() -> RWHVMac::Focus()
+    // -> [window makeFirstResponder:cocoa_view_].
+    RequestFocus();
+  }
+
+  class Delegate : public content::WebContentsDelegate {
+   public:
+    explicit Delegate(CompanionWebView* owner) : owner_(owner) {}
+    bool HandleKeyboardEvent(
+        content::WebContents* source,
+        const input::NativeWebKeyboardEvent& event) override {
+      return handler_.HandleKeyboardEvent(event, owner_->GetFocusManager());
+    }
+
+   private:
+    const raw_ptr<CompanionWebView> owner_;
+    views::UnhandledKeyboardEventHandler handler_;
+  };
+
+  Delegate delegate_;
+  base::WeakPtrFactory<CompanionWebView> weak_factory_{this};
+};
+
 std::unique_ptr<views::View> CreateGrokCompanionView(
     BrowserWindowInterface* browser,
     Profile* profile,
     SidePanelEntryScope& scope,
     const GURL& url) {
-  auto web_view = std::make_unique<views::WebView>(profile);
+  auto web_view = std::make_unique<CompanionWebView>(profile);
   web_view->SetID(SidePanelWebUIView::kSidePanelWebViewId);
   content::WebContents::CreateParams params(profile);
   auto contents = content::WebContents::Create(params);
   content::NavigationController::LoadURLParams load(url);
   load.transition_type = ui::PAGE_TRANSITION_AUTO_TOPLEVEL;
   contents->GetController().LoadURLWithParams(load);
-  web_view->SetOwnedWebContents(std::move(contents));
+  web_view->AttachContents(std::move(contents));
   web_view->SetPreferredSize(
       gfx::Size(SidePanelEntry::kSidePanelDefaultContentWidth, 0));
   return web_view;

@@ -504,6 +504,31 @@ void SetConfiguredMaxTurns(int turns) {
   SaveSettings(settings);
 }
 
+// Reasoning effort for the chat. Fast ("low") by default; the sidebar gear
+// exposes the full range. Passed to grok as --effort.
+constexpr char kDefaultEffort[] = "low";
+
+bool IsValidEffort(const std::string& e) {
+  return e == "low" || e == "medium" || e == "high" || e == "xhigh" ||
+         e == "max";
+}
+
+std::string GetConfiguredEffort() {
+  base::DictValue settings = LoadSettings();
+  if (const std::string* e = settings.FindString("effort")) {
+    if (IsValidEffort(*e))
+      return *e;
+  }
+  return kDefaultEffort;
+}
+
+void SetConfiguredEffort(const std::string& effort) {
+  base::DictValue settings = LoadSettings();
+  settings.Set("effort",
+               IsValidEffort(effort) ? effort : std::string(kDefaultEffort));
+  SaveSettings(settings);
+}
+
 std::string ResolveModel(const std::string* request_model) {
   if (request_model && !request_model->empty())
     return *request_model;
@@ -578,6 +603,7 @@ void EnrichSettingsResponse(base::DictValue* d, int gateway_port) {
   d->Set("search_model", GetConfiguredSearchModel());
   d->Set("search_model_label", ModelDisplayName(GetConfiguredSearchModel()));
   d->Set("max_turns", GetConfiguredMaxTurns());
+  d->Set("effort", GetConfiguredEffort());
   d->Set("grok_bin", ResolveGrokBinary().AsUTF8Unsafe());
   std::string gw_json;
   if (base::ReadFileToString(xplorer_paths::Resolve("gateway.json"),
@@ -1866,6 +1892,8 @@ base::CommandLine BuildGrokChatCommand(const std::string& message,
   cmd.AppendArg(model);
   cmd.AppendArg("--max-turns");
   cmd.AppendArg(base::NumberToString(GetConfiguredMaxTurns()));
+  cmd.AppendArg("--effort");
+  cmd.AppendArg(GetConfiguredEffort());
   if (!rules.empty()) {
     cmd.AppendArg("--rules");
     cmd.AppendArg(rules);
@@ -2405,6 +2433,7 @@ bool GrokNative::TryHandleRequest(
     const base::DictValue* toolbar = body->FindDict("toolbar");
     std::optional<bool> welcome = body->FindBool("welcome_completed");
     std::optional<int> max_turns = body->FindInt("max_turns");
+    const std::string* effort = body->FindString("effort");
     bool updated = false;
     // Validate model ids against the known list before persisting — these are
     // the global default chat/search models, so an unvalidated value (e.g. a
@@ -2454,6 +2483,16 @@ bool GrokNative::TryHandleRequest(
     }
     if (max_turns) {
       SetConfiguredMaxTurns(*max_turns);
+      updated = true;
+    }
+    if (effort && !effort->empty()) {
+      if (!IsValidEffort(*effort)) {
+        base::DictValue err;
+        err.Set("error", "effort must be low/medium/high/xhigh/max");
+        SendJson(server, connection_id, net::HTTP_BAD_REQUEST, std::move(err));
+        return true;
+      }
+      SetConfiguredEffort(*effort);
       updated = true;
     }
     if (welcome.has_value() && *welcome) {

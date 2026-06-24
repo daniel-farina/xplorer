@@ -603,7 +603,42 @@ def main(src: Path):
         '    if (!cmd->HasSwitch("enable-features"))\n'
         '      cmd->AppendSwitchASCII("enable-features",\n'
         '                             "AiModeOmniboxEntryPoint");\n'
+        '    if (!cmd->HasSwitch("top-chrome-touch-ui"))\n'
+        '      cmd->AppendSwitchASCII("top-chrome-touch-ui", "enabled");\n'
         '  }\n',
+    )
+
+    # XPLORER: vertical tabs (tabs to the side) on by default — enable the
+    # feature + expand-on-hover, and flip the layout pref so a fresh profile
+    # opens with the side tab strip rather than the horizontal strip.
+    tabs_features = src / "chrome/browser/ui/tabs/features.cc"
+    # NOTE: edit() only *replaces* the anchor when the insertion restates its
+    # first or last line; a bare one-line value flip is treated as additive and
+    # gets spliced (duplicated). So anchor each flip together with an unchanged
+    # neighbouring line.
+    edit(
+        tabs_features,
+        "BASE_FEATURE(kVerticalTabs, base::FEATURE_DISABLED_BY_DEFAULT);\n\n"
+        "BASE_FEATURE(kVerticalTabsLaunch, base::FEATURE_DISABLED_BY_DEFAULT);",
+        "BASE_FEATURE(kVerticalTabs, base::FEATURE_ENABLED_BY_DEFAULT);\n\n"
+        "BASE_FEATURE(kVerticalTabsLaunch, base::FEATURE_DISABLED_BY_DEFAULT);",
+    )
+    edit(
+        tabs_features,
+        "BASE_FEATURE(kVerticalTabsExpandOnHover, "
+        "base::FEATURE_DISABLED_BY_DEFAULT);\nBASE_FEATURE_PARAM(bool,",
+        "BASE_FEATURE(kVerticalTabsExpandOnHover, "
+        "base::FEATURE_ENABLED_BY_DEFAULT);\nBASE_FEATURE_PARAM(bool,",
+    )
+    tab_strip_prefs = src / "chrome/browser/ui/tabs/tab_strip_prefs.cc"
+    edit(
+        tab_strip_prefs,
+        "  registry->RegisterBooleanPref(prefs::kEverythingMenuPinnedToTabstrip,"
+        " true);\n"
+        "  registry->RegisterBooleanPref(prefs::kVerticalTabsEnabled, false);",
+        "  registry->RegisterBooleanPref(prefs::kEverythingMenuPinnedToTabstrip,"
+        " true);\n"
+        "  registry->RegisterBooleanPref(prefs::kVerticalTabsEnabled, true);",
     )
 
     # Rename "AI Mode" label to "Grok" in the omnibox chip.
@@ -865,7 +900,7 @@ def main(src: Path):
     # (Developer Build) ..."). Prepend the Xplorer product version so users see
     # OUR version first. NOTE: bump XPLORER_VERSION here per release (or wire it
     # to the release version later).
-    XPLORER_VERSION = "0.8.3"
+    XPLORER_VERSION = "0.8.4"
     ss = src / "chrome/app/settings_strings.grdp"
     sst = ss.read_text()
     _ver_marker = "Xplorer " + XPLORER_VERSION + " · Chromium"
