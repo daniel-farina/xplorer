@@ -661,8 +661,12 @@ async function initModels() {
     }
   } catch { /* use localStorage fallback */ }
   models = await fetchModels();
-  if (!models.some((m) => m.id === activeModel)) {
-    activeModel = models[0]?.id || DEFAULT_MODEL;
+  // Never clobber a remembered choice: only re-pick when the list is non-empty
+  // and the saved model truly isn't in it — and even then prefer the stored
+  // model over models[0] (which is composer-fast and would silently reset it).
+  if (models.length && !models.some((m) => m.id === activeModel)) {
+    const stored = getStoredModel();
+    activeModel = models.some((m) => m.id === stored) ? stored : models[0].id;
   }
   populateModelSelect(modelSelect, models, activeModel);
 }
