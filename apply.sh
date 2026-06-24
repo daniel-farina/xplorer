@@ -90,4 +90,11 @@ fi  # end macOS-only product-logo block
 echo "Applying integration edits..."
 python3 "$XPLORER/patches/apply_integration.py" "$SRC"
 
+# Degoogling pass: apply the vendored ungoogled-chromium series LAST, so the Grok +
+# branding edits above stay authoritative. Best-effort and idempotent — a patch that has
+# drifted against the current Chromium pin is logged and skipped, never fatal.
+# See patches/ungoogled/series and docs/UNGOOGLED.md.
+echo "Applying ungoogled degoogling patches..."
+sh "$XPLORER/scripts/apply_ungoogled.sh" "$SRC"
+
 echo "Done. Next: ./build.sh"

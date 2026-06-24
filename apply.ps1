@@ -69,4 +69,9 @@ $env:PYTHONUTF8 = "1"
 & $python (Join-Path $Xplorer "patches\apply_integration.py") $Src
 if ($LASTEXITCODE -ne 0) { throw "apply_integration.py failed (exit $LASTEXITCODE)" }
 
+# Degoogling pass: vendored ungoogled-chromium series, applied LAST so Grok + branding
+# edits stay authoritative. Best-effort/idempotent — drifted patches are logged, not fatal.
+Write-Host "Applying ungoogled degoogling patches..."
+& powershell -ExecutionPolicy Bypass -File (Join-Path $Xplorer "scripts\apply_ungoogled.ps1") -Src $Src
+
 Write-Host "Done. Next: .\build.ps1"
