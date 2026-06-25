@@ -42,5 +42,13 @@ autoninja -C "out/$OUT_DIR" chrome
 if [ "$ARCH" = "linux" ]; then
   echo "Built ($ARCH): $SRC/out/$OUT_DIR/chrome"
 else
-  echo "Built ($ARCH): $SRC/out/$OUT_DIR/Xplorer.app"
+  APP="$SRC/out/$OUT_DIR/Xplorer.app"
+  # Stage companion UI into the bundle so GrokNative can serve /schedules etc.
+  # without falling through to the auth-gated agent API (missing file -> 401).
+  UI_DST="$APP/Contents/Resources/companion/ui"
+  mkdir -p "$(dirname "$UI_DST")"
+  rm -rf "$UI_DST"
+  cp -R "$XPLORER/companion/ui" "$UI_DST"
+  echo "Bundled companion UI -> $UI_DST"
+  echo "Built ($ARCH): $APP"
 fi
