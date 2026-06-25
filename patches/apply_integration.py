@@ -601,62 +601,35 @@ def patch_vertical_sidebar(src: Path):
         )
 
     browser_ui_gn = src / "chrome/browser/ui/BUILD.gn"
-    edit(
-        browser_ui_gn,
-        '      "views/xplorer/xplorer_toolbar_icons.h",  # XPLORER',
-        '      "views/xplorer/xplorer_toolbar_icons.h",  # XPLORER\n'
-        '      "views/xplorer/xplorer_sidebar_chrome_view.cc",  # XPLORER\n'
-        '      "views/xplorer/xplorer_sidebar_chrome_view.h",  # XPLORER\n'
-        '      "views/xplorer/xplorer_sidebar_bookmarks_view.cc",  # XPLORER\n'
-        '      "views/xplorer/xplorer_sidebar_bookmarks_view.h",  # XPLORER\n'
-        '      "views/xplorer/xplorer_sidebar_row_button.cc",  # XPLORER\n'
-        '      "views/xplorer/xplorer_sidebar_row_button.h",  # XPLORER\n'
-        '      "views/xplorer/xplorer_sidebar_section_label.cc",  # XPLORER\n'
-        '      "views/xplorer/xplorer_sidebar_section_label.h",  # XPLORER\n'
-        '      "views/xplorer/xplorer_sidebar_prefs.cc",  # XPLORER\n'
-        '      "views/xplorer/xplorer_sidebar_prefs.h",  # XPLORER\n'
-        '      "views/xplorer/xplorer_agent_tab_grouper.cc",  # XPLORER\n'
-        '      "views/xplorer/xplorer_agent_tab_grouper.h",  # XPLORER\n'
-        '      "views/xplorer/xplorer_toolbar_placement.cc",  # XPLORER\n'
-        '      "views/xplorer/xplorer_toolbar_placement.h",  # XPLORER\n'
-        '      "views/xplorer/xplorer_settings_nav.cc",  # XPLORER\n'
-        '      "views/xplorer/xplorer_settings_nav.h",  # XPLORER',
-    )
-    edit(
-        browser_ui_gn,
-        '      "views/xplorer/xplorer_sidebar_bookmarks_view.h",  # XPLORER\n',
-        '      "views/xplorer/xplorer_sidebar_bookmarks_view.h",  # XPLORER\n'
-        '      "views/xplorer/xplorer_sidebar_row_button.cc",  # XPLORER\n'
-        '      "views/xplorer/xplorer_sidebar_row_button.h",  # XPLORER\n',
-    )
-    # Native "Scheduled" sidebar section sources. No new GN dep is needed: like
-    # the agent-tab grouper, these files live in //chrome/browser/ui and include
-    # agent_gateway/scheduler.h header-only; the symbols resolve at the final
-    # //chrome/browser link (agent_gateway is in chrome/browser's public_deps),
-    # exactly as the grouper's focus_arbiter.h/tab_ownership.h includes do.
-    # Appended AFTER the chrome-view sources block's last line (restated): that
-    # block has no outer name-guard and relies on edit()'s verbatim-presence
-    # check, so splicing a line into the middle of it would make it re-fire and
-    # duplicate the whole block on the next apply.
-    if "xplorer_sidebar_scheduled_view.cc" not in browser_ui_gn.read_text():
+    # Single guarded block: partial middle-of-block splices break edit()'s
+    # verbatim-presence idempotency and duplicate the whole chrome-view list.
+    if "xplorer_sidebar_chrome_view.cc" not in browser_ui_gn.read_text():
         edit(
             browser_ui_gn,
-            '      "views/xplorer/xplorer_settings_nav.h",  # XPLORER',
-            '      "views/xplorer/xplorer_settings_nav.h",  # XPLORER\n'
-            '      "views/xplorer/xplorer_sidebar_scheduled_view.cc",  # XPLORER\n'
-            '      "views/xplorer/xplorer_sidebar_scheduled_view.h",  # XPLORER',
-        )
-    if "xplorer_bookmark_tabs.cc" not in browser_ui_gn.read_text():
-        edit(
-            browser_ui_gn,
-            '      "views/xplorer/xplorer_sidebar_bookmarks_view.cc",  # XPLORER\n'
-            '      "views/xplorer/xplorer_sidebar_bookmarks_view.h",  # XPLORER\n',
+            '      "views/xplorer/xplorer_toolbar_icons.h",  # XPLORER',
+            '      "views/xplorer/xplorer_toolbar_icons.h",  # XPLORER\n'
+            '      "views/xplorer/xplorer_sidebar_chrome_view.cc",  # XPLORER\n'
+            '      "views/xplorer/xplorer_sidebar_chrome_view.h",  # XPLORER\n'
             '      "views/xplorer/xplorer_sidebar_bookmarks_view.cc",  # XPLORER\n'
             '      "views/xplorer/xplorer_sidebar_bookmarks_view.h",  # XPLORER\n'
             '      "views/xplorer/xplorer_bookmark_tabs.cc",  # XPLORER\n'
             '      "views/xplorer/xplorer_bookmark_tabs.h",  # XPLORER\n'
             '      "views/xplorer/xplorer_bookmark_tab_observer.cc",  # XPLORER\n'
-            '      "views/xplorer/xplorer_bookmark_tab_observer.h",  # XPLORER\n',
+            '      "views/xplorer/xplorer_bookmark_tab_observer.h",  # XPLORER\n'
+            '      "views/xplorer/xplorer_sidebar_row_button.cc",  # XPLORER\n'
+            '      "views/xplorer/xplorer_sidebar_row_button.h",  # XPLORER\n'
+            '      "views/xplorer/xplorer_sidebar_section_label.cc",  # XPLORER\n'
+            '      "views/xplorer/xplorer_sidebar_section_label.h",  # XPLORER\n'
+            '      "views/xplorer/xplorer_sidebar_prefs.cc",  # XPLORER\n'
+            '      "views/xplorer/xplorer_sidebar_prefs.h",  # XPLORER\n'
+            '      "views/xplorer/xplorer_agent_tab_grouper.cc",  # XPLORER\n'
+            '      "views/xplorer/xplorer_agent_tab_grouper.h",  # XPLORER\n'
+            '      "views/xplorer/xplorer_toolbar_placement.cc",  # XPLORER\n'
+            '      "views/xplorer/xplorer_toolbar_placement.h",  # XPLORER\n'
+            '      "views/xplorer/xplorer_settings_nav.cc",  # XPLORER\n'
+            '      "views/xplorer/xplorer_settings_nav.h",  # XPLORER\n'
+            '      "views/xplorer/xplorer_sidebar_scheduled_view.cc",  # XPLORER\n'
+            '      "views/xplorer/xplorer_sidebar_scheduled_view.h",  # XPLORER',
         )
 
     # XPLORER: Arc-style bookmark tabs hide their row from the vertical tab list.

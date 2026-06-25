@@ -31,6 +31,7 @@ XplorerSidebarChromeView::XplorerSidebarChromeView(
     Profile* profile)
     : browser_(browser), profile_(profile) {
   set_context_menu_controller(this);
+  SetBackground(nullptr);
   auto* layout = SetLayoutManager(std::make_unique<views::BoxLayout>(
       views::BoxLayout::Orientation::kVertical));
   layout->set_cross_axis_alignment(
@@ -40,6 +41,7 @@ XplorerSidebarChromeView::XplorerSidebarChromeView(
       std::make_unique<XplorerSidebarBookmarksView>(browser_, profile_));
 
   auto toolbar_host = std::make_unique<views::View>();
+  toolbar_host->SetBackground(nullptr);
   auto* host_layout = toolbar_host->SetLayoutManager(
       std::make_unique<views::BoxLayout>(
           views::BoxLayout::Orientation::kVertical));

@@ -12,6 +12,7 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
 #include "chrome/browser/ui/views/xplorer/xplorer_bookmark_tabs.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/xplorer/xplorer_sidebar_row_button.h"
@@ -61,10 +62,10 @@ XplorerSidebarBookmarksView::XplorerSidebarBookmarksView(
     }
   }
   if (browser_) {
-    if (TabStripModel* tabs = browser_->GetTabStripModel()) {
-      tab_strip_observation_.Observe(tabs);
-      UpdateActiveHighlight();
-    }
+    active_tab_subscription_ = browser_->RegisterActiveTabDidChange(
+        base::BindRepeating(&XplorerSidebarBookmarksView::OnTabStripActiveTabChanged,
+                            base::Unretained(this)));
+    OnTabStripActiveTabChanged(browser_);
   }
 }
 
@@ -169,7 +170,7 @@ void XplorerSidebarBookmarksView::Rebuild() {
     UpdateRowIcon(button.get(), child.get());
     XplorerSidebarRowButton* row =
         AddChildView(std::move(button));
-    rows_.push_back({child->id(), row});
+    rows_.push_back({child->id(), child->url(), row});
     if (++shown >= kMaxBookmarks) {
       break;
     }
@@ -215,13 +216,10 @@ void XplorerSidebarBookmarksView::OnBookmarkPressed(
   UpdateActiveHighlight();
 }
 
-void XplorerSidebarBookmarksView::OnTabStripModelChanged(
-    TabStripModel* tab_strip_model,
-    const TabStripModelChange& change,
-    const TabStripSelectionChange& selection) {
-  if (Browser* browser = browser_ ? browser_->GetBrowserForMigrationOnly()
-                                  : nullptr) {
-    ReassertHiddenBookmarkTabRows(browser);
+void XplorerSidebarBookmarksView::OnTabStripActiveTabChanged(
+    BrowserWindowInterface* browser) {
+  if (Browser* b = browser ? browser->GetBrowserForMigrationOnly() : nullptr) {
+    ReassertHiddenBookmarkTabRows(b);
   }
   UpdateActiveHighlight();
 }
@@ -237,11 +235,8 @@ void XplorerSidebarBookmarksView::UpdateActiveHighlight() {
       continue;
     }
     bool selected = false;
-    if (active) {
-      const bookmarks::BookmarkNode* node = model_->GetNodeByID(row.node_id);
-      if (node && node->is_url()) {
-        selected = IsBookmarkTabOnUrl(active, node->url());
-      }
+    if (active && row.url.is_valid()) {
+      selected = IsBookmarkTabOnUrl(active, row.url);
     }
     row.button->SetSelected(selected);
   }

@@ -6,7 +6,7 @@
 #include <utility>
 
 #include "chrome/browser/ui/color/chrome_color_id.h"
-#include "ui/button_style.h"
+#include "ui/base/ui_base_types.h"
 #include "chrome/browser/ui/layout_constants.h"
 #include "chrome/browser/ui/views/location_bar/location_bar_util.h"
 #include "third_party/skia/include/core/SkColor.h"
@@ -40,6 +40,7 @@ XplorerSidebarRowButton::XplorerSidebarRowButton(PressedCallback callback,
       GetLayoutConstant(LayoutConstant::kVerticalTabCornerRadius));
   label()->SetTextStyle(views::style::STYLE_BODY_4);
   SetFocusBehavior(views::View::FocusBehavior::ALWAYS);
+  UpdateBackgroundColor();
 }
 
 XplorerSidebarRowButton::~XplorerSidebarRowButton() = default;

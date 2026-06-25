@@ -9,7 +9,7 @@
 
 #include "base/memory/raw_ptr.h"
 #include "base/scoped_observation.h"
-#include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
+#include "url/gurl.h"
 #include "components/bookmarks/browser/bookmark_model_observer.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/views/context_menu_controller.h"
@@ -30,7 +30,6 @@ class XplorerSidebarRowButton;
 // Bookmark-bar shortcuts rendered in the Arc-style sidebar.
 class XplorerSidebarBookmarksView : public views::View,
                                     public bookmarks::BookmarkModelObserver,
-                                    public TabStripModelObserver,
                                     public views::ContextMenuController {
   METADATA_HEADER(XplorerSidebarBookmarksView, views::View)
 
@@ -72,16 +71,12 @@ class XplorerSidebarBookmarksView : public views::View,
       const gfx::Point& point,
       ui::mojom::MenuSourceType source_type) override;
 
-  // TabStripModelObserver:
-  void OnTabStripModelChanged(
-      TabStripModel* tab_strip_model,
-      const TabStripModelChange& change,
-      const TabStripSelectionChange& selection) override;
-
  private:
+  void OnTabStripActiveTabChanged(BrowserWindowInterface* browser);
   void UpdateActiveHighlight();
   struct BookmarkRow {
     int64_t node_id = 0;
+    GURL url;
     raw_ptr<XplorerSidebarRowButton> button = nullptr;
   };
 
@@ -97,8 +92,7 @@ class XplorerSidebarBookmarksView : public views::View,
   base::ScopedObservation<bookmarks::BookmarkModel,
                           bookmarks::BookmarkModelObserver>
       model_observation_{this};
-  base::ScopedObservation<TabStripModel, TabStripModelObserver>
-      tab_strip_observation_{this};
+  base::CallbackListSubscription active_tab_subscription_;
 };
 
 }  // namespace xplorer

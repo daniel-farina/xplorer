@@ -5,6 +5,7 @@
 #define CHROME_BROWSER_UI_VIEWS_XPLORER_XPLORER_BOOKMARK_TAB_OBSERVER_H_
 
 #include "base/memory/raw_ptr.h"
+#include "base/supports_user_data.h"
 #include "content/public/browser/web_contents_observer.h"
 
 class Browser;
@@ -17,7 +18,8 @@ namespace xplorer {
 
 // Watches a sidebar bookmark tab; when it navigates off the bookmark host the tab
 // row is re-shown in the vertical Tabs strip and the bookmark tag is cleared.
-class XplorerBookmarkTabObserver : public content::WebContentsObserver {
+class XplorerBookmarkTabObserver : public content::WebContentsObserver,
+                                   public base::SupportsUserData::Data {
  public:
   XplorerBookmarkTabObserver(Browser* browser, content::WebContents* contents);
   XplorerBookmarkTabObserver(const XplorerBookmarkTabObserver&) = delete;
