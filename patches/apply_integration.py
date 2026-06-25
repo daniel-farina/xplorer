@@ -601,8 +601,11 @@ def patch_vertical_sidebar(src: Path):
         )
 
     browser_ui_gn = src / "chrome/browser/ui/BUILD.gn"
-    # Single guarded block: partial middle-of-block splices break edit()'s
-    # verbatim-presence idempotency and duplicate the whole chrome-view list.
+    # Order matters: the chrome-view block below adds the
+    # xplorer_agent_tab_grouper.h line, which the scheduled_task_tabs block
+    # anchors on. On a clean chromium reset that anchor does not exist until
+    # this block adds it, so the chrome-view block MUST run first. Each block
+    # keeps its own verbatim-presence guard for idempotency.
     if "xplorer_sidebar_chrome_view.cc" not in browser_ui_gn.read_text():
         edit(
             browser_ui_gn,
@@ -630,6 +633,15 @@ def patch_vertical_sidebar(src: Path):
             '      "views/xplorer/xplorer_settings_nav.h",  # XPLORER\n'
             '      "views/xplorer/xplorer_sidebar_scheduled_view.cc",  # XPLORER\n'
             '      "views/xplorer/xplorer_sidebar_scheduled_view.h",  # XPLORER',
+        )
+
+    if "xplorer_scheduled_task_tabs.cc" not in browser_ui_gn.read_text():
+        edit(
+            browser_ui_gn,
+            '      "views/xplorer/xplorer_agent_tab_grouper.h",  # XPLORER\n',
+            '      "views/xplorer/xplorer_agent_tab_grouper.h",  # XPLORER\n'
+            '      "views/xplorer/xplorer_scheduled_task_tabs.cc",  # XPLORER\n'
+            '      "views/xplorer/xplorer_scheduled_task_tabs.h",  # XPLORER\n',
         )
 
     # XPLORER: Arc-style bookmark tabs hide their row from the vertical tab list.
