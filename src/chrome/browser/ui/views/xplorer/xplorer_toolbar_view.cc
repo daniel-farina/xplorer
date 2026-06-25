@@ -30,6 +30,9 @@
 #include "components/favicon_base/favicon_types.h"
 #include "components/keyed_service/core/service_access_type.h"
 #include "chrome/browser/ui/views/xplorer/xplorer_sidebar_prefs.h"
+#include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/views/frame/browser_view.h"
+#include "chrome/browser/ui/views/xplorer/xplorer_settings_nav.h"
 #include "chrome/browser/ui/views/xplorer/xplorer_toolbar_placement.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/color/chrome_color_id.h"
@@ -169,7 +172,7 @@ void XplorerToolbarView::Reload() {
 
 void XplorerToolbarView::OnToolbarConfigChanged() {
   Reload();
-  ApplyToolbarPlacementForBrowser(browser_);
+  ScheduleApplyToolbarPlacementForBrowser(browser_);
 }
 
 void XplorerToolbarView::OnActiveTabChanged(BrowserWindowInterface* browser) {
@@ -572,14 +575,17 @@ void XplorerToolbarView::ExecuteCommand(int command_id, int event_flags) {
   }
   if (command_id == kCmdShowToolbar) {
     SetToolbarVisible(!GetToolbarVisible());
+    ScheduleApplyToolbarPlacementForBrowser(browser_);
     return;
   }
   if (command_id == kCmdMoveToSidebar) {
     SetToolbarPlacement(ToolbarPlacement::kSidebar);
+    ScheduleApplyToolbarPlacementForBrowser(browser_);
     return;
   }
   if (command_id == kCmdMoveToTop) {
     SetToolbarPlacement(ToolbarPlacement::kTop);
+    ScheduleApplyToolbarPlacementForBrowser(browser_);
     return;
   }
   // Child dropdown items (range [3000, ...)).
@@ -635,7 +641,7 @@ int XplorerToolbarView::PillIndexForView(const views::View* view) const {
 }
 
 void XplorerToolbarView::OpenCustomizePage() {
-  Navigate(grok_companion::GetCompanionURL().Resolve("/settings"));
+  xplorer::OpenXplorerSettings(browser_);
 }
 
 // --- Drag-to-reorder -------------------------------------------------------
@@ -834,16 +840,28 @@ void XplorerToolbarView::ShowContextMenuForViewImpl(
         base::UTF8ToUTF16(std::string("Remove pill")));
   }
 
-  if (!GetWidget()) {
+  views::Widget* widget = GetWidget();
+  if (!widget && browser_) {
+    if (Browser* b = browser_->GetBrowserForMigrationOnly()) {
+      if (BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(b)) {
+        widget = browser_view->GetWidget();
+      }
+    }
+  }
+  if (!widget) {
     return;
   }
   context_menu_runner_ = std::make_unique<views::MenuRunner>(
       context_menu_model_.get(),
       views::MenuRunner::HAS_MNEMONICS | views::MenuRunner::CONTEXT_MENU);
+  gfx::Point screen_point = point;
+  if (source) {
+    views::View::ConvertPointToScreen(source, &screen_point);
+  }
   context_menu_runner_->RunMenuAt(
-      GetWidget(), /*button_controller=*/nullptr,
-      gfx::Rect(point, gfx::Size()), views::MenuAnchorPosition::kTopLeft,
-      source_type);
+      widget, /*button_controller=*/nullptr,
+      gfx::Rect(screen_point, gfx::Size()),
+      views::MenuAnchorPosition::kTopLeft, source_type);
 }
 
 BEGIN_METADATA(XplorerToolbarView)

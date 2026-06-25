@@ -194,6 +194,82 @@ def patch_native_toolbar(src: Path):
     )
 
 
+def patch_xplorer_settings_access(src: Path):
+    """Xplorer settings in app menu, chrome://settings nav, and command handler."""
+    cmd_ids = src / "chrome/app/chrome_command_ids.h"
+    edit(
+        cmd_ids,
+        "#define IDC_CHROME_ENTERPRISE_RELEASE_NOTES 40305",
+        "#define IDC_CHROME_ENTERPRISE_RELEASE_NOTES 40305\n"
+        "#define IDC_XPLORER_SETTINGS 40306  // XPLORER",
+    )
+
+    grdp = src / "chrome/app/settings_chromium_strings.grdp"
+    edit(
+        grdp,
+        "  <!-- About Page -->",
+        '  <message name="IDS_XPLORER_SETTINGS" '
+        'desc="App menu item to open Xplorer companion settings" '
+        'translateable="false">\n'
+        "    Xplorer settings\n"
+        "  </message>\n\n"
+        "  <!-- About Page -->",
+    )
+
+    app_menu = src / "chrome/browser/ui/toolbar/app_menu_model.cc"
+    edit(
+        app_menu,
+        "  AddItemWithStringIdAndVectorIcon(\n"
+        "      this, IDC_OPTIONS, IDS_SETTINGS,\n"
+        "      features::IsRoundedIconsEnabled() ? kSettingsIcon : kSettingsMenuOldIcon);\n",
+        "  AddItemWithStringIdAndVectorIcon(\n"
+        "      this, IDC_OPTIONS, IDS_SETTINGS,\n"
+        "      features::IsRoundedIconsEnabled() ? kSettingsIcon : kSettingsMenuOldIcon);\n\n"
+        "  // XPLORER: companion settings (toolbar pills, placement, visibility).\n"
+        "  AddItemWithStringId(IDC_XPLORER_SETTINGS, IDS_XPLORER_SETTINGS);\n",
+    )
+
+    bcc = src / "chrome/browser/ui/browser_command_controller.cc"
+    edit(
+        bcc,
+        '#include "chrome/browser/ui/browser_commands.h"',
+        '#include "chrome/browser/ui/browser_commands.h"\n'
+        '#include "chrome/browser/ui/views/xplorer/xplorer_settings_nav.h"  // XPLORER',
+    )
+    edit(
+        bcc,
+        "    case IDC_OPTIONS:\n"
+        "      ShowSettings(browser_->GetBrowserForOpeningWebUi());\n"
+        "      break;",
+        "    case IDC_OPTIONS:\n"
+        "      ShowSettings(browser_->GetBrowserForOpeningWebUi());\n"
+        "      break;\n"
+        "    case IDC_XPLORER_SETTINGS:  // XPLORER\n"
+        "      xplorer::OpenXplorerSettings(browser_);\n"
+        "      break;",
+    )
+
+    settings_menu = (
+        src / "chrome/browser/resources/settings/settings_menu/settings_menu.html"
+    )
+    edit(
+        settings_menu,
+        '        <a role="menuitem" id="about-menu" href="/help"\n'
+        '            class="cr-nav-menu-item">',
+        '        <a role="menuitem" id="xplorer-settings-link" class="cr-nav-menu-item"\n'
+        '            href="http://127.0.0.1:9334/settings" target="_blank"\n'
+        '            on-click="onLinkClick_"\n'
+        '            title="Toolbar, bookmarks, and Grok defaults">\n'
+        '          <cr-icon icon="settings:settings"></cr-icon>\n'
+        '          <span>Xplorer settings</span>\n'
+        '          <div class="cr-icon icon-external"></div>\n'
+        '          <cr-ripple></cr-ripple>\n'
+        '        </a>\n'
+        '        <a role="menuitem" id="about-menu" href="/help"\n'
+        '            class="cr-nav-menu-item">',
+    )
+
+
 def patch_vertical_sidebar(src: Path):
     """Arc-style sidebar chrome in the vertical tab strip.
 
@@ -374,7 +450,9 @@ def patch_vertical_sidebar(src: Path):
         '      "views/xplorer/xplorer_agent_tab_grouper.cc",  # XPLORER\n'
         '      "views/xplorer/xplorer_agent_tab_grouper.h",  # XPLORER\n'
         '      "views/xplorer/xplorer_toolbar_placement.cc",  # XPLORER\n'
-        '      "views/xplorer/xplorer_toolbar_placement.h",  # XPLORER',
+        '      "views/xplorer/xplorer_toolbar_placement.h",  # XPLORER\n'
+        '      "views/xplorer/xplorer_settings_nav.cc",  # XPLORER\n'
+        '      "views/xplorer/xplorer_settings_nav.h",  # XPLORER',
     )
     edit(
         browser_ui_gn,
@@ -1397,6 +1475,8 @@ def main(src: Path):
 
     # Arc-style vertical sidebar: bookmarks + optional toolbar + agent tab group.
     patch_vertical_sidebar(src)
+
+    patch_xplorer_settings_access(src)
 
     # Bundle the Grok companion UI into the Windows installer's version dir
     # (next to chrome.dll) so the gateway's UiDir() resolves it via DIR_MODULE on

@@ -80,13 +80,14 @@ void XplorerSidebarChromeView::AttachToolbar(XplorerToolbarView* toolbar) {
   if (!toolbar_host_ || !toolbar) {
     return;
   }
-  toolbar_host_->RemoveAllChildViews();
-  toolbar->SetVerticalLayout(true);
   if (toolbar->parent() != toolbar_host_) {
     if (toolbar->parent()) {
       toolbar->parent()->RemoveChildView(toolbar);
     }
     toolbar_host_->AddChildView(toolbar);
+  }
+  if (!toolbar->vertical_layout()) {
+    toolbar->SetVerticalLayout(true);
   }
   toolbar->SetProperty(
       views::kFlexBehaviorKey,

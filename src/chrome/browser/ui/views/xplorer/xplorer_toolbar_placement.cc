@@ -10,6 +10,7 @@
 #include "chrome/browser/ui/views/xplorer/xplorer_sidebar_chrome_view.h"
 #include "chrome/browser/ui/views/xplorer/xplorer_sidebar_prefs.h"
 #include "chrome/browser/ui/views/xplorer/xplorer_toolbar_view.h"
+#include "content/public/browser/browser_thread.h"
 
 namespace xplorer {
 
@@ -27,7 +28,11 @@ void ApplyToolbarPlacement(BrowserView* browser_view,
   const bool visible = GetToolbarVisible();
 
   if (placement == ToolbarPlacement::kSidebar && sidebar_chrome) {
-    sidebar_chrome->AttachToolbar(toolbar);
+    if (toolbar->parent() != sidebar_chrome->toolbar_host()) {
+      sidebar_chrome->AttachToolbar(toolbar);
+    } else if (!toolbar->vertical_layout()) {
+      toolbar->SetVerticalLayout(true);
+    }
   } else {
     toolbar->SetVerticalLayout(false);
     views::View* top = browser_view->top_container();
@@ -61,6 +66,14 @@ void ApplyToolbarPlacementForBrowser(BrowserWindowInterface* browser) {
     return;
   }
   ApplyToolbarPlacement(browser_view, browser_view->xplorer_sidebar_chrome());
+}
+
+void ScheduleApplyToolbarPlacementForBrowser(BrowserWindowInterface* browser) {
+  if (!browser) {
+    return;
+  }
+  content::GetUIThreadTaskRunner({})->PostTask(
+      FROM_HERE, base::BindOnce(&ApplyToolbarPlacementForBrowser, browser));
 }
 
 }  // namespace xplorer

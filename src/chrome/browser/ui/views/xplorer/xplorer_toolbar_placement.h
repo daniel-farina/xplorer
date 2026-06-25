@@ -19,6 +19,10 @@ void ApplyToolbarPlacement(BrowserView* browser_view,
 // Convenience wrapper for context-menu actions.
 void ApplyToolbarPlacementForBrowser(BrowserWindowInterface* browser);
 
+// Defers placement/visibility updates to the next UI message-loop turn so menu
+// handlers do not reparent the toolbar synchronously (which can SIGSEGV).
+void ScheduleApplyToolbarPlacementForBrowser(BrowserWindowInterface* browser);
+
 }  // namespace xplorer
 
 #endif  // CHROME_BROWSER_UI_VIEWS_XPLORER_XPLORER_TOOLBAR_PLACEMENT_H_

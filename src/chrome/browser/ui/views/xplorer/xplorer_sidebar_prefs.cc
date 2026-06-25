@@ -8,7 +8,7 @@
 #include "base/json/json_writer.h"
 #include "base/strings/string_util.h"
 #include "chrome/browser/agent_gateway/xplorer_paths.h"
-#include "chrome/browser/grok_companion/grok_companion_util.h"
+
 
 namespace xplorer {
 
@@ -62,7 +62,6 @@ void SetToolbarPlacement(ToolbarPlacement placement) {
       "placement",
       placement == ToolbarPlacement::kTop ? "top" : "sidebar");
   SaveSettings(settings);
-  grok_companion::NotifyToolbarConfigChanged();
 }
 
 bool GetToolbarVisible() {
@@ -79,7 +78,6 @@ void SetToolbarVisible(bool visible) {
   base::DictValue settings = LoadSettings();
   settings.EnsureDict("toolbar")->Set("visible", visible);
   SaveSettings(settings);
-  grok_companion::NotifyToolbarConfigChanged();
 }
 
 }  // namespace xplorer
