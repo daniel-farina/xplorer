@@ -9,6 +9,7 @@
 
 #include "base/functional/callback_forward.h"
 #include "base/memory/scoped_refptr.h"
+#include "base/no_destructor.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
@@ -97,6 +98,8 @@ class Scheduler {
   bool RemoveJob(const std::string& id);
 
  private:
+  friend class base::NoDestructor<Scheduler>;
+
   Scheduler();
   ~Scheduler();
 

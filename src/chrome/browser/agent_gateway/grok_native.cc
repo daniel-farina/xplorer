@@ -2071,8 +2071,6 @@ base::DictValue RunGrokChat(const std::string& message,
   return fallback;
 }
 
-}  // namespace
-
 // Headless dispatch for the scheduler. Mirrors the non-streaming RunAsync path
 // of POST /api/conversations/{id}/message (busy guard -> append user msg ->
 // register run -> blocking RunGrokChat -> persist reply), but with no live HTTP
@@ -2194,8 +2192,6 @@ void DispatchScheduledRun(
               },
               message, model, target_conv_id, std::move(on_done)));
 }
-
-namespace {
 
 bool ExtractSearchImage(const base::DictValue* body, SearchImageInput* out) {
   if (!body || !out)

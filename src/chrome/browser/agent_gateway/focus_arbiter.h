@@ -6,6 +6,7 @@
 
 #include <string>
 
+#include "base/no_destructor.h"
 #include "base/synchronization/lock.h"
 #include "base/thread_annotations.h"
 
@@ -57,6 +58,8 @@ class FocusArbiter {
   std::string owner();
 
  private:
+  friend class base::NoDestructor<FocusArbiter>;
+
   FocusArbiter();
   ~FocusArbiter();
 
