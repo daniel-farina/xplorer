@@ -25,6 +25,8 @@
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/geometry/vector2d.h"
 #include "chrome/browser/grok_companion/grok_companion_util.h"
+#include "chrome/browser/ui/views/xplorer/xplorer_sidebar_prefs.h"
+#include "chrome/browser/ui/views/xplorer/xplorer_toolbar_placement.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/color/chrome_color_id.h"
 #include "chrome/browser/ui/views/xplorer/xplorer_toolbar_icons.h"
@@ -81,6 +83,8 @@ constexpr int kButtonSpacing = 6;
 // child dropdown (separate SimpleMenuModels) never collide.
 constexpr int kCmdCustomize = 1;
 constexpr int kCmdHideToolbar = 2;
+constexpr int kCmdMoveToSidebar = 3;
+constexpr int kCmdMoveToTop = 4;
 constexpr int kCmdEditPillBase = 1000;    // + pill index
 constexpr int kCmdRemovePillBase = 2000;  // + pill index
 constexpr int kChildCmdBase = 3000;       // + child index
@@ -310,9 +314,40 @@ void XplorerToolbarView::RebuildButtons() {
   UpdateActiveHighlight();
 }
 
+void XplorerToolbarView::SetVerticalLayout(bool vertical) {
+  if (vertical_layout_ == vertical) {
+    return;
+  }
+  vertical_layout_ = vertical;
+  // Sidebar rail: transparent so the vertical tab strip background shows through.
+  if (vertical) {
+    SetBackground(nullptr);
+  } else {
+    SetBackground(views::CreateSolidBackground(kColorToolbar));
+  }
+  InvalidateLayout();
+  PreferredSizeChanged();
+}
+
 gfx::Size XplorerToolbarView::CalculatePreferredSize(
     const views::SizeBounds& available_size) const {
-  // Full available width; fixed scaffold height.
+  if (vertical_layout_) {
+    int height = kLeadingMargin;
+    int max_width = 0;
+    for (const PillViews& views : pill_buttons_) {
+      if (!views.main) {
+        continue;
+      }
+      const gfx::Size preferred = views.main->GetPreferredSize();
+      max_width = std::max(max_width, preferred.width());
+      height += preferred.height() + kButtonSpacing;
+    }
+    int width = max_width + 2 * kLeadingMargin;
+    if (available_size.width().is_bounded()) {
+      width = available_size.width().value();
+    }
+    return gfx::Size(width, height);
+  }
   int width = 0;
   if (available_size.width().is_bounded()) {
     width = available_size.width().value();
@@ -321,11 +356,25 @@ gfx::Size XplorerToolbarView::CalculatePreferredSize(
 }
 
 void XplorerToolbarView::Layout(PassKey) {
+  if (vertical_layout_) {
+    const int content_width = GetContentsBounds().width();
+    const int x = kLeadingMargin;
+    const int button_width = std::max(0, content_width - 2 * kLeadingMargin);
+    int y = kLeadingMargin;
+    for (const PillViews& views : pill_buttons_) {
+      if (!views.main) {
+        continue;
+      }
+      const gfx::Size preferred = views.main->GetPreferredSize();
+      views.main->SetBounds(x, y, button_width, preferred.height());
+      y += preferred.height() + kButtonSpacing;
+    }
+    return;
+  }
   const int content_height = GetContentsBounds().height();
   int x = kLeadingMargin;
   auto place = [&](XplorerToolbarPillButton* button, int trailing_gap) {
     const gfx::Size preferred = button->GetPreferredSize();
-    // Let the pill keep its intrinsic ~28px height; vertically center it.
     const int button_height = std::min(preferred.height(), content_height);
     const int y = (content_height - button_height) / 2;
     button->SetBounds(x, y, preferred.width(), button_height);
@@ -440,6 +489,16 @@ void XplorerToolbarView::ExecuteCommand(int command_id, int event_flags) {
     SetVisible(false);
     return;
   }
+  if (command_id == kCmdMoveToSidebar) {
+    SetToolbarPlacement(ToolbarPlacement::kSidebar);
+    ApplyToolbarPlacementForBrowser(browser_);
+    return;
+  }
+  if (command_id == kCmdMoveToTop) {
+    SetToolbarPlacement(ToolbarPlacement::kTop);
+    ApplyToolbarPlacementForBrowser(browser_);
+    return;
+  }
   // Child dropdown items (range [3000, ...)).
   if (command_id >= kChildCmdBase) {
     const size_t child = static_cast<size_t>(command_id - kChildCmdBase);
@@ -466,6 +525,13 @@ void XplorerToolbarView::ExecuteCommand(int command_id, int event_flags) {
 }
 
 bool XplorerToolbarView::IsCommandIdChecked(int command_id) const {
+  const ToolbarPlacement placement = GetToolbarPlacement();
+  if (command_id == kCmdMoveToSidebar) {
+    return placement == ToolbarPlacement::kSidebar;
+  }
+  if (command_id == kCmdMoveToTop) {
+    return placement == ToolbarPlacement::kTop;
+  }
   return false;
 }
 
@@ -665,6 +731,12 @@ void XplorerToolbarView::ShowContextMenuForViewImpl(
       kCmdCustomize, base::UTF8ToUTF16(std::string("Customize toolbar...")));
   context_menu_model_->AddItem(
       kCmdHideToolbar, base::UTF8ToUTF16(std::string("Hide toolbar")));
+  context_menu_model_->AddSeparator(ui::NORMAL_SEPARATOR);
+  context_menu_model_->AddCheckItem(
+      kCmdMoveToSidebar,
+      base::UTF8ToUTF16(std::string("Move toolbar to sidebar")));
+  context_menu_model_->AddCheckItem(
+      kCmdMoveToTop, base::UTF8ToUTF16(std::string("Move toolbar to top")));
   if (context_pill_ >= 0 &&
       static_cast<size_t>(context_pill_) < pills_.size()) {
     context_menu_model_->AddSeparator(ui::NORMAL_SEPARATOR);

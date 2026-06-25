@@ -189,6 +189,179 @@ def patch_native_toolbar(src: Path):
     )
 
 
+def patch_vertical_sidebar(src: Path):
+    """Arc-style sidebar chrome in the vertical tab strip.
+
+    Injects XplorerSidebarChromeView (bookmarks, Grok pills, Tabs label) at the
+    top of VerticalTabStripRegionView, auto-groups agent-owned tabs, and
+    supports toolbar.placement in grok_settings.json (top|sidebar).
+    """
+    vts_h = src / "chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h"
+    edit(
+        vts_h,
+        "class VerticalTabStripBottomContainer;",
+        "class VerticalTabStripBottomContainer;\n"
+        "namespace xplorer {\n"
+        "class XplorerSidebarChromeView;\n"
+        "}  // namespace xplorer  // XPLORER",
+    )
+    edit(
+        vts_h,
+        "  VerticalPinnedTabContainerView* GetPinnedTabsContainer();\n"
+        "  VerticalUnpinnedTabContainerView* GetUnpinnedTabsContainer();\n\n"
+        "  VerticalTabStripTopContainer* GetTopContainer() {",
+        "  VerticalPinnedTabContainerView* GetPinnedTabsContainer();\n"
+        "  VerticalUnpinnedTabContainerView* GetUnpinnedTabsContainer();\n\n"
+        "  // XPLORER: Arc-style bookmarks/toolbar chrome below the top menu bar.\n"
+        "  void InstallXplorerSidebarChrome(\n"
+        "      std::unique_ptr<xplorer::XplorerSidebarChromeView> chrome);\n"
+        "  xplorer::XplorerSidebarChromeView* xplorer_sidebar_chrome() {\n"
+        "    return xplorer_sidebar_chrome_;\n"
+        "  }\n\n"
+        "  VerticalTabStripTopContainer* GetTopContainer() {",
+    )
+    edit(
+        vts_h,
+        "  bool tab_strip_editable_for_testing_ = true;\n\n"
+        "  raw_ptr<VerticalTabStripTopContainer> top_button_container_ = nullptr;",
+        "  bool tab_strip_editable_for_testing_ = true;\n\n"
+        "  raw_ptr<xplorer::XplorerSidebarChromeView> xplorer_sidebar_chrome_ =\n"
+        "      nullptr;  // XPLORER\n"
+        "  raw_ptr<VerticalTabStripTopContainer> top_button_container_ = nullptr;",
+    )
+
+    vts_cc = src / "chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc"
+    edit(
+        vts_cc,
+        '#include "chrome/browser/ui/views/frame/browser_view.h"',
+        '#include "chrome/browser/ui/views/frame/browser_view.h"\n'
+        '#include "chrome/browser/ui/views/xplorer/xplorer_sidebar_chrome_view.h"'
+        "  // XPLORER",
+    )
+    edit(
+        vts_cc,
+        "VerticalTabStripRegionView::~VerticalTabStripRegionView() {",
+        "void VerticalTabStripRegionView::InstallXplorerSidebarChrome(\n"
+        "    std::unique_ptr<xplorer::XplorerSidebarChromeView> chrome) {\n"
+        "  // Below the collapse/tab-search top bar, not above it.\n"
+        "  size_t insert_index = 0;\n"
+        "  if (top_button_separator_) {\n"
+        "    insert_index = GetIndexOf(top_button_separator_).value() + 1;\n"
+        "  } else if (top_button_container_) {\n"
+        "    insert_index = GetIndexOf(top_button_container_).value() + 1;\n"
+        "  }\n"
+        "  xplorer_sidebar_chrome_ = AddChildViewAt(std::move(chrome), insert_index);\n"
+        "  const int region_horizontal_padding =\n"
+        "      GetLayoutConstant(LayoutConstant::kVerticalTabStripHorizontalPadding);\n"
+        "  xplorer_sidebar_chrome_->SetProperty(\n"
+        "      views::kMarginsKey, gfx::Insets::VH(0, region_horizontal_padding));\n"
+        "  xplorer_sidebar_chrome_->SetProperty(\n"
+        "      views::kFlexBehaviorKey,\n"
+        "      views::FlexSpecification(views::MinimumFlexSizeRule::kPreferred,\n"
+        "                               views::MaximumFlexSizeRule::kPreferred));\n"
+        "}\n\n"
+        "VerticalTabStripRegionView::~VerticalTabStripRegionView() {",
+    )
+    edit(
+        vts_cc,
+        "  std::optional<size_t> separator_index = GetIndexOf(top_button_separator_);\n"
+        "  CHECK(separator_index.has_value());\n"
+        "  ReorderChildView(tab_strip_view_, separator_index.value() + 1);",
+        "  std::optional<size_t> separator_index = GetIndexOf(top_button_separator_);\n"
+        "  CHECK(separator_index.has_value());\n"
+        "  size_t tab_strip_index = separator_index.value() + 1;\n"
+        "  if (xplorer_sidebar_chrome_) {\n"
+        "    tab_strip_index = GetIndexOf(xplorer_sidebar_chrome_).value() + 1;\n"
+        "  }\n"
+        "  ReorderChildView(tab_strip_view_, tab_strip_index);  // XPLORER",
+    )
+
+    browser_view_h = src / "chrome/browser/ui/views/frame/browser_view.h"
+    edit(
+        browser_view_h,
+        "namespace xplorer {\n"
+        "class XplorerToolbarView;\n"
+        "}  // namespace xplorer  // XPLORER",
+        "namespace xplorer {\n"
+        "class AgentTabGrouper;\n"
+        "class XplorerSidebarChromeView;\n"
+        "class XplorerToolbarView;\n"
+        "}  // namespace xplorer  // XPLORER",
+    )
+    edit(
+        browser_view_h,
+        "  TopContainerView* top_container() { return top_container_; }",
+        "  TopContainerView* top_container() { return top_container_; }\n\n"
+        "  // XPLORER: native Grok pill toolbar (top or sidebar placement).\n"
+        "  xplorer::XplorerToolbarView* xplorer_toolbar() {\n"
+        "    return xplorer_toolbar_;\n"
+        "  }\n"
+        "  VerticalTabStripRegionView* vertical_tab_strip_region_view() {\n"
+        "    return vertical_tab_strip_region_view_;\n"
+        "  }\n"
+        "  xplorer::XplorerSidebarChromeView* xplorer_sidebar_chrome() {\n"
+        "    return xplorer_sidebar_chrome_;\n"
+        "  }",
+    )
+    edit(
+        browser_view_h,
+        "  raw_ptr<xplorer::XplorerToolbarView> xplorer_toolbar_ = nullptr;",
+        "  raw_ptr<xplorer::XplorerToolbarView> xplorer_toolbar_ = nullptr;\n"
+        "  raw_ptr<xplorer::XplorerSidebarChromeView> xplorer_sidebar_chrome_ =\n"
+        "      nullptr;  // XPLORER\n"
+        "  std::unique_ptr<xplorer::AgentTabGrouper> agent_tab_grouper_;  // XPLORER",
+    )
+
+    browser_view_cc = src / "chrome/browser/ui/views/frame/browser_view.cc"
+    edit(
+        browser_view_cc,
+        '#include "chrome/browser/ui/views/xplorer/xplorer_toolbar_view.h"  // XPLORER',
+        '#include "chrome/browser/ui/views/xplorer/xplorer_agent_tab_grouper.h"  // XPLORER\n'
+        '#include "chrome/browser/ui/views/xplorer/xplorer_sidebar_chrome_view.h"  // XPLORER\n'
+        '#include "chrome/browser/ui/views/xplorer/xplorer_toolbar_placement.h"  // XPLORER\n'
+        '#include "chrome/browser/ui/views/xplorer/xplorer_toolbar_view.h"  // XPLORER',
+    )
+    edit(
+        browser_view_cc,
+        "    vertical_tab_strip_region_view_ =\n"
+        "        AddChildView(std::move(vertical_tab_strip_container));",
+        "    vertical_tab_strip_region_view_ =\n"
+        "        AddChildView(std::move(vertical_tab_strip_container));\n\n"
+        "    // XPLORER: Arc-style sidebar chrome (bookmarks, Grok pills, Tabs\n"
+        "    // label) + auto-group agent-owned tabs.\n"
+        "    {\n"
+        "      auto sidebar_chrome =\n"
+        "          std::make_unique<xplorer::XplorerSidebarChromeView>(\n"
+        "              browser_.get(), browser_->profile());\n"
+        "      xplorer_sidebar_chrome_ = sidebar_chrome.get();\n"
+        "      vertical_tab_strip_region_view_->InstallXplorerSidebarChrome(\n"
+        "          std::move(sidebar_chrome));\n"
+        "      agent_tab_grouper_ = std::make_unique<xplorer::AgentTabGrouper>(\n"
+        "          browser_->GetTabStripModel());\n"
+        "      xplorer::ApplyToolbarPlacement(this, xplorer_sidebar_chrome_);\n"
+        "    }",
+    )
+
+    browser_ui_gn = src / "chrome/browser/ui/BUILD.gn"
+    edit(
+        browser_ui_gn,
+        '      "views/xplorer/xplorer_toolbar_icons.h",  # XPLORER',
+        '      "views/xplorer/xplorer_toolbar_icons.h",  # XPLORER\n'
+        '      "views/xplorer/xplorer_sidebar_chrome_view.cc",  # XPLORER\n'
+        '      "views/xplorer/xplorer_sidebar_chrome_view.h",  # XPLORER\n'
+        '      "views/xplorer/xplorer_sidebar_bookmarks_view.cc",  # XPLORER\n'
+        '      "views/xplorer/xplorer_sidebar_bookmarks_view.h",  # XPLORER\n'
+        '      "views/xplorer/xplorer_sidebar_section_label.cc",  # XPLORER\n'
+        '      "views/xplorer/xplorer_sidebar_section_label.h",  # XPLORER\n'
+        '      "views/xplorer/xplorer_sidebar_prefs.cc",  # XPLORER\n'
+        '      "views/xplorer/xplorer_sidebar_prefs.h",  # XPLORER\n'
+        '      "views/xplorer/xplorer_agent_tab_grouper.cc",  # XPLORER\n'
+        '      "views/xplorer/xplorer_agent_tab_grouper.h",  # XPLORER\n'
+        '      "views/xplorer/xplorer_toolbar_placement.cc",  # XPLORER\n'
+        '      "views/xplorer/xplorer_toolbar_placement.h",  # XPLORER',
+    )
+
+
 def main(src: Path):
     # 1. Start the AgentGateway once the browser UI is up.
     main_cc = src / "chrome/browser/chrome_browser_main.cc"
@@ -1198,6 +1371,9 @@ def main(src: Path):
 
     # Native browser-chrome Xplorer pill toolbar (scaffold).
     patch_native_toolbar(src)
+
+    # Arc-style vertical sidebar: bookmarks + optional toolbar + agent tab group.
+    patch_vertical_sidebar(src)
 
     # Bundle the Grok companion UI into the Windows installer's version dir
     # (next to chrome.dll) so the gateway's UiDir() resolves it via DIR_MODULE on

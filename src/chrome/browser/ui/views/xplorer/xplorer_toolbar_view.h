@@ -88,6 +88,10 @@ class XplorerToolbarView : public views::AccessiblePaneView,
   // settings observer (later iteration); exposed so callers can refresh.
   void Reload();
 
+  // When true, pills stack vertically for the Arc-style sidebar rail.
+  void SetVerticalLayout(bool vertical);
+  bool vertical_layout() const { return vertical_layout_; }
+
   // views::View:
   gfx::Size CalculatePreferredSize(
       const views::SizeBounds& available_size) const override;
@@ -209,6 +213,8 @@ class XplorerToolbarView : public views::AccessiblePaneView,
   // Drag-reorder state. |drop_index_| is the live insertion marker during a
   // drag (-1 when not dragging), used to paint the drop indicator.
   int drop_index_ = -1;
+
+  bool vertical_layout_ = false;
 
   base::WeakPtrFactory<XplorerToolbarView> weak_factory_{this};
 };
