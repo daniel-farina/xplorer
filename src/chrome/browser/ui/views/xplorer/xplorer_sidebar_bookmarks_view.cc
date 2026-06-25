@@ -11,9 +11,8 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
-#include "chrome/browser/ui/navigator/browser_navigator.h"
-#include "chrome/browser/ui/navigator/browser_navigator_params.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "chrome/browser/ui/views/xplorer/xplorer_bookmark_tabs.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/xplorer/xplorer_sidebar_row_button.h"
 #include "chrome/browser/ui/views/xplorer/xplorer_sidebar_section_label.h"
@@ -48,6 +47,7 @@ XplorerSidebarBookmarksView::XplorerSidebarBookmarksView(
     Profile* profile)
     : browser_(browser), profile_(profile) {
   set_context_menu_controller(this);
+  SetBackground(nullptr);
   auto* layout = SetLayoutManager(std::make_unique<views::BoxLayout>(
       views::BoxLayout::Orientation::kVertical));
   layout->set_cross_axis_alignment(
@@ -58,6 +58,12 @@ XplorerSidebarBookmarksView::XplorerSidebarBookmarksView(
     model_observation_.Observe(model_);
     if (model_->loaded()) {
       Rebuild();
+    }
+  }
+  if (browser_) {
+    if (TabStripModel* tabs = browser_->GetTabStripModel()) {
+      tab_strip_observation_.Observe(tabs);
+      UpdateActiveHighlight();
     }
   }
 }
@@ -168,6 +174,7 @@ void XplorerSidebarBookmarksView::Rebuild() {
       break;
     }
   }
+  UpdateActiveHighlight();
 }
 
 void XplorerSidebarBookmarksView::UpdateRowIcon(
@@ -204,29 +211,40 @@ void XplorerSidebarBookmarksView::OnBookmarkPressed(
   if (!node || !node->is_url() || !browser_) {
     return;
   }
+  OpenBookmarkTab(browser_, node->url());
+  UpdateActiveHighlight();
+}
+
+void XplorerSidebarBookmarksView::OnTabStripModelChanged(
+    TabStripModel* tab_strip_model,
+    const TabStripModelChange& change,
+    const TabStripSelectionChange& selection) {
+  if (Browser* browser = browser_ ? browser_->GetBrowserForMigrationOnly()
+                                  : nullptr) {
+    ReassertHiddenBookmarkTabRows(browser);
+  }
+  UpdateActiveHighlight();
+}
+
+void XplorerSidebarBookmarksView::UpdateActiveHighlight() {
+  if (!browser_ || !model_) {
+    return;
+  }
   TabStripModel* tabs = browser_->GetTabStripModel();
-  if (!tabs) {
-    return;
-  }
-  // A sidebar bookmark behaves like a persistent tab (Arc-style): if a tab is
-  // already open at this URL, switch to it; otherwise open it in a new
-  // foreground tab. Never reload the active tab in place — that would replace
-  // whatever the user is currently looking at.
-  const GURL& url = node->url();
-  for (int i = 0; i < tabs->count(); ++i) {
-    content::WebContents* wc = tabs->GetWebContentsAt(i);
-    if (wc && wc->GetLastCommittedURL() == url) {
-      tabs->ActivateTabAt(i);
-      return;
+  content::WebContents* active = tabs ? tabs->GetActiveWebContents() : nullptr;
+  for (const BookmarkRow& row : rows_) {
+    if (!row.button) {
+      continue;
     }
+    bool selected = false;
+    if (active) {
+      const bookmarks::BookmarkNode* node = model_->GetNodeByID(row.node_id);
+      if (node && node->is_url()) {
+        selected = IsBookmarkTabOnUrl(active, node->url());
+      }
+    }
+    row.button->SetSelected(selected);
   }
-  Browser* target = browser_->GetBrowserForMigrationOnly();
-  if (!target) {
-    return;
-  }
-  NavigateParams params(target, url, ui::PAGE_TRANSITION_AUTO_BOOKMARK);
-  params.disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
-  Navigate(&params);
 }
 
 BEGIN_METADATA(XplorerSidebarBookmarksView)

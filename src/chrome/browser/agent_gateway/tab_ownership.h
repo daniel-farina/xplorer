@@ -7,6 +7,7 @@
 #include <string>
 
 #include "base/supports_user_data.h"
+#include "url/gurl.h"
 
 namespace content {
 class WebContents;
@@ -44,6 +45,11 @@ class TabOwnership : public base::SupportsUserData::Data {
   // false for user/foreground tabs. Agent tabs default to background so they
   // never steal the user's focus.
   bool background = false;
+
+  // When non-empty, this tab is an Arc-style sidebar bookmark tab: its row is
+  // hidden from the vertical Tabs strip until navigation leaves |bookmark_url|'s
+  // host (then the row is shown again and this field is cleared).
+  GURL bookmark_url;
 
   // Per-tab activity counters — what the in-tab HUD shows, so each tab
   // reflects only the agent controlling it (not a global blend).

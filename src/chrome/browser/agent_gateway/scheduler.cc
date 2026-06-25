@@ -205,6 +205,8 @@ void Scheduler::Poll() {
   for (Job& job : jobs_) {
     if (!job.enabled)
       continue;
+    if (job.last_status == "running")
+      continue;
     if (job.next_fire_us <= 0 || job.next_fire_us > now_us)
       continue;
     FireJob(&job);
@@ -226,6 +228,8 @@ void Scheduler::FireJob(Job* job) {
   } else if (job->once_at_us > 0) {
     job->enabled = false;
     job->next_fire_us = 0;
+  } else if (!job->cron.empty()) {
+    ComputeNextFire(job, now);
   }
 
   DispatchJob(*job);

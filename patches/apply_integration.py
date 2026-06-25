@@ -646,6 +646,53 @@ def patch_vertical_sidebar(src: Path):
             '      "views/xplorer/xplorer_sidebar_scheduled_view.cc",  # XPLORER\n'
             '      "views/xplorer/xplorer_sidebar_scheduled_view.h",  # XPLORER',
         )
+    if "xplorer_bookmark_tabs.cc" not in browser_ui_gn.read_text():
+        edit(
+            browser_ui_gn,
+            '      "views/xplorer/xplorer_sidebar_bookmarks_view.cc",  # XPLORER\n'
+            '      "views/xplorer/xplorer_sidebar_bookmarks_view.h",  # XPLORER\n',
+            '      "views/xplorer/xplorer_sidebar_bookmarks_view.cc",  # XPLORER\n'
+            '      "views/xplorer/xplorer_sidebar_bookmarks_view.h",  # XPLORER\n'
+            '      "views/xplorer/xplorer_bookmark_tabs.cc",  # XPLORER\n'
+            '      "views/xplorer/xplorer_bookmark_tabs.h",  # XPLORER\n'
+            '      "views/xplorer/xplorer_bookmark_tab_observer.cc",  # XPLORER\n'
+            '      "views/xplorer/xplorer_bookmark_tab_observer.h",  # XPLORER\n',
+        )
+
+    # XPLORER: Arc-style bookmark tabs hide their row from the vertical tab list.
+    vts_view_h = (src / "chrome/browser/ui/views/tabs/vertical/"
+                  "vertical_tab_strip_view.h")
+    if "SetTabRowVisible" not in vts_view_h.read_text():
+        edit(
+            vts_view_h,
+            "  void OnTabChanged(const tabs::TabInterface* active_tab);\n\n"
+            "  void RecordMousePressedInTab();",
+            "  void OnTabChanged(const tabs::TabInterface* active_tab);\n\n"
+            "  // XPLORER: hide/show a tab row (Arc-style sidebar bookmark tabs).\n"
+            "  void SetTabRowVisible(const tabs::TabHandle& handle, bool visible);\n\n"
+            "  void RecordMousePressedInTab();",
+        )
+    vts_view_cc = (src / "chrome/browser/ui/views/tabs/vertical/"
+                   "vertical_tab_strip_view.cc")
+    if "VerticalTabStripView::SetTabRowVisible" not in vts_view_cc.read_text():
+        edit(
+            vts_view_cc,
+            "BEGIN_METADATA(VerticalTabStripView)",
+            "void VerticalTabStripView::SetTabRowVisible(\n"
+            "    const tabs::TabHandle& handle,\n"
+            "    bool visible) {\n"
+            "  if (!collection_node_) {\n"
+            "    return;\n"
+            "  }\n"
+            "  TabCollectionNode* node = collection_node_->GetNodeForHandle(handle);\n"
+            "  if (!node || !node->view()) {\n"
+            "    return;\n"
+            "  }\n"
+            "  node->view()->SetVisible(visible);\n"
+            "  InvalidateLayout();\n"
+            "}\n\n"
+            "BEGIN_METADATA(VerticalTabStripView)",
+        )
 
 
 def main(src: Path):
