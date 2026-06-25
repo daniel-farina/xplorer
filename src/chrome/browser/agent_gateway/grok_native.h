@@ -60,6 +60,25 @@ void RunGrokAgentStream(
     const std::string& model,
     const base::FilePath& cwd);
 
+// Headless run dispatch for the background-task scheduler: runs |message| with
+// |model| and appends the reply to conversation |target_conv_id|, with NO live
+// HTTP connection. Reuses the same machinery as POST /api/conversations/{id}/
+// message (append user msg -> register in ActiveRuns -> blocking RunGrokChat ->
+// SaveChatAssistantReply), including the busy guard. If |target_conv_id| is
+// empty a new conversation is created. The blocking run is posted to a
+// base::ThreadPool {MayBlock, USER_VISIBLE} task, so this returns immediately.
+//
+// |on_done| (optional) is invoked on the ThreadPool task once the run resolves,
+// with the final status string ("ok" | "failed" | "skipped") and the conv_id
+// the run was appended to (newly minted if |target_conv_id| was empty). The
+// scheduler uses it to stamp last_status / last_fire_us back onto the job.
+void DispatchScheduledRun(
+    const std::string& message,
+    const std::string& model,
+    const std::string& target_conv_id,
+    base::OnceCallback<void(const std::string& status,
+                            const std::string& conv_id)> on_done);
+
 class GrokNative {
  public:
   // Returns true if |info| was handled (response sent or async work started).

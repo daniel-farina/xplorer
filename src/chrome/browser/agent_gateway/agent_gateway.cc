@@ -6,6 +6,7 @@
 #include "chrome/browser/agent_gateway/browser_api.h"
 #include "chrome/browser/agent_gateway/focus_arbiter.h"
 #include "chrome/browser/agent_gateway/grok_companion_launcher.h"
+#include "chrome/browser/agent_gateway/scheduler.h"
 #include "chrome/browser/agent_gateway/xplorer_paths.h"
 #include "chrome/browser/agent_gateway/grok_native.h"
 
@@ -116,6 +117,12 @@ void AgentGateway::StartServerOnIOThread(int port) {
     base::WriteFile(dir.AppendASCII("gateway.json"), json);
   }
   WriteCompanionDiscovery(port_);
+
+  // The background-task scheduler is owned by the gateway (process-lifetime
+  // singleton). Arm it here, on server_thread_, so its base::RepeatingTimer
+  // runs on the gateway IO thread (the run machinery hops to the UI thread as
+  // needed). Loads schedules.json and re-arms persisted jobs across restarts.
+  Scheduler::Get()->Start();
 }
 
 bool AgentGateway::CheckAuth(const net::HttpServerRequestInfo& info) {

@@ -49,6 +49,7 @@
 #include "chrome/browser/agent_gateway/app_store.h"
 #include "chrome/browser/agent_gateway/browser_api.h"
 #include "chrome/browser/agent_gateway/focus_arbiter.h"
+#include "chrome/browser/agent_gateway/scheduler.h"
 #include "chrome/browser/agent_gateway/xplorer_paths.h"
 #include "chrome/browser/grok_companion/grok_companion_util.h"
 #include "chrome/browser/agent_gateway/tab_screenshot.h"
@@ -2070,6 +2071,132 @@ base::DictValue RunGrokChat(const std::string& message,
   return fallback;
 }
 
+}  // namespace
+
+// Headless dispatch for the scheduler. Mirrors the non-streaming RunAsync path
+// of POST /api/conversations/{id}/message (busy guard -> append user msg ->
+// register run -> blocking RunGrokChat -> persist reply), but with no live HTTP
+// connection: the reply is written straight into companion_sessions.json so the
+// user can read it later. The blocking grok run is hopped onto a ThreadPool
+// task so the caller (the scheduler poll on the IO thread) does not block.
+void DispatchScheduledRun(
+    const std::string& message,
+    const std::string& model,
+    const std::string& target_conv_id,
+    base::OnceCallback<void(const std::string& status,
+                            const std::string& conv_id)> on_done) {
+  base::ThreadPool::CreateSequencedTaskRunner(
+      {base::MayBlock(), base::TaskPriority::USER_VISIBLE})
+      ->PostTask(
+          FROM_HERE,
+          base::BindOnce(
+              [](std::string message, std::string model,
+                 std::string conv_id,
+                 base::OnceCallback<void(const std::string&,
+                                         const std::string&)>
+                     on_done) {
+                auto finish = [&](const std::string& status,
+                                  const std::string& cid) {
+                  if (on_done)
+                    std::move(on_done).Run(status, cid);
+                };
+
+                base::DictValue data = LoadSessions();
+                base::ListValue* convs = data.FindList("conversations");
+                if (!convs) {
+                  data.Set("conversations", base::ListValue());
+                  convs = data.FindList("conversations");
+                }
+
+                // Locate the target conversation; auto-create one if the job
+                // has no target_conv_id (mirrors POST /api/conversations).
+                base::DictValue* conv = nullptr;
+                if (!conv_id.empty()) {
+                  for (auto& v : *convs) {
+                    if (!v.is_dict())
+                      continue;
+                    const std::string* cid = v.GetDict().FindString("id");
+                    if (cid && *cid == conv_id) {
+                      conv = &v.GetDict();
+                      break;
+                    }
+                  }
+                }
+                if (!conv) {
+                  base::DictValue fresh;
+                  conv_id = base::HexEncode(base::RandBytesAsVector(8));
+                  fresh.Set("id", conv_id);
+                  fresh.Set("title",
+                            message.substr(0, std::min<size_t>(48,
+                                                               message.size())));
+                  fresh.Set("session_id", base::Value());
+                  fresh.Set("messages", base::ListValue());
+                  convs->Append(std::move(fresh));
+                  conv = &convs->back().GetDict();
+                }
+
+                // Busy guard: if a run for this conversation is already active,
+                // skip this fire (same 409 semantics as the message handler).
+                {
+                  base::AutoLock l(ActiveRunsLock());
+                  if (ActiveRuns().count(conv_id)) {
+                    finish("skipped", conv_id);
+                    return;
+                  }
+                }
+
+                // Append the job's user message + persist before running, so the
+                // conversation reflects the fire even if grok later fails.
+                base::ListValue* msgs = conv->FindList("messages");
+                if (!msgs) {
+                  conv->Set("messages", base::ListValue());
+                  msgs = conv->FindList("messages");
+                }
+                base::DictValue user_msg;
+                user_msg.Set("role", "user");
+                user_msg.Set("content", message);
+                msgs->Append(std::move(user_msg));
+                if (const std::string* title = conv->FindString("title");
+                    title && *title == "New chat") {
+                  conv->Set("title",
+                            message.substr(0, std::min<size_t>(48,
+                                                               message.size())));
+                }
+                std::string session_id;
+                if (const std::string* sid = conv->FindString("session_id"))
+                  session_id = *sid;
+                SaveSessions(data);
+
+                // Register the run so POST /api/conversations/{id}/stop can
+                // cancel it and the busy guard rejects overlapping fires. The
+                // blocking RunGrokChat does not expose a PID (it uses
+                // GetAppOutputWithExitCode), so register a null pid — /stop will
+                // report "not running" for it, but the 409 guard still holds.
+                RegisterActiveRun(conv_id, base::kNullProcessId);
+                base::DictValue result = RunGrokChat(message, session_id, model);
+                UnregisterActiveRun(conv_id);
+
+                if (const std::string* err = result.FindString("error")) {
+                  // Record the failure as an assistant message so the user sees
+                  // why the scheduled run did not produce a result.
+                  SaveChatAssistantReply(
+                      conv_id, std::string("Scheduled run failed: ") + *err,
+                      session_id);
+                  finish("failed", conv_id);
+                  return;
+                }
+
+                const std::string* new_sid = result.FindString("sessionId");
+                const std::string* text = result.FindString("text");
+                SaveChatAssistantReply(conv_id, text ? *text : std::string(),
+                                       new_sid ? *new_sid : std::string());
+                finish("ok", conv_id);
+              },
+              message, model, target_conv_id, std::move(on_done)));
+}
+
+namespace {
+
 bool ExtractSearchImage(const base::DictValue* body, SearchImageInput* out) {
   if (!body || !out)
     return false;
@@ -2673,6 +2800,47 @@ bool GrokNative::TryHandleRequest(
 
   if (info.method == "GET" && path == "/api/conversations") {
     SendJson(server, connection_id, net::HTTP_OK, LoadSessions());
+    return true;
+  }
+
+  // --- Background-task schedules (Scheduler, design §3.3 / §4.1) -----------
+  // GET /api/schedules — list all jobs ({"version":1,"jobs":[...]}). Mirrors
+  // the conversation listing style.
+  if (info.method == "GET" && path == "/api/schedules") {
+    SendJson(server, connection_id, net::HTTP_OK,
+             Scheduler::Get()->ListJobsDict());
+    return true;
+  }
+
+  // POST /api/schedules — create or update a job from the JSON body. The
+  // scheduler computes the initial next_fire_us and persists schedules.json.
+  if (info.method == "POST" && path == "/api/schedules") {
+    auto body = base::JSONReader::ReadDict(info.data, base::JSON_PARSE_RFC);
+    if (!body) {
+      base::DictValue err;
+      err.Set("error", "invalid JSON body");
+      SendJson(server, connection_id, net::HTTP_BAD_REQUEST, std::move(err));
+      return true;
+    }
+    base::DictValue result = Scheduler::Get()->UpsertJobFromDict(*body);
+    if (result.FindString("error")) {
+      SendJson(server, connection_id, net::HTTP_BAD_REQUEST, std::move(result));
+    } else {
+      SendJson(server, connection_id, net::HTTP_OK, std::move(result));
+    }
+    return true;
+  }
+
+  // DELETE /api/schedules/{id} — remove a job and persist.
+  if (info.method == "DELETE" &&
+      base::StartsWith(path, "/api/schedules/")) {
+    std::string id = path.substr(std::string("/api/schedules/").size());
+    const bool removed = Scheduler::Get()->RemoveJob(id);
+    base::DictValue d;
+    d.Set("ok", true);
+    d.Set("removed", removed);
+    SendJson(server, connection_id,
+             removed ? net::HTTP_OK : net::HTTP_NOT_FOUND, std::move(d));
     return true;
   }
 
