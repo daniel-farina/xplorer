@@ -21,6 +21,8 @@ namespace xplorer {
 class XplorerSidebarBookmarksView;
 class XplorerToolbarView;
 
+enum class ToolbarPlacement;
+
 // Arc-style chrome injected at the top of the vertical tab strip: bookmarks,
 // optional Grok pill toolbar, and a "Tabs" section label.
 class XplorerSidebarChromeView : public views::View,
@@ -38,6 +40,9 @@ class XplorerSidebarChromeView : public views::View,
   views::View* toolbar_host() { return toolbar_host_; }
   void AttachToolbar(XplorerToolbarView* toolbar);
 
+  // Shows/hides the bookmarks + toolbar block; only "Tabs" remains when at top.
+  void UpdateForToolbarPlacement(ToolbarPlacement placement);
+
   // views::ContextMenuController:
   void ShowContextMenuForViewImpl(
       views::View* source,
@@ -49,6 +54,7 @@ class XplorerSidebarChromeView : public views::View,
   const raw_ptr<Profile> profile_;
   raw_ptr<XplorerSidebarBookmarksView> bookmarks_ = nullptr;
   raw_ptr<views::View> toolbar_host_ = nullptr;
+  raw_ptr<views::View> bookmarks_separator_ = nullptr;
 };
 
 }  // namespace xplorer

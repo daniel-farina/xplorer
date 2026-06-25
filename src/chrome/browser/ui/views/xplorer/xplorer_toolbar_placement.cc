@@ -26,6 +26,7 @@ void ApplyToolbarPlacement(BrowserView* browser_view,
   const ToolbarPlacement placement = GetToolbarPlacement();
   if (placement == ToolbarPlacement::kSidebar && sidebar_chrome) {
     sidebar_chrome->AttachToolbar(toolbar);
+    sidebar_chrome->UpdateForToolbarPlacement(ToolbarPlacement::kSidebar);
     toolbar->SetVisible(true);
   } else {
     toolbar->SetVerticalLayout(false);
@@ -37,8 +38,8 @@ void ApplyToolbarPlacement(BrowserView* browser_view,
       top->AddChildView(toolbar);
     }
     toolbar->SetVisible(true);
-    if (sidebar_chrome && sidebar_chrome->toolbar_host()) {
-      sidebar_chrome->toolbar_host()->SetVisible(false);
+    if (sidebar_chrome) {
+      sidebar_chrome->UpdateForToolbarPlacement(ToolbarPlacement::kTop);
     }
   }
   browser_view->InvalidateLayout();

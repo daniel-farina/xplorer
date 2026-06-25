@@ -9,6 +9,7 @@
 #include "chrome/browser/ui/views/xplorer/xplorer_sidebar_section_label.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
+#include "chrome/browser/ui/views/xplorer/xplorer_sidebar_prefs.h"
 #include "chrome/browser/ui/views/xplorer/xplorer_toolbar_view.h"
 #include "ui/base/mojom/menu_source_type.mojom.h"
 #include "ui/gfx/geometry/point.h"
@@ -47,8 +48,10 @@ XplorerSidebarChromeView::XplorerSidebarChromeView(
   toolbar_host->SetProperty(views::kMarginsKey, kHostInsets);
   toolbar_host_ = AddChildView(std::move(toolbar_host));
 
-  AddChildView(std::make_unique<views::Separator>());
+  bookmarks_separator_ = AddChildView(std::make_unique<views::Separator>());
   AddChildView(std::make_unique<XplorerSidebarSectionLabel>(u"Tabs"));
+
+  UpdateForToolbarPlacement(GetToolbarPlacement());
 }
 
 XplorerSidebarChromeView::~XplorerSidebarChromeView() = default;
@@ -91,7 +94,23 @@ void XplorerSidebarChromeView::AttachToolbar(XplorerToolbarView* toolbar) {
           .WithWeight(0));
   toolbar_host_->SetVisible(true);
   toolbar->SetVisible(true);
-  SizeToPreferredSize();
+  UpdateForToolbarPlacement(ToolbarPlacement::kSidebar);
+}
+
+void XplorerSidebarChromeView::UpdateForToolbarPlacement(
+    ToolbarPlacement placement) {
+  const bool show_bookmarks_block = placement == ToolbarPlacement::kSidebar;
+  if (bookmarks_) {
+    bookmarks_->SetVisible(show_bookmarks_block);
+  }
+  if (toolbar_host_) {
+    toolbar_host_->SetVisible(show_bookmarks_block);
+  }
+  if (bookmarks_separator_) {
+    bookmarks_separator_->SetVisible(show_bookmarks_block);
+  }
+  PreferredSizeChanged();
+  InvalidateLayout();
 }
 
 BEGIN_METADATA(XplorerSidebarChromeView)
