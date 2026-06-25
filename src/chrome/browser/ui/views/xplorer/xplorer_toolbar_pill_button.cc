@@ -6,6 +6,7 @@
 #include <utility>
 
 #include "chrome/browser/ui/color/chrome_color_id.h"
+#include "chrome/browser/ui/layout_constants.h"
 #include "chrome/browser/ui/views/location_bar/location_bar_util.h"
 #include "chrome/browser/ui/views/xplorer/xplorer_toolbar_icons.h"
 #include "third_party/skia/include/core/SkColor.h"
@@ -73,9 +74,48 @@ void XplorerToolbarPillButton::SetSelected(bool selected) {
   SchedulePaint();
 }
 
+void XplorerToolbarPillButton::SetSidebarRowStyle(bool sidebar_row) {
+  if (sidebar_row_style_ == sidebar_row) {
+    return;
+  }
+  sidebar_row_style_ = sidebar_row;
+  if (sidebar_row) {
+    SetImageLabelSpacing(8);
+    SetCornerRadius(
+        GetLayoutConstant(LayoutConstant::kVerticalTabCornerRadius));
+    label()->SetTextStyle(views::style::STYLE_BODY_4);
+  } else {
+    SetImageLabelSpacing(kImageLabelSpacing);
+    SetCornerRadius(kCornerRadius);
+    label()->SetTextStyle(views::style::STYLE_BODY_4_EMPHASIS);
+  }
+  UpdatePadding();
+  if (GetColorProvider()) {
+    SetEnabledTextColors(sidebar_row_style_
+                             ? kColorTabForegroundInactiveFrameInactive
+                             : kColorToolbarText);
+  }
+  UpdateBackgroundColor();
+  PreferredSizeChanged();
+}
+
+gfx::Size XplorerToolbarPillButton::CalculatePreferredSize(
+    const views::SizeBounds& available_size) const {
+  gfx::Size size = MdTextButton::CalculatePreferredSize(available_size);
+  if (sidebar_row_style_) {
+    size.set_height(GetLayoutConstant(LayoutConstant::kVerticalTabHeight));
+    if (available_size.width().is_bounded()) {
+      size.set_width(available_size.width().value());
+    }
+  }
+  return size;
+}
+
 void XplorerToolbarPillButton::OnThemeChanged() {
   MdTextButton::OnThemeChanged();
-  SetEnabledTextColors(kColorToolbarText);
+  SetEnabledTextColors(sidebar_row_style_
+                           ? kColorTabForegroundInactiveFrameInactive
+                           : kColorToolbarText);
   ConfigureInkDropForRefresh2023(this, kColorToolbarInkDropHover,
                                  kColorToolbarInkDropRipple);
   UpdateIconImage();
@@ -92,16 +132,22 @@ void XplorerToolbarPillButton::UpdateBackgroundColor() {
           ? color_provider->GetColor(
                 kColorToolbarButtonBackgroundHighlightedDefault)
           : color_provider->GetColor(kColorToolbarBackgroundSubtleEmphasis);
-  SetBackground(views::CreateRoundedRectBackground(background, kCornerRadius));
+  const int radius =
+      sidebar_row_style_
+          ? GetLayoutConstant(LayoutConstant::kVerticalTabCornerRadius)
+          : kCornerRadius;
+  SetBackground(views::CreateRoundedRectBackground(background, radius));
 }
 
 void XplorerToolbarPillButton::UpdateIconImage() {
   if (!icon_ || !GetColorProvider()) {
     return;
   }
+  const SkColor icon_color = sidebar_row_style_
+                                 ? kColorTabForegroundInactiveFrameInactive
+                                 : kColorToolbarButtonIcon;
   SetImageModel(views::Button::STATE_NORMAL,
-                ui::ImageModel::FromVectorIcon(*icon_, kColorToolbarButtonIcon,
-                                               kIconSize));
+                ui::ImageModel::FromVectorIcon(*icon_, icon_color, kIconSize));
 }
 
 void XplorerToolbarPillButton::SetHasDropdownCaret(bool has_caret) {
@@ -109,12 +155,17 @@ void XplorerToolbarPillButton::SetHasDropdownCaret(bool has_caret) {
     return;
   }
   has_caret_ = has_caret;
-  // Reserve room on the trailing edge so the caret never overlaps the label.
-  SetCustomPadding(gfx::Insets::TLBR(
-      kVerticalPadding, kHorizontalPadding, kVerticalPadding,
-      kHorizontalPadding + (has_caret_ ? kCaretReserve : 0)));
+  UpdatePadding();
   PreferredSizeChanged();
   SchedulePaint();
+}
+
+void XplorerToolbarPillButton::UpdatePadding() {
+  const int vertical = sidebar_row_style_ ? 5 : kVerticalPadding;
+  const int horizontal = sidebar_row_style_ ? 8 : kHorizontalPadding;
+  SetCustomPadding(gfx::Insets::TLBR(
+      vertical, horizontal, vertical,
+      horizontal + (has_caret_ ? kCaretReserve : 0)));
 }
 
 bool XplorerToolbarPillButton::PointInCaret(const gfx::Point& point) const {

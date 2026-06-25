@@ -41,6 +41,10 @@ class XplorerToolbarPillButton : public views::MdTextButton {
   void SetSelected(bool selected);
   bool GetSelected() const { return selected_; }
 
+  // Match VerticalTabView / XplorerSidebarRowButton geometry in the sidebar rail.
+  void SetSidebarRowStyle(bool sidebar_row);
+  bool sidebar_row_style() const { return sidebar_row_style_; }
+
   // Shows an integrated trailing dropdown caret inside the pill (reserves room
   // on the right). The owner routes clicks: see PointInCaret().
   void SetHasDropdownCaret(bool has_caret);
@@ -51,14 +55,18 @@ class XplorerToolbarPillButton : public views::MdTextButton {
   bool PointInCaret(const gfx::Point& point) const;
 
   // views::MdTextButton:
+  gfx::Size CalculatePreferredSize(
+      const views::SizeBounds& available_size) const override;
   void OnThemeChanged() override;
   void UpdateBackgroundColor() override;
   void PaintButtonContents(gfx::Canvas* canvas) override;
 
  private:
   void UpdateIconImage();
+  void UpdatePadding();
 
   bool selected_ = false;
+  bool sidebar_row_style_ = false;
   bool has_caret_ = false;
   raw_ptr<const gfx::VectorIcon> icon_ = nullptr;
 };

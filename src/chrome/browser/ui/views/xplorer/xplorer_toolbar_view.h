@@ -145,6 +145,7 @@ class XplorerToolbarView : public views::AccessiblePaneView,
   // Builds the pill buttons (+ chevrons) for |pills_|, attaches icons, and
   // marks the active home pill as selected.
   void RebuildButtons();
+  void ApplyVerticalButtonChrome();
   // Click dispatch for a pill: opens the dropdown when the press lands in the
   // integrated caret zone (and the pill has children), else navigates.
   void OnPillActivated(size_t pill_index, const ui::Event& event);

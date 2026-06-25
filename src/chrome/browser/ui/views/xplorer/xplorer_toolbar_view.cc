@@ -29,6 +29,7 @@
 #include "chrome/browser/ui/views/xplorer/xplorer_toolbar_placement.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/color/chrome_color_id.h"
+#include "chrome/browser/ui/layout_constants.h"
 #include "chrome/browser/ui/views/xplorer/xplorer_toolbar_icons.h"
 #include "chrome/browser/ui/views/xplorer/xplorer_toolbar_pill_button.h"
 #include "components/tabs/public/tab_interface.h"
@@ -46,6 +47,7 @@
 #include "ui/menus/simple_menu_model.h"
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/background.h"
+#include "ui/views/view_class_properties.h"
 #include "ui/views/controls/menu/menu_runner.h"
 #include "ui/views/widget/widget.h"
 #include "url/gurl.h"
@@ -310,8 +312,26 @@ void XplorerToolbarView::RebuildButtons() {
     pill_buttons_.push_back(views);
   }
 
+  ApplyVerticalButtonChrome();
   // Selection tracks the active tab's page, not the persisted search-home mode.
   UpdateActiveHighlight();
+}
+
+void XplorerToolbarView::ApplyVerticalButtonChrome() {
+  const int horizontal =
+      GetLayoutConstant(LayoutConstant::kVerticalTabStripHorizontalPadding);
+  const gfx::Insets row_margins = gfx::Insets::TLBR(2, horizontal, 2, horizontal);
+  for (PillViews& views : pill_buttons_) {
+    if (!views.main) {
+      continue;
+    }
+    views.main->SetSidebarRowStyle(vertical_layout_);
+    if (vertical_layout_) {
+      views.main->SetProperty(views::kMarginsKey, row_margins);
+    } else {
+      views.main->ClearProperty(views::kMarginsKey);
+    }
+  }
 }
 
 void XplorerToolbarView::SetVerticalLayout(bool vertical) {
@@ -325,6 +345,7 @@ void XplorerToolbarView::SetVerticalLayout(bool vertical) {
   } else {
     SetBackground(views::CreateSolidBackground(kColorToolbar));
   }
+  ApplyVerticalButtonChrome();
   InvalidateLayout();
   PreferredSizeChanged();
 }
@@ -332,17 +353,20 @@ void XplorerToolbarView::SetVerticalLayout(bool vertical) {
 gfx::Size XplorerToolbarView::CalculatePreferredSize(
     const views::SizeBounds& available_size) const {
   if (vertical_layout_) {
-    int height = kLeadingMargin;
-    int max_width = 0;
+    int height = 0;
     for (const PillViews& views : pill_buttons_) {
       if (!views.main) {
         continue;
       }
-      const gfx::Size preferred = views.main->GetPreferredSize();
-      max_width = std::max(max_width, preferred.width());
-      height += preferred.height() + kButtonSpacing;
+      gfx::Insets margins;
+      if (const gfx::Insets* m = views.main->GetProperty(views::kMarginsKey)) {
+        margins = *m;
+      }
+      const gfx::Size preferred = views.main->GetPreferredSize(
+          views::SizeBounds(available_size.width(), views::SizeBound()));
+      height += margins.top() + preferred.height() + margins.bottom();
     }
-    int width = max_width + 2 * kLeadingMargin;
+    int width = 0;
     if (available_size.width().is_bounded()) {
       width = available_size.width().value();
     }
@@ -358,16 +382,22 @@ gfx::Size XplorerToolbarView::CalculatePreferredSize(
 void XplorerToolbarView::Layout(PassKey) {
   if (vertical_layout_) {
     const int content_width = GetContentsBounds().width();
-    const int x = kLeadingMargin;
-    const int button_width = std::max(0, content_width - 2 * kLeadingMargin);
-    int y = kLeadingMargin;
+    int y = 0;
     for (const PillViews& views : pill_buttons_) {
       if (!views.main) {
         continue;
       }
-      const gfx::Size preferred = views.main->GetPreferredSize();
-      views.main->SetBounds(x, y, button_width, preferred.height());
-      y += preferred.height() + kButtonSpacing;
+      gfx::Insets margins;
+      if (const gfx::Insets* m = views.main->GetProperty(views::kMarginsKey)) {
+        margins = *m;
+      }
+      const int button_width =
+          std::max(0, content_width - margins.left() - margins.right());
+      const gfx::Size preferred = views.main->GetPreferredSize(
+          views::SizeBounds(button_width, views::SizeBound()));
+      views.main->SetBounds(margins.left(), y + margins.top(), button_width,
+                            preferred.height());
+      y += margins.top() + preferred.height() + margins.bottom();
     }
     return;
   }

@@ -205,21 +205,27 @@ def patch_vertical_sidebar(src: Path):
         "class XplorerSidebarChromeView;\n"
         "}  // namespace xplorer  // XPLORER",
     )
-    edit(
-        vts_h,
-        "  VerticalPinnedTabContainerView* GetPinnedTabsContainer();\n"
-        "  VerticalUnpinnedTabContainerView* GetUnpinnedTabsContainer();\n\n"
-        "  VerticalTabStripTopContainer* GetTopContainer() {",
-        "  VerticalPinnedTabContainerView* GetPinnedTabsContainer();\n"
-        "  VerticalUnpinnedTabContainerView* GetUnpinnedTabsContainer();\n\n"
-        "  // XPLORER: Arc-style bookmarks/toolbar chrome below the top menu bar.\n"
-        "  void InstallXplorerSidebarChrome(\n"
-        "      std::unique_ptr<xplorer::XplorerSidebarChromeView> chrome);\n"
-        "  xplorer::XplorerSidebarChromeView* xplorer_sidebar_chrome() {\n"
-        "    return xplorer_sidebar_chrome_;\n"
-        "  }\n\n"
-        "  VerticalTabStripTopContainer* GetTopContainer() {",
-    )
+    vts_h_text = vts_h.read_text()
+    if "InstallXplorerSidebarChrome" not in vts_h_text:
+        edit(
+            vts_h,
+            "  VerticalPinnedTabContainerView* GetPinnedTabsContainer();\n"
+            "  VerticalUnpinnedTabContainerView* GetUnpinnedTabsContainer();\n\n"
+            "  VerticalTabStripTopContainer* GetTopContainer() {\n"
+            "    return top_button_container_;\n"
+            "  }",
+            "  VerticalPinnedTabContainerView* GetPinnedTabsContainer();\n"
+            "  VerticalUnpinnedTabContainerView* GetUnpinnedTabsContainer();\n\n"
+            "  // XPLORER: Arc-style bookmarks/toolbar chrome below the top menu bar.\n"
+            "  void InstallXplorerSidebarChrome(\n"
+            "      std::unique_ptr<xplorer::XplorerSidebarChromeView> chrome);\n"
+            "  xplorer::XplorerSidebarChromeView* xplorer_sidebar_chrome() {\n"
+            "    return xplorer_sidebar_chrome_;\n"
+            "  }\n\n"
+            "  VerticalTabStripTopContainer* GetTopContainer() {\n"
+            "    return top_button_container_;\n"
+            "  }",
+        )
     edit(
         vts_h,
         "  bool tab_strip_editable_for_testing_ = true;\n\n"
@@ -238,43 +244,46 @@ def patch_vertical_sidebar(src: Path):
         '#include "chrome/browser/ui/views/xplorer/xplorer_sidebar_chrome_view.h"'
         "  // XPLORER",
     )
-    edit(
-        vts_cc,
-        "VerticalTabStripRegionView::~VerticalTabStripRegionView() {",
-        "void VerticalTabStripRegionView::InstallXplorerSidebarChrome(\n"
-        "    std::unique_ptr<xplorer::XplorerSidebarChromeView> chrome) {\n"
-        "  // Below the collapse/tab-search top bar, not above it.\n"
-        "  size_t insert_index = 0;\n"
-        "  if (top_button_separator_) {\n"
-        "    insert_index = GetIndexOf(top_button_separator_).value() + 1;\n"
-        "  } else if (top_button_container_) {\n"
-        "    insert_index = GetIndexOf(top_button_container_).value() + 1;\n"
-        "  }\n"
-        "  xplorer_sidebar_chrome_ = AddChildViewAt(std::move(chrome), insert_index);\n"
-        "  const int region_horizontal_padding =\n"
-        "      GetLayoutConstant(LayoutConstant::kVerticalTabStripHorizontalPadding);\n"
-        "  xplorer_sidebar_chrome_->SetProperty(\n"
-        "      views::kMarginsKey, gfx::Insets::VH(0, region_horizontal_padding));\n"
-        "  xplorer_sidebar_chrome_->SetProperty(\n"
-        "      views::kFlexBehaviorKey,\n"
-        "      views::FlexSpecification(views::MinimumFlexSizeRule::kPreferred,\n"
-        "                               views::MaximumFlexSizeRule::kPreferred));\n"
-        "}\n\n"
-        "VerticalTabStripRegionView::~VerticalTabStripRegionView() {",
-    )
-    edit(
-        vts_cc,
-        "  std::optional<size_t> separator_index = GetIndexOf(top_button_separator_);\n"
-        "  CHECK(separator_index.has_value());\n"
-        "  ReorderChildView(tab_strip_view_, separator_index.value() + 1);",
-        "  std::optional<size_t> separator_index = GetIndexOf(top_button_separator_);\n"
-        "  CHECK(separator_index.has_value());\n"
-        "  size_t tab_strip_index = separator_index.value() + 1;\n"
-        "  if (xplorer_sidebar_chrome_) {\n"
-        "    tab_strip_index = GetIndexOf(xplorer_sidebar_chrome_).value() + 1;\n"
-        "  }\n"
-        "  ReorderChildView(tab_strip_view_, tab_strip_index);  // XPLORER",
-    )
+    vts_cc_text = vts_cc.read_text()
+    if "InstallXplorerSidebarChrome" not in vts_cc_text:
+        edit(
+            vts_cc,
+            "VerticalTabStripRegionView::~VerticalTabStripRegionView() {",
+            "void VerticalTabStripRegionView::InstallXplorerSidebarChrome(\n"
+            "    std::unique_ptr<xplorer::XplorerSidebarChromeView> chrome) {\n"
+            "  // Below the collapse/tab-search top bar, not above it.\n"
+            "  size_t insert_index = 0;\n"
+            "  if (top_button_separator_) {\n"
+            "    insert_index = GetIndexOf(top_button_separator_).value() + 1;\n"
+            "  } else if (top_button_container_) {\n"
+            "    insert_index = GetIndexOf(top_button_container_).value() + 1;\n"
+            "  }\n"
+            "  xplorer_sidebar_chrome_ = AddChildViewAt(std::move(chrome), insert_index);\n"
+            "  const int region_horizontal_padding =\n"
+            "      GetLayoutConstant(LayoutConstant::kVerticalTabStripHorizontalPadding);\n"
+            "  xplorer_sidebar_chrome_->SetProperty(\n"
+            "      views::kMarginsKey, gfx::Insets::VH(0, region_horizontal_padding));\n"
+            "  xplorer_sidebar_chrome_->SetProperty(\n"
+            "      views::kFlexBehaviorKey,\n"
+            "      views::FlexSpecification(views::MinimumFlexSizeRule::kPreferred,\n"
+            "                               views::MaximumFlexSizeRule::kPreferred));\n"
+            "}\n\n"
+            "VerticalTabStripRegionView::~VerticalTabStripRegionView() {",
+        )
+    if "tab_strip_index" not in vts_cc.read_text():
+        edit(
+            vts_cc,
+            "  std::optional<size_t> separator_index = GetIndexOf(top_button_separator_);\n"
+            "  CHECK(separator_index.has_value());\n"
+            "  ReorderChildView(tab_strip_view_, separator_index.value() + 1);",
+            "  std::optional<size_t> separator_index = GetIndexOf(top_button_separator_);\n"
+            "  CHECK(separator_index.has_value());\n"
+            "  size_t tab_strip_index = separator_index.value() + 1;\n"
+            "  if (xplorer_sidebar_chrome_) {\n"
+            "    tab_strip_index = GetIndexOf(xplorer_sidebar_chrome_).value() + 1;\n"
+            "  }\n"
+            "  ReorderChildView(tab_strip_view_, tab_strip_index);  // XPLORER",
+        )
 
     browser_view_h = src / "chrome/browser/ui/views/frame/browser_view.h"
     edit(
@@ -351,6 +360,8 @@ def patch_vertical_sidebar(src: Path):
         '      "views/xplorer/xplorer_sidebar_chrome_view.h",  # XPLORER\n'
         '      "views/xplorer/xplorer_sidebar_bookmarks_view.cc",  # XPLORER\n'
         '      "views/xplorer/xplorer_sidebar_bookmarks_view.h",  # XPLORER\n'
+        '      "views/xplorer/xplorer_sidebar_row_button.cc",  # XPLORER\n'
+        '      "views/xplorer/xplorer_sidebar_row_button.h",  # XPLORER\n'
         '      "views/xplorer/xplorer_sidebar_section_label.cc",  # XPLORER\n'
         '      "views/xplorer/xplorer_sidebar_section_label.h",  # XPLORER\n'
         '      "views/xplorer/xplorer_sidebar_prefs.cc",  # XPLORER\n'
@@ -359,6 +370,13 @@ def patch_vertical_sidebar(src: Path):
         '      "views/xplorer/xplorer_agent_tab_grouper.h",  # XPLORER\n'
         '      "views/xplorer/xplorer_toolbar_placement.cc",  # XPLORER\n'
         '      "views/xplorer/xplorer_toolbar_placement.h",  # XPLORER',
+    )
+    edit(
+        browser_ui_gn,
+        '      "views/xplorer/xplorer_sidebar_bookmarks_view.h",  # XPLORER\n',
+        '      "views/xplorer/xplorer_sidebar_bookmarks_view.h",  # XPLORER\n'
+        '      "views/xplorer/xplorer_sidebar_row_button.cc",  # XPLORER\n'
+        '      "views/xplorer/xplorer_sidebar_row_button.h",  # XPLORER\n',
     )
 
 

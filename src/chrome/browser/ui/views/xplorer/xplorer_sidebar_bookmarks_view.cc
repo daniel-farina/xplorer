@@ -7,32 +7,37 @@
 
 #include "base/functional/bind.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
+#include "chrome/browser/favicon/favicon_utils.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
-#include "chrome/browser/ui/views/frame/browser_view.h"
-#include "chrome/browser/ui/views/xplorer/xplorer_toolbar_view.h"
-#include "ui/base/mojom/menu_source_type.mojom.h"
+#include "chrome/browser/ui/layout_constants.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "chrome/browser/ui/views/frame/browser_view.h"
+#include "chrome/browser/ui/views/xplorer/xplorer_sidebar_row_button.h"
 #include "chrome/browser/ui/views/xplorer/xplorer_sidebar_section_label.h"
+#include "chrome/browser/ui/views/xplorer/xplorer_toolbar_view.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/bookmarks/browser/bookmark_node.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/web_contents.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
+#include "ui/base/mojom/menu_source_type.mojom.h"
 #include "ui/base/page_transition_types.h"
 #include "ui/gfx/geometry/insets.h"
-#include "ui/views/controls/button/label_button.h"
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/view_class_properties.h"
-#include "url/gurl.h"
 
 namespace xplorer {
 
 namespace {
 constexpr int kMaxBookmarks = 12;
-constexpr int kRowHeight = 32;
-constexpr gfx::Insets kRowInsets = gfx::Insets::TLBR(0, 8, 0, 8);
+
+gfx::Insets SidebarRowMargins() {
+  const int h =
+      GetLayoutConstant(LayoutConstant::kVerticalTabStripHorizontalPadding);
+  return gfx::Insets::TLBR(2, h, 2, h);
+}
 }  // namespace
 
 XplorerSidebarBookmarksView::XplorerSidebarBookmarksView(
@@ -78,7 +83,11 @@ void XplorerSidebarBookmarksView::BookmarkNodeRemoved(
 
 void XplorerSidebarBookmarksView::BookmarkNodeChanged(
     const bookmarks::BookmarkNode* node) {
-  Rebuild();
+  if (XplorerSidebarRowButton* button = FindRowButton(node->id())) {
+    button->SetText(node->GetTitle());
+  } else {
+    Rebuild();
+  }
 }
 
 void XplorerSidebarBookmarksView::BookmarkNodeMoved(
@@ -91,7 +100,9 @@ void XplorerSidebarBookmarksView::BookmarkNodeMoved(
 
 void XplorerSidebarBookmarksView::BookmarkNodeFaviconChanged(
     const bookmarks::BookmarkNode* node) {
-  Rebuild();
+  if (XplorerSidebarRowButton* button = FindRowButton(node->id())) {
+    UpdateRowIcon(button, node);
+  }
 }
 
 void XplorerSidebarBookmarksView::BookmarkNodeChildrenReordered(
@@ -126,12 +137,15 @@ void XplorerSidebarBookmarksView::ShowContextMenuForViewImpl(
 
 void XplorerSidebarBookmarksView::Rebuild() {
   RemoveAllChildViews();
+  rows_.clear();
   if (!model_ || !model_->loaded()) {
     return;
   }
 
-  AddChildView(std::make_unique<XplorerSidebarSectionLabel>(
+  auto* header = AddChildView(std::make_unique<XplorerSidebarSectionLabel>(
       u"Bookmarks"));
+  header->SetProperty(views::kMarginsKey,
+                      gfx::Insets::TLBR(4, SidebarRowMargins().left(), 0, 0));
 
   const bookmarks::BookmarkNode* bar = model_->bookmark_bar_node();
   int shown = 0;
@@ -139,19 +153,43 @@ void XplorerSidebarBookmarksView::Rebuild() {
     if (!child->is_url()) {
       continue;
     }
-    auto button = std::make_unique<views::LabelButton>(
+    auto button = std::make_unique<XplorerSidebarRowButton>(
         base::BindRepeating(&XplorerSidebarBookmarksView::OnBookmarkPressed,
                             base::Unretained(this), child.get()),
         child->GetTitle());
-    button->SetHorizontalAlignment(gfx::ALIGN_LEFT);
-    button->SetProperty(views::kMarginsKey, kRowInsets);
-    button->SetMinSize(gfx::Size(0, kRowHeight));
-    button->SetMaxSize(gfx::Size(INT_MAX, kRowHeight));
-    AddChildView(std::move(button));
+    button->SetProperty(views::kMarginsKey, SidebarRowMargins());
+    UpdateRowIcon(button.get(), child.get());
+    XplorerSidebarRowButton* row =
+        AddChildView(std::move(button));
+    rows_.push_back({child->id(), row});
     if (++shown >= kMaxBookmarks) {
       break;
     }
   }
+}
+
+void XplorerSidebarBookmarksView::UpdateRowIcon(
+    XplorerSidebarRowButton* button,
+    const bookmarks::BookmarkNode* node) {
+  if (!button || !node || !model_) {
+    return;
+  }
+  const gfx::Image& image = model_->GetFavicon(node);
+  ui::ImageModel icon =
+      image.IsEmpty()
+          ? favicon::GetDefaultFaviconModel(kColorBookmarkBarBackground)
+          : ui::ImageModel::FromImage(image);
+  button->SetRowIcon(icon);
+}
+
+XplorerSidebarRowButton* XplorerSidebarBookmarksView::FindRowButton(
+    int64_t node_id) {
+  for (const BookmarkRow& row : rows_) {
+    if (row.node_id == node_id) {
+      return row.button;
+    }
+  }
+  return nullptr;
 }
 
 void XplorerSidebarBookmarksView::OnBookmarkPressed(

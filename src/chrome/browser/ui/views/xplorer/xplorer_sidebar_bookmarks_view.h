@@ -5,6 +5,7 @@
 #define CHROME_BROWSER_UI_VIEWS_XPLORER_XPLORER_SIDEBAR_BOOKMARKS_VIEW_H_
 
 #include <set>
+#include <vector>
 
 #include "base/memory/raw_ptr.h"
 #include "base/scoped_observation.h"
@@ -22,6 +23,8 @@ class BookmarkNode;
 }  // namespace bookmarks
 
 namespace xplorer {
+
+class XplorerSidebarRowButton;
 
 // Bookmark-bar shortcuts rendered in the Arc-style sidebar.
 class XplorerSidebarBookmarksView : public views::View,
@@ -68,11 +71,20 @@ class XplorerSidebarBookmarksView : public views::View,
       ui::mojom::MenuSourceType source_type) override;
 
  private:
+  struct BookmarkRow {
+    int64_t node_id = 0;
+    raw_ptr<XplorerSidebarRowButton> button = nullptr;
+  };
+
   void OnBookmarkPressed(const bookmarks::BookmarkNode* node);
+  void UpdateRowIcon(XplorerSidebarRowButton* button,
+                     const bookmarks::BookmarkNode* node);
+  XplorerSidebarRowButton* FindRowButton(int64_t node_id);
 
   const raw_ptr<BrowserWindowInterface> browser_;
   const raw_ptr<Profile> profile_;
   raw_ptr<bookmarks::BookmarkModel> model_ = nullptr;
+  std::vector<BookmarkRow> rows_;
   base::ScopedObservation<bookmarks::BookmarkModel,
                           bookmarks::BookmarkModelObserver>
       model_observation_{this};

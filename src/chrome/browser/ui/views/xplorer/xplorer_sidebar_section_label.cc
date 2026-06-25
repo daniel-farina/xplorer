@@ -3,9 +3,11 @@
 
 #include "chrome/browser/ui/views/xplorer/xplorer_sidebar_section_label.h"
 
+#include "chrome/browser/ui/layout_constants.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/views/controls/label.h"
+#include "ui/views/view_class_properties.h"
 
 namespace xplorer {
 
@@ -26,7 +28,6 @@ gfx::Size XplorerSidebarSectionLabel::CalculatePreferredSize(
     const views::SizeBounds& available_size) const {
   gfx::Size size = Label::CalculatePreferredSize(available_size);
   size.set_height(kSectionHeight);
-  size.Enlarge(24, 12);
   return size;
 }
 
