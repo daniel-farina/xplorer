@@ -49,6 +49,7 @@ class XplorerSidebarScheduledView : public views::View {
   void Refresh();
   // Rebuild the section's children from a {"version":1,"jobs":[...]} snapshot.
   void OnJobs(base::DictValue snapshot);
+  void ScheduleNextRefresh(bool any_running);
 
   // Row click: open the Grok side panel and navigate it to the job's detail page
   // (/schedules?id=<job_id>).

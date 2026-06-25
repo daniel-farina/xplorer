@@ -3551,6 +3551,8 @@ bool GrokNative::TryHandleRequest(
     std::string id = path.substr(prefix.size());
     id = id.substr(0, id.size() - std::string("/stop").size());
     const bool stopped = StopActiveRun(id);
+    // Clear any scheduler job stuck on "running" for this conversation.
+    Scheduler::Get()->OnConversationRunStopped(id);
     base::DictValue d;
     d.Set("ok", true);
     d.Set("stopped", stopped);

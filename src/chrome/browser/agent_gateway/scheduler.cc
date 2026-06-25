@@ -26,6 +26,10 @@ namespace {
 // poll time, so the effective scheduling granularity is this interval.
 constexpr base::TimeDelta kPollInterval = base::Seconds(30);
 
+// Grace after last_fire_us before treating a "running" job as stuck when no
+// ActiveRuns entry exists (covers async dispatch startup).
+constexpr int64_t kRunningGraceUs = 30 * 1000000LL;
+
 // Epoch microseconds for a base::Time, matching the design's *_us fields. We use
 // the Windows epoch consistently (it is monotonic with wall clock and the same
 // base used by the rest of the *_us fields in the data model).
@@ -198,7 +202,44 @@ void Scheduler::Start() {
   Poll();
 }
 
+void Scheduler::ReconcileStuckRunningJobs() {
+  const int64_t now_us = ToEpochUs(base::Time::Now());
+  bool changed = false;
+  for (Job& job : jobs_) {
+    if (job.last_status != "running")
+      continue;
+    if (job.last_fire_us > 0 &&
+        (now_us - job.last_fire_us) < kRunningGraceUs) {
+      continue;
+    }
+    std::string conv_id = job.target_conv_id;
+    if (!conv_id.empty() && IsConversationRunActive(conv_id))
+      continue;
+    job.last_status = "failed";
+    changed = true;
+  }
+  if (changed)
+    Save();
+}
+
+void Scheduler::OnConversationRunStopped(const std::string& conv_id) {
+  if (conv_id.empty())
+    return;
+  bool changed = false;
+  for (Job& job : jobs_) {
+    if (job.last_status != "running")
+      continue;
+    if (job.target_conv_id != conv_id)
+      continue;
+    job.last_status = "failed";
+    changed = true;
+  }
+  if (changed)
+    Save();
+}
+
 void Scheduler::Poll() {
+  ReconcileStuckRunningJobs();
   const base::Time now = base::Time::Now();
   const int64_t now_us = ToEpochUs(now);
   bool changed = false;
@@ -233,6 +274,7 @@ void Scheduler::FireJob(Job* job) {
   }
 
   DispatchJob(*job);
+  Save();
 }
 
 void Scheduler::DispatchJob(const Job& job) {

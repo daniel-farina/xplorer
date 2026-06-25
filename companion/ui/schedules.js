@@ -729,6 +729,55 @@ async function reload() {
   if (selectedId && !getJob(selectedId)) selectedId = null;
 }
 
+function anyJobRunning() {
+  return jobs.some((j) => j.enabled !== false && j.last_status === 'running');
+}
+
+function jobSnapshotChanged(prev, next) {
+  if (!prev || !next) return true;
+  return prev.last_status !== next.last_status ||
+    prev.last_fire_us !== next.last_fire_us ||
+    prev.next_fire_us !== next.next_fire_us ||
+    (Array.isArray(prev.history) ? prev.history.length : 0) !==
+      (Array.isArray(next.history) ? next.history.length : 0);
+}
+
+let pollTimer = null;
+
+function stopPollTimer() {
+  if (pollTimer) {
+    clearInterval(pollTimer);
+    pollTimer = null;
+  }
+}
+
+function startPollTimer() {
+  stopPollTimer();
+  const ms = anyJobRunning() ? 2000 : 10000;
+  pollTimer = setInterval(pollJobs, ms);
+}
+
+async function pollJobs() {
+  const prev = jobs.slice();
+  try {
+    await reload();
+  } catch (e) {
+    console.error('schedules poll failed:', e);
+    return;
+  }
+  renderList();
+  if (selectedId) {
+    const job = getJob(selectedId);
+    const prevJob = prev.find((j) => j.id === selectedId);
+    if (!job) {
+      showPlaceholder();
+    } else if (jobSnapshotChanged(prevJob, job)) {
+      renderDetail();
+    }
+  }
+  startPollTimer();
+}
+
 // ---------------------------------------------------------------------------
 // In-page confirm dialog (window.confirm is suppressed in the side panel)
 // ---------------------------------------------------------------------------
@@ -815,6 +864,15 @@ async function init() {
   }
   renderList();
   if (selectedId) renderDetail(); else showPlaceholder();
+  startPollTimer();
 }
+
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    stopPollTimer();
+  } else {
+    pollJobs();
+  }
+});
 
 init();

@@ -23,9 +23,8 @@ namespace xplorer {
 
 namespace {
 
-// How often the section re-pulls the job snapshot. Light: the schedule list
-// changes rarely, and a stale last_status hint for a few seconds is harmless.
-constexpr base::TimeDelta kRefreshInterval = base::Seconds(10);
+constexpr base::TimeDelta kRefreshIntervalIdle = base::Seconds(10);
+constexpr base::TimeDelta kRefreshIntervalActive = base::Seconds(2);
 
 gfx::Insets SidebarRowMargins() {
   return gfx::Insets::TLBR(2, 0, 2, 0);
@@ -57,10 +56,6 @@ XplorerSidebarScheduledView::XplorerSidebarScheduledView(
   // Pull the initial snapshot; the section stays empty (collapsed) until it
   // arrives.
   Refresh();
-  refresh_timer_.Start(
-      FROM_HERE, kRefreshInterval,
-      base::BindRepeating(&XplorerSidebarScheduledView::Refresh,
-                          base::Unretained(this)));
 }
 
 XplorerSidebarScheduledView::~XplorerSidebarScheduledView() = default;
@@ -78,14 +73,25 @@ void XplorerSidebarScheduledView::Refresh() {
                      weak_factory_.GetWeakPtr()));
 }
 
+void XplorerSidebarScheduledView::ScheduleNextRefresh(bool any_running) {
+  refresh_timer_.Stop();
+  refresh_timer_.Start(
+      FROM_HERE,
+      any_running ? kRefreshIntervalActive : kRefreshIntervalIdle,
+      base::BindRepeating(&XplorerSidebarScheduledView::Refresh,
+                          base::Unretained(this)));
+}
+
 void XplorerSidebarScheduledView::OnJobs(base::DictValue snapshot) {
   RemoveAllChildViews();
 
   const base::ListValue* jobs = snapshot.FindList("jobs");
+  bool any_running = false;
   if (!jobs || jobs->empty()) {
     // Empty state: render nothing (no header), matching how the bookmarks
     // section stays collapsed when there is nothing to show.
     PreferredSizeChanged();
+    ScheduleNextRefresh(any_running);
     return;
   }
 
@@ -102,6 +108,8 @@ void XplorerSidebarScheduledView::OnJobs(base::DictValue snapshot) {
     const std::string* id = job.FindString("id");
     const std::string* last_status = job.FindString("last_status");
     const bool enabled = job.FindBool("enabled").value_or(true);
+    if (enabled && last_status && *last_status == "running")
+      any_running = true;
 
     // Prefer the user-set label; fall back to the id so a label-less job is
     // still identifiable.
@@ -142,6 +150,7 @@ void XplorerSidebarScheduledView::OnJobs(base::DictValue snapshot) {
   }
 
   PreferredSizeChanged();
+  ScheduleNextRefresh(any_running);
 }
 
 void XplorerSidebarScheduledView::OnJobPressed(const std::string& job_id) {

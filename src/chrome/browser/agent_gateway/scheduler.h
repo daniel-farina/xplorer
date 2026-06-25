@@ -137,6 +137,11 @@ class Scheduler {
   // Must be called on the scheduler's sequence (the gateway IO thread).
   base::DictValue RunJobNow(const std::string& id);
 
+  // Called when POST /api/conversations/{id}/stop fires. Clears any job whose
+  // last_status is "running" for that conversation. Must run on the scheduler's
+  // sequence (gateway IO thread).
+  void OnConversationRunStopped(const std::string& conv_id);
+
  private:
   friend class base::NoDestructor<Scheduler>;
 
@@ -145,6 +150,9 @@ class Scheduler {
 
   // Timer tick: scan jobs, dispatch any whose next_fire_us has arrived.
   void Poll();
+
+  // Clear jobs stuck on last_status=="running" when no grok run is active.
+  void ReconcileStuckRunningJobs();
 
   // Fire one job: stamp last_fire/last_status, recompute next_fire_us (interval
   // -> now+interval; once -> disable), then hand the run to DispatchJob. Runs on
