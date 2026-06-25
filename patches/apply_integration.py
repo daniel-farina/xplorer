@@ -711,12 +711,15 @@ def patch_vertical_tab_bookmark_strip(src: Path):
         "  CHECK(activated_node);\n"
         "  ScrollToView(activated_node->view());"
     )
+    # Restate the anchor's first line (the declaration) so edit() REPLACES the
+    # block instead of splicing after it (which duplicated activated_node and
+    # tripped -Wshadow). Reuse the existing activated_node — don't re-declare.
     scroll_replacement = (
-        "  // XPLORER: bookmark tabs have no visible strip row.\n"
+        "  TabCollectionNode* activated_node =\n"
+        "      collection_node_->GetNodeForHandle(active_tab->GetHandle());\n"
+        "  CHECK(activated_node);\n"
+        "  // XPLORER: bookmark tabs have no visible strip row, so skip scroll.\n"
         "  if (!xplorer::IsBookmarkWebContents(active_tab->GetContents())) {\n"
-        "    TabCollectionNode* activated_node =\n"
-        "        collection_node_->GetNodeForHandle(active_tab->GetHandle());\n"
-        "    CHECK(activated_node);\n"
         "    ScrollToView(activated_node->view());\n"
         "  }"
     )
