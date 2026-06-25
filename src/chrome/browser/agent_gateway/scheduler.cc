@@ -8,6 +8,7 @@
 
 #include "base/files/file_util.h"
 #include "base/functional/bind.h"
+#include "base/functional/callback.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
 #include "base/logging.h"
@@ -154,6 +155,28 @@ base::DictValue Scheduler::ListJobsDict() const {
   d.Set("version", 1);
   d.Set("jobs", std::move(list));
   return d;
+}
+
+void Scheduler::GetJobsAsync(
+    base::OnceCallback<void(base::DictValue)> callback) {
+  // jobs_ is only safe to touch on the sequence that owns it (the gateway IO
+  // thread, captured as task_runner_ in Start()). Compute the snapshot there and
+  // let PostTaskAndReplyWithResult deliver it back on the caller's sequence.
+  if (!task_runner_) {
+    // Scheduler not started yet: reply with an empty list on the caller's
+    // sequence so callers always get a well-formed dict.
+    base::DictValue empty;
+    empty.Set("version", 1);
+    empty.Set("jobs", base::ListValue());
+    std::move(callback).Run(std::move(empty));
+    return;
+  }
+  // base::Unretained is safe: the Scheduler is a process-lifetime NoDestructor
+  // singleton, so it outlives any UI-thread caller and this posted task.
+  task_runner_->PostTaskAndReplyWithResult(
+      FROM_HERE,
+      base::BindOnce([]() { return Scheduler::Get()->ListJobsDict(); }),
+      std::move(callback));
 }
 
 base::DictValue Scheduler::UpsertJobFromDict(const base::DictValue& body) {

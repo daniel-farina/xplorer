@@ -309,6 +309,22 @@ def patch_vertical_sidebar(src: Path):
         "class XplorerSidebarChromeView;\n"
         "}  // namespace xplorer  // XPLORER",
     )
+    # Scheduled-section forward declaration in its OWN namespace block, spliced
+    # after the chrome view's block. Important: do NOT add a line *inside* the
+    # chrome view's block — that block is the verbatim insertion of the edit
+    # above, and mutating it would break that edit's idempotency guard and cause
+    # it to re-fire (duplicating the block) on the next apply.
+    if "XplorerSidebarScheduledView" not in vts_h.read_text():
+        edit(
+            vts_h,
+            "class XplorerSidebarChromeView;\n"
+            "}  // namespace xplorer  // XPLORER",
+            "class XplorerSidebarChromeView;\n"
+            "}  // namespace xplorer  // XPLORER\n"
+            "namespace xplorer {\n"
+            "class XplorerSidebarScheduledView;\n"
+            "}  // namespace xplorer  // XPLORER",
+        )
     vts_h_text = vts_h.read_text()
     if "InstallXplorerSidebarChrome" not in vts_h_text:
         edit(
@@ -339,6 +355,47 @@ def patch_vertical_sidebar(src: Path):
         "      nullptr;  // XPLORER\n"
         "  raw_ptr<VerticalTabStripTopContainer> top_button_container_ = nullptr;",
     )
+    # Scheduled-section installer + accessor, mirroring the chrome view.
+    if "InstallXplorerSidebarScheduled" not in vts_h.read_text():
+        edit(
+            vts_h,
+            "  void InstallXplorerSidebarChrome(\n"
+            "      std::unique_ptr<xplorer::XplorerSidebarChromeView> chrome);\n"
+            "  xplorer::XplorerSidebarChromeView* xplorer_sidebar_chrome() {\n"
+            "    return xplorer_sidebar_chrome_;\n"
+            "  }",
+            "  void InstallXplorerSidebarChrome(\n"
+            "      std::unique_ptr<xplorer::XplorerSidebarChromeView> chrome);\n"
+            "  xplorer::XplorerSidebarChromeView* xplorer_sidebar_chrome() {\n"
+            "    return xplorer_sidebar_chrome_;\n"
+            "  }\n"
+            "  // XPLORER: native \"Scheduled\" section, BELOW the tab list.\n"
+            "  void InstallXplorerSidebarScheduled(\n"
+            "      std::unique_ptr<xplorer::XplorerSidebarScheduledView> scheduled);\n"
+            "  xplorer::XplorerSidebarScheduledView* xplorer_sidebar_scheduled() {\n"
+            "    return xplorer_sidebar_scheduled_;\n"
+            "  }",
+        )
+    # Scheduled-section member, appended AFTER the chrome view member's full
+    # block. The guard checks the member-declaration text specifically (the
+    # accessor above already put the bare name "xplorer_sidebar_scheduled_" into
+    # the file). We RESTATE the chrome member block verbatim and add the
+    # scheduled member after its last line, so the chrome member edit's exact
+    # insertion stays present contiguously and its idempotency guard keeps
+    # passing (splitting that block would make it re-fire and duplicate).
+    if ("raw_ptr<xplorer::XplorerSidebarScheduledView> xplorer_sidebar_scheduled_"
+            not in vts_h.read_text()):
+        edit(
+            vts_h,
+            "  raw_ptr<xplorer::XplorerSidebarChromeView> xplorer_sidebar_chrome_ =\n"
+            "      nullptr;  // XPLORER\n"
+            "  raw_ptr<VerticalTabStripTopContainer> top_button_container_ = nullptr;",
+            "  raw_ptr<xplorer::XplorerSidebarChromeView> xplorer_sidebar_chrome_ =\n"
+            "      nullptr;  // XPLORER\n"
+            "  raw_ptr<VerticalTabStripTopContainer> top_button_container_ = nullptr;\n"
+            "  raw_ptr<xplorer::XplorerSidebarScheduledView> xplorer_sidebar_scheduled_ =\n"
+            "      nullptr;  // XPLORER",
+        )
 
     vts_cc = src / "chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc"
     edit(
@@ -348,6 +405,16 @@ def patch_vertical_sidebar(src: Path):
         '#include "chrome/browser/ui/views/xplorer/xplorer_sidebar_chrome_view.h"'
         "  // XPLORER",
     )
+    if "xplorer_sidebar_scheduled_view.h" not in vts_cc.read_text():
+        edit(
+            vts_cc,
+            '#include "chrome/browser/ui/views/xplorer/xplorer_sidebar_chrome_view.h"'
+            "  // XPLORER",
+            '#include "chrome/browser/ui/views/xplorer/xplorer_sidebar_chrome_view.h"'
+            "  // XPLORER\n"
+            '#include "chrome/browser/ui/views/xplorer/xplorer_sidebar_scheduled_view.h"'
+            "  // XPLORER",
+        )
     vts_cc_text = vts_cc.read_text()
     if "InstallXplorerSidebarChrome" not in vts_cc_text:
         edit(
@@ -387,6 +454,53 @@ def patch_vertical_sidebar(src: Path):
             "    tab_strip_index = GetIndexOf(xplorer_sidebar_chrome_).value() + 1;\n"
             "  }\n"
             "  ReorderChildView(tab_strip_view_, tab_strip_index);  // XPLORER",
+        )
+    # InstallXplorerSidebarScheduled: append the "Scheduled" section below the tab
+    # list. At install time tab_strip_view_ does not exist yet (the tab strip is
+    # created lazily via InitializeTabStrip()/SetTabStripView, well after this
+    # runs), so just append it for now; SetTabStripView re-anchors it directly
+    # after tab_strip_view_ (see the reorder below). That ordering puts it between
+    # the scrollable tab list and the bottom new-tab container.
+    if "InstallXplorerSidebarScheduled" not in vts_cc.read_text():
+        edit(
+            vts_cc,
+            "VerticalTabStripRegionView::~VerticalTabStripRegionView() {",
+            "void VerticalTabStripRegionView::InstallXplorerSidebarScheduled(\n"
+            "    std::unique_ptr<xplorer::XplorerSidebarScheduledView> scheduled) {\n"
+            "  // Append for now; SetTabStripView() reorders it to sit just below\n"
+            "  // tab_strip_view_ once the tab strip exists.\n"
+            "  xplorer_sidebar_scheduled_ = AddChildView(std::move(scheduled));\n"
+            "  const int region_horizontal_padding =\n"
+            "      GetLayoutConstant(LayoutConstant::kVerticalTabStripHorizontalPadding);\n"
+            "  xplorer_sidebar_scheduled_->SetProperty(\n"
+            "      views::kMarginsKey, gfx::Insets::VH(0, region_horizontal_padding));\n"
+            "  xplorer_sidebar_scheduled_->SetProperty(\n"
+            "      views::kFlexBehaviorKey,\n"
+            "      views::FlexSpecification(views::MinimumFlexSizeRule::kPreferred,\n"
+            "                               views::MaximumFlexSizeRule::kPreferred));\n"
+            "  if (tab_strip_view_) {\n"
+            "    ReorderChildView(xplorer_sidebar_scheduled_,\n"
+            "                     GetIndexOf(tab_strip_view_).value() + 1);\n"
+            "  }\n"
+            "}\n\n"
+            "VerticalTabStripRegionView::~VerticalTabStripRegionView() {",
+        )
+    # Keep the Scheduled section directly below the tab list whenever the tab
+    # strip view is (re)installed. Anchor on the SetTabStripView() tail (the
+    # collapse-state call + return) so this is independent of whether the
+    # tab_strip_index reorder line carries a "// XPLORER" suffix (it does on a
+    # fresh apply, but may not on a tree patched by an earlier script).
+    if "if (xplorer_sidebar_scheduled_) {  // XPLORER" not in vts_cc.read_text():
+        edit(
+            vts_cc,
+            "  OnCollapseStateChanged(state_controller_->GetCollapseState());\n\n"
+            "  return tab_strip_view_;",
+            "  if (xplorer_sidebar_scheduled_) {  // XPLORER\n"
+            "    ReorderChildView(xplorer_sidebar_scheduled_,\n"
+            "                     GetIndexOf(tab_strip_view_).value() + 1);\n"
+            "  }\n\n"
+            "  OnCollapseStateChanged(state_controller_->GetCollapseState());\n\n"
+            "  return tab_strip_view_;",
         )
 
     browser_view_h = src / "chrome/browser/ui/views/frame/browser_view.h"
@@ -434,6 +548,17 @@ def patch_vertical_sidebar(src: Path):
         '#include "chrome/browser/ui/views/xplorer/xplorer_toolbar_placement.h"  // XPLORER\n'
         '#include "chrome/browser/ui/views/xplorer/xplorer_toolbar_view.h"  // XPLORER',
     )
+    # Append the scheduled-view include AFTER the chrome include block's last
+    # line (restated), not inside it: the chrome include edit above has no outer
+    # name-guard and relies on edit()'s verbatim-presence check, so splitting its
+    # block would duplicate the whole block on the next apply.
+    if "xplorer_sidebar_scheduled_view.h" not in browser_view_cc.read_text():
+        edit(
+            browser_view_cc,
+            '#include "chrome/browser/ui/views/xplorer/xplorer_toolbar_view.h"  // XPLORER',
+            '#include "chrome/browser/ui/views/xplorer/xplorer_toolbar_view.h"  // XPLORER\n'
+            '#include "chrome/browser/ui/views/xplorer/xplorer_sidebar_scheduled_view.h"  // XPLORER',
+        )
     edit(
         browser_view_cc,
         "    vertical_tab_strip_region_view_ =\n"
@@ -454,6 +579,25 @@ def patch_vertical_sidebar(src: Path):
         "      xplorer::ApplyToolbarPlacement(this, xplorer_sidebar_chrome_);\n"
         "    }",
     )
+    # XPLORER: native "Scheduled" section, installed AFTER the chrome view so it
+    # renders below the tab list (sidebar order: Bookmarks -> Tabs -> Scheduled).
+    # Spliced AFTER the chrome instantiation block's closing brace (restated
+    # verbatim) rather than inside it: the chrome instantiation edit above has no
+    # outer name-guard and relies on edit()'s verbatim-presence check, so
+    # mutating its block would make it re-fire and duplicate on the next apply.
+    # InstallXplorerSidebarScheduled only needs the region view member, so a
+    # standalone block after the chrome block is fine.
+    if "InstallXplorerSidebarScheduled" not in browser_view_cc.read_text():
+        edit(
+            browser_view_cc,
+            "      xplorer::ApplyToolbarPlacement(this, xplorer_sidebar_chrome_);\n"
+            "    }",
+            "      xplorer::ApplyToolbarPlacement(this, xplorer_sidebar_chrome_);\n"
+            "    }\n"
+            "    // XPLORER: native \"Scheduled\" section below the tab list.\n"
+            "    vertical_tab_strip_region_view_->InstallXplorerSidebarScheduled(\n"
+            "        std::make_unique<xplorer::XplorerSidebarScheduledView>());",
+        )
 
     browser_ui_gn = src / "chrome/browser/ui/BUILD.gn"
     edit(
@@ -484,6 +628,23 @@ def patch_vertical_sidebar(src: Path):
         '      "views/xplorer/xplorer_sidebar_row_button.cc",  # XPLORER\n'
         '      "views/xplorer/xplorer_sidebar_row_button.h",  # XPLORER\n',
     )
+    # Native "Scheduled" sidebar section sources. No new GN dep is needed: like
+    # the agent-tab grouper, these files live in //chrome/browser/ui and include
+    # agent_gateway/scheduler.h header-only; the symbols resolve at the final
+    # //chrome/browser link (agent_gateway is in chrome/browser's public_deps),
+    # exactly as the grouper's focus_arbiter.h/tab_ownership.h includes do.
+    # Appended AFTER the chrome-view sources block's last line (restated): that
+    # block has no outer name-guard and relies on edit()'s verbatim-presence
+    # check, so splicing a line into the middle of it would make it re-fire and
+    # duplicate the whole block on the next apply.
+    if "xplorer_sidebar_scheduled_view.cc" not in browser_ui_gn.read_text():
+        edit(
+            browser_ui_gn,
+            '      "views/xplorer/xplorer_settings_nav.h",  # XPLORER',
+            '      "views/xplorer/xplorer_settings_nav.h",  # XPLORER\n'
+            '      "views/xplorer/xplorer_sidebar_scheduled_view.cc",  # XPLORER\n'
+            '      "views/xplorer/xplorer_sidebar_scheduled_view.h",  # XPLORER',
+        )
 
 
 def main(src: Path):

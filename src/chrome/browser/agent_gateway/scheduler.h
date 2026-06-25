@@ -7,6 +7,7 @@
 #include <string>
 #include <vector>
 
+#include "base/functional/callback_forward.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/time/time.h"
@@ -76,6 +77,15 @@ class Scheduler {
 
   // All jobs as a {"version":1,"jobs":[...]} dict, for GET /api/schedules.
   base::DictValue ListJobsDict() const;
+
+  // Thread-safe snapshot of the job list for UI consumers (the native
+  // "Scheduled" sidebar section runs on the UI thread and must NOT read jobs_
+  // directly — jobs_ lives on the gateway IO thread, task_runner_). Computes
+  // ListJobsDict() on task_runner_ and runs |callback| with the result on the
+  // caller's sequence. If the scheduler has not been Start()ed yet (task_runner_
+  // is null), replies with an empty {"version":1,"jobs":[]} dict on the caller's
+  // sequence.
+  void GetJobsAsync(base::OnceCallback<void(base::DictValue)> callback);
 
   // Create or update a job from a JSON body (POST /api/schedules). If the body
   // carries an existing id the matching job is replaced; otherwise a new id is
