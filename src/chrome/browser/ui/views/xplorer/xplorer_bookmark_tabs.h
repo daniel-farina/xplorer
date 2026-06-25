@@ -4,6 +4,8 @@
 #ifndef CHROME_BROWSER_UI_VIEWS_XPLORER_XPLORER_BOOKMARK_TABS_H_
 #define CHROME_BROWSER_UI_VIEWS_XPLORER_XPLORER_BOOKMARK_TABS_H_
 
+#include <cstdint>
+
 #include "url/gurl.h"
 
 class Browser;
@@ -19,20 +21,22 @@ class TabInterface;
 
 namespace xplorer {
 
-// Shows or hides a tab's row in the vertical tab strip (Arc-style bookmark tabs
-// live in the sidebar and are hidden from the Tabs list while pinned to a URL).
 void SetTabRowVisible(Browser* browser, tabs::TabInterface* tab, bool visible);
 
-// Opens |url| as a sidebar bookmark tab: reuses an existing tab tagged with the
-// same URL, otherwise opens a new tab, tags it, and hides its row from Tabs.
-void OpenBookmarkTab(BrowserWindowInterface* browser, const GURL& url);
+// Arc-style bookmark tabs: each bookmark is a dedicated WebContents, launched
+// from the Bookmarks sidebar. Rows stay hidden in the Tabs strip; the sidebar
+// row is the tab affordance.
+void OpenBookmarkTab(BrowserWindowInterface* browser,
+                     const GURL& url,
+                     int64_t bookmark_node_id = 0);
 
-// True when |wc| is tagged as a sidebar bookmark tab still on |bookmark_url|'s
-// host (used for row highlighting and detach detection).
+bool IsBookmarkWebContents(content::WebContents* wc);
 bool IsBookmarkTabOnUrl(content::WebContents* wc, const GURL& bookmark_url);
+bool IsBookmarkTabForNode(content::WebContents* wc, int64_t bookmark_node_id);
 
-// Re-applies hidden rows for all bookmark-tagged tabs (call after tab-strip
-// layout churn that may have re-shown rows).
+// Vertical strip paints |last user tab| as selected while bookmark content shows.
+bool ShouldShowAsActiveInStrip(tabs::TabInterface* tab);
+
 void ReassertHiddenBookmarkTabRows(Browser* browser);
 
 }  // namespace xplorer

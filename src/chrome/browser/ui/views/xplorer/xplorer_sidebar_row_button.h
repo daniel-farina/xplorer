@@ -23,6 +23,9 @@ class XplorerSidebarRowButton : public views::MdTextButton {
   ~XplorerSidebarRowButton() override;
 
   void SetRowIcon(const ui::ImageModel& icon);
+  void SetRowTitle(std::u16string_view title);
+  // Folder rows show a leading expand/collapse chevron in the title.
+  void SetFolderStyle(bool is_folder, bool expanded);
   void SetSelected(bool selected);
 
   // views::View:
@@ -34,7 +37,11 @@ class XplorerSidebarRowButton : public views::MdTextButton {
   void UpdateBackgroundColor() override;
 
  private:
+  void RefreshTitle();
 
+  std::u16string base_title_;
+  bool is_folder_ = false;
+  bool folder_expanded_ = false;
   bool selected_ = false;
 };
 

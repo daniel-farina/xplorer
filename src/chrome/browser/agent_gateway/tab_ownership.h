@@ -53,10 +53,10 @@ class TabOwnership : public base::SupportsUserData::Data {
   // never steal the user's focus.
   bool background = false;
 
-  // When non-empty, this tab is an Arc-style sidebar bookmark tab: its row is
-  // hidden from the vertical Tabs strip until navigation leaves |bookmark_url|'s
-  // host (then the row is shown again and this field is cleared).
+  // Sidebar bookmark tab: |bookmark_node_id| maps to a BookmarkModel node;
+  // row stays out of the Tabs strip. |bookmark_url| is the opened URL.
   GURL bookmark_url;
+  int64_t bookmark_node_id = 0;
 
   // Per-tab activity counters — what the in-tab HUD shows, so each tab
   // reflects only the agent controlling it (not a global blend).

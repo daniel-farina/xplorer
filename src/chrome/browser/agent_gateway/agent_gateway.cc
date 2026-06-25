@@ -179,7 +179,7 @@ bool IsUnownedUserTab(const TabOwnership* own) {
   if (!own) {
     return true;
   }
-  if (own->bookmark_url.is_valid()) {
+  if (own->bookmark_node_id != 0) {
     return false;
   }
   return own->task_id.empty() && own->owner.empty();
@@ -195,7 +195,7 @@ bool AgentMayUseTab(const std::string& agent_id,
   if (agent_id.empty() || !own) {
     return true;
   }
-  if (own->bookmark_url.is_valid()) {
+  if (own->bookmark_node_id != 0) {
     err->Set("error",
              "cannot use a sidebar bookmark tab — use POST /tabs to open a "
              "new background tab");
@@ -477,7 +477,7 @@ void AgentGateway::RouteRequest(int connection_id,
         t.Set("label", own ? own->label : std::string());
         t.Set("task_id", own ? own->task_id : std::string());
         t.Set("background", own ? own->background : false);
-        t.Set("bookmark", own && own->bookmark_url.is_valid());
+        t.Set("bookmark", own && own->bookmark_node_id != 0);
         t.Set("mine", own && !agent_id.empty() && own->owner == agent_id);
         tabs.Append(std::move(t));
       }

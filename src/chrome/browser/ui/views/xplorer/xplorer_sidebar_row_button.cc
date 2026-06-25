@@ -28,8 +28,9 @@ constexpr int kHorizontalPadding = 8;
 
 XplorerSidebarRowButton::XplorerSidebarRowButton(PressedCallback callback,
                                                  std::u16string_view text)
-    : views::MdTextButton(std::move(callback), text,
+    : views::MdTextButton(std::move(callback), std::u16string(),
                             views::style::CONTEXT_BUTTON_MD) {
+  SetRowTitle(text);
   SetStyle(ui::ButtonStyle::kText);
   views::InstallPillHighlightPathGenerator(this);
   SetHorizontalAlignment(gfx::ALIGN_LEFT);
@@ -47,6 +48,26 @@ XplorerSidebarRowButton::~XplorerSidebarRowButton() = default;
 
 void XplorerSidebarRowButton::SetRowIcon(const ui::ImageModel& icon) {
   SetImageModel(views::Button::STATE_NORMAL, icon);
+}
+
+void XplorerSidebarRowButton::SetRowTitle(std::u16string_view title) {
+  base_title_ = std::u16string(title);
+  RefreshTitle();
+}
+
+void XplorerSidebarRowButton::SetFolderStyle(bool is_folder, bool expanded) {
+  is_folder_ = is_folder;
+  folder_expanded_ = expanded;
+  RefreshTitle();
+}
+
+void XplorerSidebarRowButton::RefreshTitle() {
+  std::u16string text;
+  if (is_folder_) {
+    text += folder_expanded_ ? u"\u25BE " : u"\u25B8 ";
+  }
+  text += base_title_;
+  SetText(text);
 }
 
 void XplorerSidebarRowButton::SetSelected(bool selected) {

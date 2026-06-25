@@ -83,15 +83,19 @@ class XplorerSidebarBookmarksView : public views::View,
     raw_ptr<XplorerSidebarRowButton> button = nullptr;
   };
 
+  void AddBookmarkNodes(const bookmarks::BookmarkNode* parent, int depth);
   void OnBookmarkPressed(const bookmarks::BookmarkNode* node);
+  void OnFolderPressed(const bookmarks::BookmarkNode* folder);
   void UpdateRowIcon(XplorerSidebarRowButton* button,
                      const bookmarks::BookmarkNode* node);
   XplorerSidebarRowButton* FindRowButton(int64_t node_id);
+  gfx::Insets RowMargins(int depth) const;
 
   const raw_ptr<BrowserWindowInterface> browser_;
   const raw_ptr<Profile> profile_;
   raw_ptr<bookmarks::BookmarkModel> model_ = nullptr;
   std::vector<BookmarkRow> rows_;
+  std::set<int64_t> expanded_folder_ids_;
   base::ScopedObservation<bookmarks::BookmarkModel,
                           bookmarks::BookmarkModelObserver>
       model_observation_{this};

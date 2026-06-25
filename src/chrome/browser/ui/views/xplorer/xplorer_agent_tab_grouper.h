@@ -17,7 +17,7 @@ namespace xplorer {
 
 // Keeps agent-owned tabs grouped in the vertical tab strip: ad-hoc agent tabs
 // in "Agent tabs (N)", scheduled-task tabs in "Scheduled task tabs (N)" (rows
-// hidden from the strip). Reasserts hidden bookmark/scheduled rows on change.
+// hidden from the strip). Reasserts hidden scheduled rows on change.
 class AgentTabGrouper : public TabStripModelObserver {
  public:
   explicit AgentTabGrouper(TabStripModel* model);

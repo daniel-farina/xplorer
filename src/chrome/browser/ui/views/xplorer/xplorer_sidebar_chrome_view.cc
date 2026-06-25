@@ -100,16 +100,18 @@ void XplorerSidebarChromeView::AttachToolbar(XplorerToolbarView* toolbar) {
 }
 
 void XplorerSidebarChromeView::UpdateChromeState() {
-  const bool show_bookmarks_block =
+  const bool show_toolbar_in_sidebar =
       GetToolbarPlacement() == ToolbarPlacement::kSidebar && GetToolbarVisible();
+  // Bookmarks always live in the sidebar rail (Arc-style), independent of where
+  // the Grok pill toolbar is placed.
   if (bookmarks_) {
-    bookmarks_->SetVisible(show_bookmarks_block);
+    bookmarks_->SetVisible(true);
   }
   if (toolbar_host_) {
-    toolbar_host_->SetVisible(show_bookmarks_block);
+    toolbar_host_->SetVisible(show_toolbar_in_sidebar);
   }
   if (bookmarks_separator_) {
-    bookmarks_separator_->SetVisible(show_bookmarks_block);
+    bookmarks_separator_->SetVisible(show_toolbar_in_sidebar);
   }
   PreferredSizeChanged();
   InvalidateLayout();

@@ -606,6 +606,14 @@ def patch_vertical_sidebar(src: Path):
     # anchors on. On a clean chromium reset that anchor does not exist until
     # this block adds it, so the chrome-view block MUST run first. Each block
     # keeps its own verbatim-presence guard for idempotency.
+    observer_cc = '      "views/xplorer/xplorer_bookmark_tab_observer.cc",  # XPLORER\n'
+    observer_h = '      "views/xplorer/xplorer_bookmark_tab_observer.h",  # XPLORER\n'
+    gn_text = browser_ui_gn.read_text()
+    if observer_cc in gn_text or observer_h in gn_text:
+        gn_text = gn_text.replace(observer_cc, "").replace(observer_h, "")
+        browser_ui_gn.write_text(gn_text)
+        print(f"  removed bookmark_tab_observer from: {browser_ui_gn}")
+
     if "xplorer_sidebar_chrome_view.cc" not in browser_ui_gn.read_text():
         edit(
             browser_ui_gn,
@@ -617,8 +625,6 @@ def patch_vertical_sidebar(src: Path):
             '      "views/xplorer/xplorer_sidebar_bookmarks_view.h",  # XPLORER\n'
             '      "views/xplorer/xplorer_bookmark_tabs.cc",  # XPLORER\n'
             '      "views/xplorer/xplorer_bookmark_tabs.h",  # XPLORER\n'
-            '      "views/xplorer/xplorer_bookmark_tab_observer.cc",  # XPLORER\n'
-            '      "views/xplorer/xplorer_bookmark_tab_observer.h",  # XPLORER\n'
             '      "views/xplorer/xplorer_sidebar_row_button.cc",  # XPLORER\n'
             '      "views/xplorer/xplorer_sidebar_row_button.h",  # XPLORER\n'
             '      "views/xplorer/xplorer_sidebar_section_label.cc",  # XPLORER\n'
@@ -677,6 +683,118 @@ def patch_vertical_sidebar(src: Path):
             "  InvalidateLayout();\n"
             "}\n\n"
             "BEGIN_METADATA(VerticalTabStripView)",
+        )
+
+
+def patch_vertical_tab_bookmark_strip(src: Path):
+    """Keep Tabs-strip selection on the last user tab while bookmark content shows."""
+    vtv_cc = src / "chrome/browser/ui/views/tabs/vertical/vertical_tab_view.cc"
+    anchor = "  active_ = tab_strip_model->IsTabInForeground(index);"
+    replacement = (
+        "  // XPLORER: bookmark tabs are sidebar-only; don't steal strip selection.\n"
+        "  active_ = xplorer::ShouldShowAsActiveInStrip(tab);"
+    )
+    if anchor in vtv_cc.read_text() and replacement not in vtv_cc.read_text():
+        edit(
+            vtv_cc,
+            '#include "chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_view.h"',
+            '#include "chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_view.h"\n'
+            '#include "chrome/browser/ui/views/xplorer/xplorer_bookmark_tabs.h"  // XPLORER',
+        )
+        edit(vtv_cc, anchor, replacement)
+
+    vts_view_cc = (src / "chrome/browser/ui/views/tabs/vertical/"
+                   "vertical_tab_strip_view.cc")
+    scroll_anchor = (
+        "  TabCollectionNode* activated_node =\n"
+        "      collection_node_->GetNodeForHandle(active_tab->GetHandle());\n"
+        "  CHECK(activated_node);\n"
+        "  ScrollToView(activated_node->view());"
+    )
+    scroll_replacement = (
+        "  // XPLORER: bookmark tabs have no visible strip row.\n"
+        "  if (!xplorer::IsBookmarkWebContents(active_tab->GetContents())) {\n"
+        "    TabCollectionNode* activated_node =\n"
+        "        collection_node_->GetNodeForHandle(active_tab->GetHandle());\n"
+        "    CHECK(activated_node);\n"
+        "    ScrollToView(activated_node->view());\n"
+        "  }"
+    )
+    vts_text = vts_view_cc.read_text()
+    if scroll_anchor in vts_text and (
+            "bookmark tabs have no visible strip row" not in vts_text):
+        edit(
+            vts_view_cc,
+            '#include "chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_view.h"',
+            '#include "chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_view.h"\n'
+            '#include "chrome/browser/ui/views/xplorer/xplorer_bookmark_tabs.h"  // XPLORER',
+        )
+        edit(vts_view_cc, scroll_anchor, scroll_replacement)
+
+
+def patch_bookmark_bar_navigation(src: Path):
+    """Route bookmark-bar clicks through Arc-style dedicated bookmark tabs."""
+    bbv = src / "chrome/browser/ui/views/bookmarks/bookmark_bar_view.cc"
+    if "xplorer::OpenBookmarkTab" not in bbv.read_text():
+        edit(
+            bbv,
+            '#include "chrome/browser/ui/views/frame/browser_view.h"',
+            '#include "chrome/browser/ui/views/frame/browser_view.h"\n'
+            '#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"  '
+            "// XPLORER\n"
+            '#include "chrome/browser/ui/views/xplorer/xplorer_bookmark_tabs.h"  // XPLORER',
+        )
+        edit(
+            bbv,
+            "  RecordAppLaunch(browser_->profile(), node->url());\n"
+            "  bookmarks::OpenAllIfAllowed(\n"
+            "      browser_, {node}, ui::DispositionFromEventFlags(event.flags()),\n"
+            "      bookmarks::OpenAllBookmarksContext::kNone,\n"
+            "      page_load_metrics::NavigationHandleUserData::InitiatorLocation::\n"
+            "          kBookmarkBar,\n"
+            "      {{BookmarkLaunchLocation::kAttachedBar, base::TimeTicks::Now()}});",
+            "  RecordAppLaunch(browser_->profile(), node->url());\n"
+            "  // XPLORER: Arc-style dedicated bookmark tabs (same as sidebar).\n"
+            "  xplorer::OpenBookmarkTab(browser_, node->url(), node->id());",
+        )
+
+    bmd = src / "chrome/browser/ui/views/bookmarks/bookmark_menu_delegate.cc"
+    bmd_text = bmd.read_text()
+    old_menu_guard = (
+        "  if (selection.size() == 1 && selection[0]->is_url() &&\n"
+        "      initial_disposition == WindowOpenDisposition::CURRENT_TAB) {"
+    )
+    new_menu_guard = (
+        "  if (selection.size() == 1 && selection[0]->is_url()) {"
+    )
+    if old_menu_guard in bmd_text:
+        bmd.write_text(bmd_text.replace(old_menu_guard, new_menu_guard, 1))
+        print(f"  updated menu guard: {bmd}")
+    if "xplorer::OpenBookmarkTab" not in bmd.read_text():
+        edit(
+            bmd,
+            '#include "chrome/browser/ui/views/bookmarks/bookmark_bar_view.h"',
+            '#include "chrome/browser/ui/views/bookmarks/bookmark_bar_view.h"\n'
+            '#include "chrome/browser/ui/views/xplorer/xplorer_bookmark_tabs.h"  // XPLORER',
+        )
+        edit(
+            bmd,
+            "  std::vector<raw_ptr<const BookmarkNode, VectorExperimental>> selection =\n"
+            "      menu_id_to_node_map_.find(id)->second.GetUnderlyingNodes(\n"
+            "          GetBookmarkMergedSurfaceService());\n"
+            "  bookmarks::OpenAllIfAllowed(browser_, selection, initial_disposition,\n"
+            "                              context);",
+            "  std::vector<raw_ptr<const BookmarkNode, VectorExperimental>> selection =\n"
+            "      menu_id_to_node_map_.find(id)->second.GetUnderlyingNodes(\n"
+            "          GetBookmarkMergedSurfaceService());\n"
+            "  // XPLORER: single URL picks get a dedicated bookmark tab.\n"
+            "  if (selection.size() == 1 && selection[0]->is_url()) {\n"
+            "    xplorer::OpenBookmarkTab(browser_, selection[0]->url(),\n"
+            "                             selection[0]->id());\n"
+            "    return;\n"
+            "  }\n"
+            "  bookmarks::OpenAllIfAllowed(browser_, selection, initial_disposition,\n"
+            "                              context);",
         )
 
 
@@ -1692,6 +1810,9 @@ def main(src: Path):
 
     # Arc-style vertical sidebar: bookmarks + optional toolbar + agent tab group.
     patch_vertical_sidebar(src)
+
+    patch_vertical_tab_bookmark_strip(src)
+    patch_bookmark_bar_navigation(src)
 
     patch_xplorer_settings_access(src)
 

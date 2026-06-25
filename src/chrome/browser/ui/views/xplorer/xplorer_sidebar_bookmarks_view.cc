@@ -7,12 +7,12 @@
 
 #include "base/functional/bind.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
+#include "chrome/browser/ui/bookmarks/bookmark_utils.h"
 #include "chrome/browser/favicon/favicon_utils.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
-#include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
 #include "chrome/browser/ui/views/xplorer/xplorer_bookmark_tabs.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/xplorer/xplorer_sidebar_row_button.h"
@@ -20,27 +20,19 @@
 #include "chrome/browser/ui/views/xplorer/xplorer_toolbar_view.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/bookmarks/browser/bookmark_node.h"
-#include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/web_contents.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/mojom/menu_source_type.mojom.h"
-#include "ui/base/page_transition_types.h"
-#include "ui/base/window_open_disposition.h"
 #include "ui/gfx/favicon_size.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/image/image_skia_operations.h"
-
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/view_class_properties.h"
 
 namespace xplorer {
 
 namespace {
-constexpr int kMaxBookmarks = 12;
-
-gfx::Insets SidebarRowMargins() {
-  return gfx::Insets::TLBR(2, 0, 2, 0);
-}
+constexpr int kFolderIndentPx = 12;
 }  // namespace
 
 XplorerSidebarBookmarksView::XplorerSidebarBookmarksView(
@@ -88,13 +80,14 @@ void XplorerSidebarBookmarksView::BookmarkNodeRemoved(
     const bookmarks::BookmarkNode* node,
     const std::set<GURL>& no_longer_bookmarked,
     const base::Location& location) {
+  expanded_folder_ids_.erase(node->id());
   Rebuild();
 }
 
 void XplorerSidebarBookmarksView::BookmarkNodeChanged(
     const bookmarks::BookmarkNode* node) {
   if (XplorerSidebarRowButton* button = FindRowButton(node->id())) {
-    button->SetText(node->GetTitle());
+    button->SetRowTitle(node->GetTitle());
   } else {
     Rebuild();
   }
@@ -123,6 +116,7 @@ void XplorerSidebarBookmarksView::BookmarkNodeChildrenReordered(
 void XplorerSidebarBookmarksView::BookmarkAllUserNodesRemoved(
     const std::set<GURL>& removed_urls,
     const base::Location& location) {
+  expanded_folder_ids_.clear();
   Rebuild();
 }
 
@@ -150,6 +144,11 @@ void XplorerSidebarBookmarksView::OnThemeChanged() {
   SetBackground(nullptr);
 }
 
+gfx::Insets XplorerSidebarBookmarksView::RowMargins(int depth) const {
+  const int left = depth * kFolderIndentPx;
+  return gfx::Insets::TLBR(2, left, 2, 0);
+}
+
 void XplorerSidebarBookmarksView::Rebuild() {
   RemoveAllChildViews();
   rows_.clear();
@@ -161,26 +160,48 @@ void XplorerSidebarBookmarksView::Rebuild() {
       u"Bookmarks"));
   header->SetProperty(views::kMarginsKey, gfx::Insets::TLBR(4, 0, 0, 0));
 
-  const bookmarks::BookmarkNode* bar = model_->bookmark_bar_node();
-  int shown = 0;
-  for (const auto& child : bar->children()) {
-    if (!child->is_url()) {
+  AddBookmarkNodes(model_->bookmark_bar_node(), /*depth=*/0);
+  UpdateActiveHighlight();
+}
+
+void XplorerSidebarBookmarksView::AddBookmarkNodes(
+    const bookmarks::BookmarkNode* parent,
+    int depth) {
+  if (!parent) {
+    return;
+  }
+  for (const auto& child : parent->children()) {
+    if (child->is_url()) {
+      auto button = std::make_unique<XplorerSidebarRowButton>(
+          base::BindRepeating(&XplorerSidebarBookmarksView::OnBookmarkPressed,
+                              base::Unretained(this), child.get()),
+          child->GetTitle());
+      button->SetProperty(views::kMarginsKey, RowMargins(depth));
+      UpdateRowIcon(button.get(), child.get());
+      XplorerSidebarRowButton* row = AddChildView(std::move(button));
+      rows_.push_back({child->id(), child->url(), row});
       continue;
     }
-    auto button = std::make_unique<XplorerSidebarRowButton>(
-        base::BindRepeating(&XplorerSidebarBookmarksView::OnBookmarkPressed,
+
+    if (!child->is_folder()) {
+      continue;
+    }
+
+    const bool expanded = expanded_folder_ids_.count(child->id()) > 0;
+    auto folder_button = std::make_unique<XplorerSidebarRowButton>(
+        base::BindRepeating(&XplorerSidebarBookmarksView::OnFolderPressed,
                             base::Unretained(this), child.get()),
         child->GetTitle());
-    button->SetProperty(views::kMarginsKey, SidebarRowMargins());
-    UpdateRowIcon(button.get(), child.get());
-    XplorerSidebarRowButton* row =
-        AddChildView(std::move(button));
-    rows_.push_back({child->id(), child->url(), row});
-    if (++shown >= kMaxBookmarks) {
-      break;
+    folder_button->SetProperty(views::kMarginsKey, RowMargins(depth));
+    folder_button->SetFolderStyle(/*is_folder=*/true, expanded);
+    folder_button->SetRowIcon(chrome::GetBookmarkFolderIcon(
+        chrome::BookmarkFolderIconType::kNormal, ui::kColorMenuIcon));
+    AddChildView(std::move(folder_button));
+
+    if (expanded) {
+      AddBookmarkNodes(child.get(), depth + 1);
     }
   }
-  UpdateActiveHighlight();
 }
 
 void XplorerSidebarBookmarksView::UpdateRowIcon(
@@ -217,15 +238,25 @@ void XplorerSidebarBookmarksView::OnBookmarkPressed(
   if (!node || !node->is_url() || !browser_) {
     return;
   }
-  OpenBookmarkTab(browser_, node->url());
+  OpenBookmarkTab(browser_, node->url(), node->id());
   UpdateActiveHighlight();
+}
+
+void XplorerSidebarBookmarksView::OnFolderPressed(
+    const bookmarks::BookmarkNode* folder) {
+  if (!folder || !folder->is_folder()) {
+    return;
+  }
+  if (expanded_folder_ids_.count(folder->id())) {
+    expanded_folder_ids_.erase(folder->id());
+  } else {
+    expanded_folder_ids_.insert(folder->id());
+  }
+  Rebuild();
 }
 
 void XplorerSidebarBookmarksView::OnTabStripActiveTabChanged(
     BrowserWindowInterface* browser) {
-  if (Browser* b = browser ? browser->GetBrowserForMigrationOnly() : nullptr) {
-    ReassertHiddenBookmarkTabRows(b);
-  }
   UpdateActiveHighlight();
 }
 
@@ -240,8 +271,12 @@ void XplorerSidebarBookmarksView::UpdateActiveHighlight() {
       continue;
     }
     bool selected = false;
-    if (active && row.url.is_valid()) {
-      selected = IsBookmarkTabOnUrl(active, row.url);
+    if (active) {
+      if (row.node_id != 0) {
+        selected = IsBookmarkTabForNode(active, row.node_id);
+      } else if (row.url.is_valid()) {
+        selected = IsBookmarkTabOnUrl(active, row.url);
+      }
     }
     row.button->SetSelected(selected);
   }

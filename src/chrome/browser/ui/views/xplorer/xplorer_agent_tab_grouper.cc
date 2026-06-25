@@ -179,7 +179,7 @@ void AgentTabGrouper::Reconcile() {
       own->task_id.clear();
       if (browser) {
         tabs::TabInterface* tab = model_->GetTabAtIndex(i);
-        if (tab && !own->bookmark_url.is_valid()) {
+        if (tab && own->bookmark_node_id == 0) {
           SetTabRowVisible(browser, tab, true);
         }
       }

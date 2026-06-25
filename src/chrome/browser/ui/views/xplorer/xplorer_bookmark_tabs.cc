@@ -3,9 +3,10 @@
 
 #include "chrome/browser/ui/views/xplorer/xplorer_bookmark_tabs.h"
 
-#include "chrome/browser/ui/views/xplorer/xplorer_bookmark_tab_observer.h"
+#include <map>
+#include <memory>
 
-#include "base/strings/string_util.h"
+#include "base/no_destructor.h"
 #include "chrome/browser/agent_gateway/tab_ownership.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/navigator/browser_navigator.h"
@@ -19,34 +20,38 @@
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/web_contents.h"
 #include "ui/base/page_transition_types.h"
-#include "ui/base/window_open_disposition.h"
 #include "url/gurl.h"
 
 namespace xplorer {
 
 namespace {
 
-bool SameBookmarkHost(const GURL& a, const GURL& b) {
-  return a.is_valid() && b.is_valid() && !a.host().empty() &&
-         a.host() == b.host();
+bool IsBookmarkOwnership(const agent_gateway::TabOwnership* own) {
+  return own && own->bookmark_node_id != 0;
 }
 
-void TagBookmarkTab(content::WebContents* wc, const GURL& url) {
-  if (!wc || !url.is_valid()) {
+void TagBookmarkTab(content::WebContents* wc,
+                    const GURL& url,
+                    int64_t bookmark_node_id) {
+  if (!wc || !url.is_valid() || bookmark_node_id == 0) {
     return;
   }
   agent_gateway::TabOwnership* own =
       agent_gateway::TabOwnership::GetOrCreate(wc);
   own->bookmark_url = url;
+  own->bookmark_node_id = bookmark_node_id;
 }
 
-void ClearBookmarkTabTag(content::WebContents* wc) {
-  if (!wc) {
+void NavigateBookmarkTabToUrl(content::WebContents* wc, const GURL& url) {
+  if (!wc || !url.is_valid()) {
     return;
   }
-  if (agent_gateway::TabOwnership* own = agent_gateway::TabOwnership::Get(wc)) {
-    own->bookmark_url = GURL();
+  if (wc->GetLastCommittedURL() == url) {
+    return;
   }
+  content::NavigationController::LoadURLParams params(url);
+  params.transition_type = ui::PAGE_TRANSITION_AUTO_BOOKMARK;
+  wc->GetController().LoadURLWithParams(params);
 }
 
 VerticalTabStripView* GetVerticalTabStripView(Browser* browser) {
@@ -59,6 +64,159 @@ VerticalTabStripView* GetVerticalTabStripView(Browser* browser) {
   }
   return static_cast<VerticalTabStripView*>(
       browser_view->vertical_tab_strip_region_view()->GetTabStripView());
+}
+
+void HideBookmarkTabRow(Browser* browser, tabs::TabInterface* tab) {
+  SetTabRowVisible(browser, tab, false);
+}
+
+// Tracks the last non-bookmark tab so the Tabs strip selection stays put while
+// bookmark content is in the frame.
+class BookmarkTabStripHelper : public TabStripModelObserver {
+ public:
+  explicit BookmarkTabStripHelper(Browser* browser) : browser_(browser) {
+    browser_->tab_strip_model()->AddObserver(this);
+    SeedLastUserTab();
+  }
+
+  ~BookmarkTabStripHelper() override {
+    if (browser_) {
+      browser_->tab_strip_model()->RemoveObserver(this);
+    }
+  }
+
+  static BookmarkTabStripHelper* GetOrCreate(Browser* browser) {
+    if (!browser) {
+      return nullptr;
+    }
+    static base::NoDestructor<
+        std::map<Browser*, std::unique_ptr<BookmarkTabStripHelper>>>
+        helpers;
+    auto& map = *helpers;
+    auto it = map.find(browser);
+    if (it != map.end()) {
+      return it->second.get();
+    }
+    auto helper = std::make_unique<BookmarkTabStripHelper>(browser);
+    BookmarkTabStripHelper* raw = helper.get();
+    map.emplace(browser, std::move(helper));
+    return raw;
+  }
+
+  const tabs::TabInterface* last_user_tab() const { return last_user_tab_; }
+
+  void RememberCurrentUserTab() {
+    TabStripModel* tabs = browser_->tab_strip_model();
+    if (!tabs) {
+      return;
+    }
+    content::WebContents* active = tabs->GetActiveWebContents();
+    if (!active || IsBookmarkWebContents(active)) {
+      return;
+    }
+    last_user_tab_ = tabs->GetTabForWebContents(active);
+  }
+
+  void OnTabStripModelChanged(
+      TabStripModel* tab_strip_model,
+      const TabStripModelChange& change,
+      const TabStripSelectionChange& selection) override {
+    if (!selection.active_tab_changed() || !selection.new_tab) {
+      return;
+    }
+    if (!IsBookmarkWebContents(selection.new_tab->GetContents())) {
+      last_user_tab_ = selection.new_tab;
+    }
+  }
+
+ private:
+  void SeedLastUserTab() {
+    TabStripModel* tabs = browser_->tab_strip_model();
+    if (!tabs) {
+      return;
+    }
+    for (int i = 0; i < tabs->count(); ++i) {
+      content::WebContents* wc = tabs->GetWebContentsAt(i);
+      if (wc && !IsBookmarkWebContents(wc)) {
+        last_user_tab_ = tabs->GetTabAtIndex(i);
+        return;
+      }
+    }
+  }
+
+  raw_ptr<Browser> browser_;
+  raw_ptr<const tabs::TabInterface> last_user_tab_ = nullptr;
+};
+
+content::WebContents* FindBookmarkTab(TabStripModel* tabs,
+                                      int64_t bookmark_node_id) {
+  if (!tabs || bookmark_node_id == 0) {
+    return nullptr;
+  }
+  for (int i = 0; i < tabs->count(); ++i) {
+    content::WebContents* wc = tabs->GetWebContentsAt(i);
+    if (!wc) {
+      continue;
+    }
+    agent_gateway::TabOwnership* own = agent_gateway::TabOwnership::Get(wc);
+    if (IsBookmarkOwnership(own) && own->bookmark_node_id == bookmark_node_id) {
+      return wc;
+    }
+  }
+  return nullptr;
+}
+
+content::WebContents* CreateBackgroundBookmarkTab(Browser* browser,
+                                                  const GURL& url) {
+  NavigateParams params(browser, url, ui::PAGE_TRANSITION_AUTO_BOOKMARK);
+  params.disposition = WindowOpenDisposition::NEW_BACKGROUND_TAB;
+  Navigate(&params);
+  return params.navigated_or_inserted_contents;
+}
+
+void ActivateBookmarkTab(Browser* browser,
+                         TabStripModel* tabs,
+                         content::WebContents* wc,
+                         const GURL& url,
+                         int64_t bookmark_node_id) {
+  if (!browser || !tabs || !wc) {
+    return;
+  }
+  BookmarkTabStripHelper::GetOrCreate(browser)->RememberCurrentUserTab();
+
+  TagBookmarkTab(wc, url, bookmark_node_id);
+  NavigateBookmarkTabToUrl(wc, url);
+
+  if (tabs::TabInterface* tab = tabs->GetTabForWebContents(wc)) {
+    HideBookmarkTabRow(browser, tab);
+  }
+
+  const int index = tabs->GetIndexOfWebContents(wc);
+  if (index != TabStripModel::kNoTab) {
+    tabs->ActivateTabAt(index);
+  }
+
+  if (tabs::TabInterface* tab = tabs->GetTabForWebContents(wc)) {
+    HideBookmarkTabRow(browser, tab);
+  }
+  ReassertHiddenBookmarkTabRows(browser);
+}
+
+void UpdateBookmarkTabRowVisibility(Browser* browser,
+                                    TabStripModel* tabs,
+                                    content::WebContents* wc) {
+  if (!browser || !tabs || !wc) {
+    return;
+  }
+  agent_gateway::TabOwnership* own = agent_gateway::TabOwnership::Get(wc);
+  if (!IsBookmarkOwnership(own)) {
+    return;
+  }
+  tabs::TabInterface* tab = tabs->GetTabForWebContents(wc);
+  if (!tab) {
+    return;
+  }
+  HideBookmarkTabRow(browser, tab);
 }
 
 }  // namespace
@@ -76,67 +234,73 @@ void SetTabRowVisible(Browser* browser,
   strip->SetTabRowVisible(tab->GetHandle(), visible);
 }
 
-void OpenBookmarkTab(BrowserWindowInterface* browser, const GURL& url) {
-  if (!browser || !url.is_valid()) {
+void OpenBookmarkTab(BrowserWindowInterface* browser,
+                     const GURL& url,
+                     int64_t bookmark_node_id) {
+  if (!browser || !url.is_valid() || bookmark_node_id == 0) {
     return;
   }
   TabStripModel* tabs = browser->GetTabStripModel();
-  if (!tabs) {
-    return;
-  }
-
-  for (int i = 0; i < tabs->count(); ++i) {
-    content::WebContents* wc = tabs->GetWebContentsAt(i);
-    if (!wc) {
-      continue;
-    }
-    agent_gateway::TabOwnership* own = agent_gateway::TabOwnership::Get(wc);
-    if (own && own->bookmark_url == url) {
-      tabs->ActivateTabAt(i);
-      XplorerBookmarkTabObserver::ObserveBookmarkTab(
-          browser->GetBrowserForMigrationOnly(), wc);
-      SetTabRowVisible(browser->GetBrowserForMigrationOnly(),
-                       tabs->GetTabAtIndex(i), false);
-      return;
-    }
-    if (wc->GetLastCommittedURL() == url) {
-      TagBookmarkTab(wc, url);
-      tabs->ActivateTabAt(i);
-      XplorerBookmarkTabObserver::ObserveBookmarkTab(
-          browser->GetBrowserForMigrationOnly(), wc);
-      SetTabRowVisible(browser->GetBrowserForMigrationOnly(),
-                       tabs->GetTabAtIndex(i), false);
-      return;
-    }
-  }
-
   Browser* target = browser->GetBrowserForMigrationOnly();
-  if (!target) {
+  if (!tabs || !target) {
     return;
   }
-  NavigateParams params(target, url, ui::PAGE_TRANSITION_AUTO_BOOKMARK);
-  params.disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
-  Navigate(&params);
-  content::WebContents* wc = params.navigated_or_inserted_contents;
+
+  BookmarkTabStripHelper::GetOrCreate(target);
+
+  if (content::WebContents* existing =
+          FindBookmarkTab(tabs, bookmark_node_id)) {
+    ActivateBookmarkTab(target, tabs, existing, url, bookmark_node_id);
+    return;
+  }
+
+  content::WebContents* wc = CreateBackgroundBookmarkTab(target, url);
   if (!wc) {
     return;
   }
-  TagBookmarkTab(wc, url);
-  XplorerBookmarkTabObserver::ObserveBookmarkTab(target, wc);
-  if (tabs::TabInterface* tab = tabs->GetTabForWebContents(wc)) {
-    SetTabRowVisible(target, tab, false);
-  }
+  ActivateBookmarkTab(target, tabs, wc, url, bookmark_node_id);
+}
+
+bool IsBookmarkWebContents(content::WebContents* wc) {
+  return IsBookmarkOwnership(agent_gateway::TabOwnership::Get(wc));
 }
 
 bool IsBookmarkTabOnUrl(content::WebContents* wc, const GURL& bookmark_url) {
   if (!wc || !bookmark_url.is_valid()) {
     return false;
   }
-  agent_gateway::TabOwnership* own = agent_gateway::TabOwnership::Get(wc);
-  if (!own || own->bookmark_url != bookmark_url) {
+  return wc->GetLastCommittedURL() == bookmark_url;
+}
+
+bool IsBookmarkTabForNode(content::WebContents* wc, int64_t bookmark_node_id) {
+  if (!wc || bookmark_node_id == 0) {
     return false;
   }
-  return SameBookmarkHost(wc->GetLastCommittedURL(), bookmark_url);
+  agent_gateway::TabOwnership* own = agent_gateway::TabOwnership::Get(wc);
+  return own && own->bookmark_node_id == bookmark_node_id;
+}
+
+bool ShouldShowAsActiveInStrip(tabs::TabInterface* tab) {
+  if (!tab) {
+    return false;
+  }
+  BrowserWindowInterface* bwi = tab->GetBrowserWindowInterface();
+  TabStripModel* tabs = bwi ? bwi->GetTabStripModel() : nullptr;
+  if (!tabs) {
+    return false;
+  }
+  const int index = tabs->GetIndexOfTab(tab);
+  if (index == TabStripModel::kNoTab) {
+    return false;
+  }
+  content::WebContents* active_wc = tabs->GetActiveWebContents();
+  if (!IsBookmarkWebContents(active_wc)) {
+    return tabs->IsTabInForeground(index);
+  }
+  Browser* browser = bwi->GetBrowserForMigrationOnly();
+  BookmarkTabStripHelper* helper =
+      browser ? BookmarkTabStripHelper::GetOrCreate(browser) : nullptr;
+  return helper && helper->last_user_tab() == tab;
 }
 
 void ReassertHiddenBookmarkTabRows(Browser* browser) {
@@ -152,16 +316,7 @@ void ReassertHiddenBookmarkTabRows(Browser* browser) {
     if (!wc) {
       continue;
     }
-    agent_gateway::TabOwnership* own = agent_gateway::TabOwnership::Get(wc);
-    if (!own || !own->bookmark_url.is_valid()) {
-      continue;
-    }
-    const bool hide =
-        SameBookmarkHost(wc->GetLastCommittedURL(), own->bookmark_url);
-    SetTabRowVisible(browser, tabs->GetTabAtIndex(i), !hide);
-    if (!hide) {
-      ClearBookmarkTabTag(wc);
-    }
+    UpdateBookmarkTabRowVisibility(browser, tabs, wc);
   }
 }
 
