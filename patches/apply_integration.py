@@ -651,17 +651,46 @@ def patch_vertical_sidebar(src: Path):
         )
 
     # XPLORER: Arc-style bookmark tabs hide their row from the vertical tab list.
+    # Hiding is STATEFUL: a tab handle stays in `hidden_rows_` so it can be
+    # re-asserted at the relayout boundary (OnAnimationEnded in the unpinned
+    # container), mirroring how collapsed tab groups re-assert visibility. A
+    # one-shot SetVisible(false) is otherwise clobbered when the insert
+    # animation's TabCollectionAnimatingLayoutManager forces the new row back
+    # visible for the duration of the animation.
     vts_view_h = (src / "chrome/browser/ui/views/tabs/vertical/"
                   "vertical_tab_strip_view.h")
-    if "SetTabRowVisible" not in vts_view_h.read_text():
+    vts_view_h_text = vts_view_h.read_text()
+    if "SetTabRowVisible" not in vts_view_h_text:
+        # flat_set for the persistent set of hidden tab-row handles.
+        edit(
+            vts_view_h,
+            '#include "base/memory/raw_ptr.h"',
+            '#include "base/containers/flat_set.h"  // XPLORER\n'
+            '#include "base/memory/raw_ptr.h"',
+        )
+        # Public API: SetTabRowVisible + ReassertHiddenRows.
         edit(
             vts_view_h,
             "  void OnTabChanged(const tabs::TabInterface* active_tab);\n\n"
             "  void RecordMousePressedInTab();",
             "  void OnTabChanged(const tabs::TabInterface* active_tab);\n\n"
             "  // XPLORER: hide/show a tab row (Arc-style sidebar bookmark tabs).\n"
-            "  void SetTabRowVisible(const tabs::TabHandle& handle, bool visible);\n\n"
+            "  // Hiding is stateful so it survives insert + activate + the insert\n"
+            "  // animation; ReassertHiddenRows() re-applies SetVisible(false) at\n"
+            "  // the relayout boundary (the unpinned container's OnAnimationEnded).\n"
+            "  void SetTabRowVisible(const tabs::TabHandle& handle, bool visible);\n"
+            "  void ReassertHiddenRows();\n\n"
             "  void RecordMousePressedInTab();",
+        )
+        # Private member: the persistent set of hidden tab-row handles.
+        edit(
+            vts_view_h,
+            "  bool is_collapsed_ = false;",
+            "  bool is_collapsed_ = false;\n\n"
+            "  // XPLORER: handles of tab rows hidden from the strip. Kept so the\n"
+            "  // hidden state can be re-asserted after the insert animation, which\n"
+            "  // would otherwise force a freshly-inserted row back to visible.\n"
+            "  base::flat_set<tabs::TabHandle> hidden_rows_;",
         )
     vts_view_cc = (src / "chrome/browser/ui/views/tabs/vertical/"
                    "vertical_tab_strip_view.cc")
@@ -672,6 +701,14 @@ def patch_vertical_sidebar(src: Path):
             "void VerticalTabStripView::SetTabRowVisible(\n"
             "    const tabs::TabHandle& handle,\n"
             "    bool visible) {\n"
+            "  // Track the hidden state so it can be re-asserted after the insert\n"
+            "  // animation (see ReassertHiddenRows / the unpinned container's\n"
+            "  // OnAnimationEnded).\n"
+            "  if (visible) {\n"
+            "    hidden_rows_.erase(handle);\n"
+            "  } else {\n"
+            "    hidden_rows_.insert(handle);\n"
+            "  }\n"
             "  if (!collection_node_) {\n"
             "    return;\n"
             "  }\n"
@@ -682,7 +719,71 @@ def patch_vertical_sidebar(src: Path):
             "  node->view()->SetVisible(visible);\n"
             "  InvalidateLayout();\n"
             "}\n\n"
+            "void VerticalTabStripView::ReassertHiddenRows() {\n"
+            "  if (hidden_rows_.empty() || !collection_node_) {\n"
+            "    return;\n"
+            "  }\n"
+            "  // Re-apply SetVisible(false) for every still-hidden row, dropping\n"
+            "  // handles whose node/view has gone away. The next\n"
+            "  // CalculateProposedLayout then reads GetVisible()==false and the row\n"
+            "  // stays hidden.\n"
+            "  for (auto it = hidden_rows_.begin(); it != hidden_rows_.end();) {\n"
+            "    TabCollectionNode* node = collection_node_->GetNodeForHandle(*it);\n"
+            "    if (!node || !node->view()) {\n"
+            "      it = hidden_rows_.erase(it);\n"
+            "      continue;\n"
+            "    }\n"
+            "    node->view()->SetVisible(false);\n"
+            "    ++it;\n"
+            "  }\n"
+            "}\n\n"
             "BEGIN_METADATA(VerticalTabStripView)",
+        )
+
+    # XPLORER: re-assert hidden bookmark-tab rows at the relayout boundary.
+    # The unpinned container is a TabCollectionAnimatingLayoutManager::Delegate;
+    # overriding OnAnimationEnded() lets us re-apply SetVisible(false) right
+    # after the insert animation ends (mirrors VerticalTabGroupView, which
+    # re-asserts collapse there). Access the strip via the existing
+    # GetVerticalTabStripView() ancestry helper — no new member, no xplorer dep.
+    vutc_view_h = (src / "chrome/browser/ui/views/tabs/vertical/"
+                   "vertical_unpinned_tab_container_view.h")
+    if "OnAnimationEnded" not in vutc_view_h.read_text():
+        edit(
+            vutc_view_h,
+            "  bool ShouldAnimateOpacityForAddAndRemove(\n"
+            "      const views::View& child_view) const override;",
+            "  bool ShouldAnimateOpacityForAddAndRemove(\n"
+            "      const views::View& child_view) const override;\n"
+            "  // XPLORER: re-assert hidden bookmark-tab rows once the insert/move\n"
+            "  // animation settles, so the row stays hidden from the strip.\n"
+            "  void OnAnimationEnded() override;",
+        )
+    vutc_view_cc = (src / "chrome/browser/ui/views/tabs/vertical/"
+                    "vertical_unpinned_tab_container_view.cc")
+    vutc_cc_text = vutc_view_cc.read_text()
+    if "VerticalUnpinnedTabContainerView::OnAnimationEnded" not in vutc_cc_text:
+        edit(
+            vutc_view_cc,
+            '#include "chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_controller.h"',
+            '#include "chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_controller.h"\n'
+            '#include "chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_utils.h"  // XPLORER\n'
+            '#include "chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_view.h"  // XPLORER',
+        )
+        edit(
+            vutc_view_cc,
+            "BEGIN_METADATA(VerticalUnpinnedTabContainerView)",
+            "// XPLORER: re-apply the hidden state of bookmark-tab rows after the\n"
+            "// animating layout manager finishes. The insert animation forces a\n"
+            "// freshly-added row back to visible for its duration; re-asserting\n"
+            "// here makes the hidden state durable (the next layout reads\n"
+            "// GetVisible()==false and the row persists hidden).\n"
+            "void VerticalUnpinnedTabContainerView::OnAnimationEnded() {\n"
+            "  if (VerticalTabStripView* strip = GetVerticalTabStripView(this)) {\n"
+            "    strip->ReassertHiddenRows();\n"
+            "  }\n"
+            "}\n\n"
+            "BEGIN_METADATA(VerticalUnpinnedTabContainerView)",
         )
 
 
