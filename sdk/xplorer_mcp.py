@@ -38,28 +38,69 @@ def gateway():
         "Xplorer first.")
 
 
+def _is_scheduled_agent():
+    return os.environ.get("XPLORER_AGENT_ID", "").startswith("schedule:")
+
+
+def _scheduled_task_id():
+    if not _is_scheduled_agent():
+        return ""
+    return os.environ.get("XPLORER_TASK_ID", "")
+
+
 def api(method, path, body=None):
     g = gateway()
+    headers = {
+        "Authorization": "Bearer " + g["token"],
+        "Content-Type": "application/json",
+        # Identify the agent so the in-tab HUD shows who/which model
+        # is driving. Configure via env in your MCP server entry:
+        #   "env": {"XPLORER_AGENT_MODEL": "Grok", "XPLORER_AGENT_ID": "grok-cli"}
+        "X-Agent-Id": os.environ.get("XPLORER_AGENT_ID", "mcp"),
+        "X-Agent-Model": os.environ.get("XPLORER_AGENT_MODEL", "AI agent"),
+    }
+    task_id = _scheduled_task_id()
+    if task_id:
+        headers["X-Task-Id"] = task_id
     req = urllib.request.Request(
         g["url"] + path, method=method,
         data=json.dumps(body).encode() if body is not None else None,
-        headers={"Authorization": "Bearer " + g["token"],
-                 "Content-Type": "application/json",
-                 # Identify the agent so the in-tab HUD shows who/which model
-                 # is driving. Configure via env in your MCP server entry:
-                 #   "env": {"XPLORER_AGENT_MODEL": "Grok", "XPLORER_AGENT_ID": "grok-cli"}
-                 "X-Agent-Id": os.environ.get("XPLORER_AGENT_ID", "mcp"),
-                 "X-Agent-Model": os.environ.get("XPLORER_AGENT_MODEL",
-                                                  "AI agent")})
+        headers=headers)
     with urllib.request.urlopen(req, timeout=60) as r:
         return json.load(r)
 
 
 # -- tool definitions: name -> (description, input schema, handler) ----------
 
-def _first_tab():
+def _agent_tab(explicit=None):
+    """Resolve a tab id for agent tools. Never falls back to user/bookmark tabs."""
+    if explicit:
+        return explicit
     tabs = api("GET", "/tabs")["tabs"]
-    return tabs[0]["id"] if tabs else None
+    task_id = _scheduled_task_id()
+    agent_id = os.environ.get("XPLORER_AGENT_ID", "")
+    for t in tabs:
+        if t.get("mine"):
+            return t["id"]
+    if task_id:
+        for t in tabs:
+            if t.get("task_id") == task_id and not t.get("bookmark"):
+                return t["id"]
+    if agent_id:
+        for t in tabs:
+            if (t.get("owner") == agent_id and not t.get("task_id")
+                    and not t.get("bookmark")):
+                return t["id"]
+    return None
+
+
+def _require_agent_tab(explicit=None):
+    tab = _agent_tab(explicit)
+    if not tab:
+        raise RuntimeError(
+            "no agent-owned tab — call xplorer_new_tab first (never reuse "
+            "user or bookmark sidebar tabs)")
+    return tab
 
 
 def t_tabs(_):
@@ -68,20 +109,29 @@ def t_tabs(_):
 
 
 def t_new_tab(a):
-    r = api("POST", "/tabs", {"url": a.get("url", "about:blank"),
-                              "owner": a.get("owner", "mcp"),
-                              "label": a.get("label", "")})
+    owner = a.get("owner") or os.environ.get("XPLORER_AGENT_ID", "mcp")
+    if not _is_scheduled_agent() and owner.startswith("schedule:"):
+        owner = "mcp"
+    body = {
+        "url": a.get("url", "about:blank"),
+        "owner": owner,
+        "label": a.get("label", ""),
+    }
+    task_id = a.get("task_id") or _scheduled_task_id()
+    if task_id and _is_scheduled_agent():
+        body["task_id"] = task_id
+    r = api("POST", "/tabs", body)
     return text(json.dumps(r))
 
 
 def t_navigate(a):
-    tab = a.get("tab") or _first_tab()
+    tab = _require_agent_tab(a.get("tab"))
     api("POST", f"/tabs/{tab}/navigate", {"url": a["url"]})
     return text(f"navigated tab {tab} to {a['url']}")
 
 
 def t_read_text(a):
-    tab = a.get("tab") or _first_tab()
+    tab = _require_agent_tab(a.get("tab"))
     r = api("POST", f"/tabs/{tab}/text")
     val = r.get("result", {}).get("value")
     if val:
@@ -93,7 +143,7 @@ def t_read_text(a):
 def t_observe(a):
     """Return interactive elements (role + accessible name) — site-agnostic.
     Optional: role (filter, e.g. 'gridcell'), limit (default 80)."""
-    tab = a.get("tab") or _first_tab()
+    tab = _require_agent_tab(a.get("tab"))
     role = a.get("role", "")
     limit = int(a.get("limit", 80))
     js = ("(()=>{const S='a,button,input,textarea,select,[role=button],"
@@ -119,13 +169,13 @@ def t_observe(a):
 
 
 def t_click(a):
-    tab = a.get("tab") or _first_tab()
+    tab = _require_agent_tab(a.get("tab"))
     sel = a.get("selector") or f'[data-aref="{a["ref"]}"]'
     return text(json.dumps(api("POST", f"/tabs/{tab}/click", {"selector": sel})))
 
 
 def t_type(a):
-    tab = a.get("tab") or _first_tab()
+    tab = _require_agent_tab(a.get("tab"))
     sel = a.get("selector") or f'[data-aref="{a["ref"]}"]'
     # A trusted click focuses the page's REAL editable input — even when the
     # target is a role=combobox wrapper that delegates to a hidden input
@@ -151,12 +201,12 @@ def t_type(a):
 
 
 def t_press(a):
-    tab = a.get("tab") or _first_tab()
+    tab = _require_agent_tab(a.get("tab"))
     return text(json.dumps(api("POST", f"/tabs/{tab}/press", {"key": a["key"]})))
 
 
 def t_screenshot(a):
-    tab = a.get("tab") or _first_tab()
+    tab = _require_agent_tab(a.get("tab"))
     r = api("POST", f"/tabs/{tab}/screenshot")
     data = r.get("data")
     if not data:
@@ -165,7 +215,7 @@ def t_screenshot(a):
 
 
 def t_eval(a):
-    tab = a.get("tab") or _first_tab()
+    tab = _require_agent_tab(a.get("tab"))
     r = api("POST", f"/tabs/{tab}/eval", {"expression": a["expression"]})
     return text(json.dumps(r.get("result", r)))
 
@@ -216,7 +266,7 @@ def t_organize_tabs(_):
 
 
 def t_split_tab(a):
-    tab = a.get("tab") or _first_tab()
+    tab = _require_agent_tab(a.get("tab"))
     layout = a.get("layout", "side_by_side")
     return text(json.dumps(api("POST", f"/tabs/{tab}/split", {"layout": layout})))
 
@@ -239,11 +289,16 @@ TOOLS = {
     "xplorer_tabs": ("List open browser tabs with context (url, title, owner, "
                     "active, loading).", {"type": "object", "properties": {}},
                     t_tabs),
-    "xplorer_new_tab": ("Open a NEW tab (optionally owned/labelled).",
+    "xplorer_new_tab": ("Open a NEW background tab owned by this agent/task. "
+                       "Always use this instead of xplorer_navigate on user tabs.",
                        {"type": "object", "properties": {
                            "url": {"type": "string"},
                            "owner": {"type": "string"},
-                           "label": {"type": "string"}}}, t_new_tab),
+                           "label": {"type": "string"},
+                           "task_id": {"type": "string",
+                                       "description": "scheduled task id "
+                                                      "(auto from env)"}}},
+                       t_new_tab),
     "xplorer_navigate": ("Navigate a tab to a URL (waits for load).",
                         {"type": "object", "properties": {
                             "url": {"type": "string"}, "tab": TAB},
