@@ -554,7 +554,7 @@ function renderDetail() {
 
   // --- 4. Run history ---------------------------------------------------
   const histCard = card('Run history');
-  const history = Array.isArray(job.history) ? job.history : [];
+  const history = historyForDisplay(job);
   if (!history.length) {
     const empty = document.createElement('p');
     empty.className = 'sched-history-empty';
@@ -578,10 +578,8 @@ function renderDetail() {
         const link = document.createElement('button');
         link.type = 'button';
         link.className = 'sched-history-link';
-        link.textContent = 'open reply';
-        link.addEventListener('click', () => {
-          location.href = '/?conv=' + encodeURIComponent(h.conv_id);
-        });
+        link.textContent = h.status === 'running' ? 'watch live' : 'open reply';
+        link.addEventListener('click', () => openConversation(h.conv_id, job.id));
         row.appendChild(link);
       }
       list.appendChild(row);
@@ -641,6 +639,14 @@ function renderDetail() {
   // Cancel running — only when last_status == 'running'
   if (job.last_status === 'running') {
     const latestConv = latestRunningConvId(job);
+    if (latestConv) {
+      const liveBtn = document.createElement('button');
+      liveBtn.type = 'button';
+      liveBtn.className = 'settings-btn settings-btn-primary';
+      liveBtn.textContent = 'Watch live';
+      liveBtn.addEventListener('click', () => openConversation(latestConv, job.id));
+      actions.appendChild(liveBtn);
+    }
     const cancelBtn = document.createElement('button');
     cancelBtn.type = 'button';
     cancelBtn.className = 'settings-btn sched-btn-danger';
@@ -700,15 +706,40 @@ function setActionStatus(el, msg, kind = '') {
   el.textContent = msg;
 }
 
-/** Newest history entry that has a conv_id — used for "Cancel running". */
+/** Conversation id for the in-flight run, if any. */
 function latestRunningConvId(job) {
   const history = Array.isArray(job.history) ? job.history : [];
+  const running = history.find((h) => h.status === 'running' && h.conv_id);
+  if (running) return running.conv_id;
+  if (job.last_status === 'running' && job.run && job.run.target_conv_id) {
+    return job.run.target_conv_id;
+  }
   const sorted = history.slice().sort(
     (a, b) => Number(b.fired_us || 0) - Number(a.fired_us || 0));
   const withConv = sorted.find((h) => h.conv_id);
   if (withConv) return withConv.conv_id;
-  // Fall back to the job's live target_conv_id if the server tracks it there.
   return (job.run && job.run.target_conv_id) || '';
+}
+
+/** History rows for display, including an in-flight row when last_status=running. */
+function historyForDisplay(job) {
+  const history = Array.isArray(job.history) ? job.history.slice() : [];
+  if (job.last_status === 'running' &&
+      !history.some((h) => h.status === 'running')) {
+    history.unshift({
+      fired_us: job.last_fire_us || '0',
+      status: 'running',
+      conv_id: latestRunningConvId(job),
+    });
+  }
+  return history;
+}
+
+function openConversation(convId, jobId) {
+  if (!convId) return;
+  let url = '/?conv=' + encodeURIComponent(convId);
+  if (jobId) url += '&schedule=' + encodeURIComponent(jobId);
+  location.href = url;
 }
 
 // ---------------------------------------------------------------------------

@@ -207,6 +207,92 @@ function renderConvList() {
   }
 }
 
+/** convId -> { id, label } for scheduled-task conversations. */
+let scheduleByConv = {};
+let scheduleJobsCache = null;
+let scheduleJobsCacheAt = 0;
+const SCHEDULE_CACHE_MS = 5000;
+
+function rebuildScheduleByConv(jobs) {
+  scheduleByConv = {};
+  for (const job of jobs) {
+    if (!job?.id) continue;
+    const info = { id: job.id, label: job.label || job.id };
+    const convIds = new Set();
+    if (job.run?.target_conv_id) convIds.add(job.run.target_conv_id);
+    if (Array.isArray(job.history)) {
+      for (const h of job.history) {
+        if (h?.conv_id) convIds.add(h.conv_id);
+      }
+    }
+    for (const cid of convIds) scheduleByConv[cid] = info;
+  }
+}
+
+async function fetchScheduleJobs() {
+  const now = Date.now();
+  if (scheduleJobsCache && now - scheduleJobsCacheAt < SCHEDULE_CACHE_MS) {
+    return scheduleJobsCache;
+  }
+  try {
+    const res = await fetch('/api/schedules');
+    if (!res.ok) return scheduleJobsCache || [];
+    const data = await res.json();
+    scheduleJobsCache = data.jobs || [];
+    scheduleJobsCacheAt = now;
+    rebuildScheduleByConv(scheduleJobsCache);
+    return scheduleJobsCache;
+  } catch {
+    return scheduleJobsCache || [];
+  }
+}
+
+function getScheduleForConv(convId) {
+  return convId ? scheduleByConv[convId] || null : null;
+}
+
+function syncScheduleUrlParam(info) {
+  const params = new URLSearchParams(location.search);
+  if (info?.id) {
+    params.set('schedule', info.id);
+    if (activeId) params.set('conv', activeId);
+  } else {
+    params.delete('schedule');
+  }
+  const qs = params.toString();
+  history.replaceState(null, '', qs ? `?${qs}` : location.pathname);
+}
+
+function updateScheduleLink() {
+  const link = document.getElementById('chat-schedule-link');
+  if (!link) return;
+  const info = getScheduleForConv(activeId);
+  if (!info) {
+    link.hidden = true;
+    syncScheduleUrlParam(null);
+    return;
+  }
+  link.hidden = false;
+  link.href = '/schedules?id=' + encodeURIComponent(info.id);
+  const label = (info.label || '').trim();
+  link.textContent = label ? `${label} · Settings` : 'Task settings';
+  link.title = 'Open scheduled task settings';
+  syncScheduleUrlParam(info);
+}
+
+async function resolveScheduleForConv(convId, hintJobId) {
+  if (!convId) return null;
+  if (hintJobId) {
+    scheduleByConv[convId] = scheduleByConv[convId] || { id: hintJobId, label: '' };
+  }
+  const jobs = await fetchScheduleJobs();
+  if (hintJobId) {
+    const job = jobs.find((j) => j.id === hintJobId);
+    if (job) scheduleByConv[convId] = { id: job.id, label: job.label || job.id };
+  }
+  return getScheduleForConv(convId);
+}
+
 function selectConv(id) {
   activeId = id;
   activeModel = getConvModel(id);
@@ -217,18 +303,63 @@ function selectConv(id) {
   setComposerRunning();
   renderQueue();
   updateActiveBadge();
+  updateScheduleLink();
+  const hint = new URLSearchParams(location.search).get('schedule');
+  resolveScheduleForConv(id, hint).then((info) => {
+    if (activeId !== id) return;
+    if (info) updateScheduleLink();
+    const panel = document.getElementById('chat-info');
+    if (panel && !panel.hidden) renderChatInfo();
+  });
 }
 
 async function refresh() {
+  const prev = conversations.slice();
   const data = await api('/api/conversations');
   conversations = data.conversations || [];
+  syncRemoteRuns(prev);
   const chats = chatConversations();
   if (!activeId && chats.length) activeId = chats[0].id;
   if (activeId && !chats.some((c) => c.id === activeId)) {
     activeId = chats[0]?.id || null;
   }
-  renderConvList();
-  selectConv(activeId);
+  if (activeId) {
+    const conv = conversations.find((c) => c.id === activeId);
+    renderConvList();
+    renderMessages(conv);
+    setComposerRunning();
+    updateActiveBadge();
+    updateScheduleLink();
+    fetchScheduleJobs().then(() => {
+      if (conversations.some((c) => c.id === activeId)) updateScheduleLink();
+    });
+    startRemotePoll();
+  } else {
+    renderConvList();
+    selectConv(activeId);
+    startRemotePoll();
+  }
+}
+
+let remotePollTimer = null;
+
+function anyRemoteRun() {
+  return conversations.some((c) => c.running);
+}
+
+function stopRemotePoll() {
+  if (remotePollTimer) {
+    clearInterval(remotePollTimer);
+    remotePollTimer = null;
+  }
+}
+
+function startRemotePoll() {
+  stopRemotePoll();
+  if (!anyRemoteRun()) return;
+  remotePollTimer = setInterval(() => {
+    refresh().catch((e) => console.error('remote poll failed:', e));
+  }, 2000);
 }
 
 async function newChat() {
@@ -254,8 +385,40 @@ function appendStatusLine(container, text) {
 }
 
 const currentConv = () => conversations.find((c) => c.id === activeId);
-function isRunning(convId) { return !!(streams[convId] && streams[convId].running); }
-function activeRunCount() { return Object.values(streams).filter((s) => s.running).length; }
+function isRunning(convId) {
+  if (streams[convId] && streams[convId].running) return true;
+  const conv = conversations.find((c) => c.id === convId);
+  return !!(conv && conv.running);
+}
+function activeRunCount() {
+  const ids = new Set();
+  for (const c of conversations) {
+    if (c.running) ids.add(c.id);
+  }
+  for (const [id, st] of Object.entries(streams)) {
+    if (st.running) ids.add(id);
+  }
+  return ids.size;
+}
+
+function syncRemoteRuns(prevConvs) {
+  const prevById = new Map((prevConvs || []).map((c) => [c.id, c]));
+  for (const c of conversations) {
+    const wasRunning = prevById.get(c.id)?.running;
+    if (c.running && !streams[c.id]?.running) {
+      streams[c.id] = {
+        running: true,
+        remote: true,
+        reply: '',
+        status: 'Agent is working…',
+      };
+    } else if (!c.running && streams[c.id]?.remote) {
+      delete streams[c.id];
+    } else if (c.running && streams[c.id]?.remote && wasRunning) {
+      // Still running — keep tail visible.
+    }
+  }
+}
 
 function updateActiveBadge() {
   const el = document.getElementById('active-count');
@@ -277,6 +440,9 @@ async function stopChat(convId) {
   const st = streams[convId];
   if (st && st.aborter) st.aborter.abort();
   try { await api('/api/conversations/' + convId + '/stop', { method: 'POST' }); } catch (e) { /* best effort */ }
+  if (st?.remote) delete streams[convId];
+  await refresh();
+  startRemotePoll();
 }
 
 function appendError(convId) {
@@ -554,12 +720,16 @@ function renderChatInfo() {
     return;
   }
   const sid = conv.session_id || '';
+  const sched = getScheduleForConv(conv.id);
   const rows = [
     ['Model', modelLabel(getConvModel(conv.id), models)],
     ['Messages', String((conv.messages || []).length)],
     ['Conversation ID', conv.id],
     ['Grok session', sid || '— (send a message first)'],
   ];
+  if (sched) {
+    rows.splice(1, 0, ['Scheduled task', sched.label || sched.id]);
+  }
   const dl = document.createElement('dl');
   dl.className = 'info-grid';
   for (const [k, v] of rows) {
@@ -586,6 +756,13 @@ function renderChatInfo() {
     code.textContent = cmd;
     actions.append(btn, code);
     el.appendChild(actions);
+  }
+  if (sched) {
+    const taskLink = document.createElement('a');
+    taskLink.className = 'info-settings-link';
+    taskLink.href = '/schedules?id=' + encodeURIComponent(sched.id);
+    taskLink.textContent = 'Open task settings (schedule, prompt, history) →';
+    el.appendChild(taskLink);
   }
   const settingsLink = document.createElement('a');
   settingsLink.className = 'info-settings-link';
@@ -734,6 +911,7 @@ initModels().then(() => refresh().then(() => {
   } else if (!chatConversations().length) {
     newChat();
   }
+  startRemotePoll();
   consumePendingApp();
 }));
 
@@ -742,7 +920,12 @@ initModels().then(() => refresh().then(() => {
 // On reopen, re-render the active conversation from its saved messages (errors
 // aren't persisted, so they clear) — keeping the last conversation but clean.
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState !== 'visible' || isRunning(activeId)) return;
+  if (document.visibilityState !== 'visible') {
+    stopRemotePoll();
+    return;
+  }
+  refresh().then(() => startRemotePoll()).catch(() => {});
+  if (isRunning(activeId)) return;
   if (!activeId) return;
   const conv = conversations.find((c) => c.id === activeId);
   if (conv) renderMessages(conv);

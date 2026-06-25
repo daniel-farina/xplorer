@@ -146,6 +146,7 @@ html.grok-build body {
 .sched-pill.ok       { color: #0d9488; border-color: rgba(13, 148, 136, 0.4); }
 .sched-pill.failed   { color: #dc2626; border-color: rgba(220, 38, 38, 0.4); }
 .sched-pill.running  { color: #2563eb; border-color: rgba(37, 99, 235, 0.4); }
+.sched-pill.cancelled { color: #d97706; border-color: rgba(217, 119, 6, 0.4); }
 .sched-pill.skipped  { color: #d97706; border-color: rgba(217, 119, 6, 0.4); }
 .sched-pill.deferred { color: #d97706; border-color: rgba(217, 119, 6, 0.4); }
 .sched-pill.paused   { color: var(--text-secondary); }
