@@ -786,6 +786,25 @@ def patch_vertical_sidebar(src: Path):
             "BEGIN_METADATA(VerticalUnpinnedTabContainerView)",
         )
 
+    # XPLORER: collapse the layout slot of a hidden tab row. CalculateProposedLayout
+    # marks an invisible child as not-painted but still adds bounds.height() to the
+    # running height, leaving a ~30px gap where an Arc bookmark tab's row was. Skip
+    # invisible children entirely so the hidden row takes zero space.
+    if "XPLORER: hidden rows take zero space" not in vutc_cc_text:
+        edit(
+            vutc_view_cc,
+            "  for (auto* child : children) {\n"
+            "    // The leading inset should not be applied for tab groups when the tab strip",
+            "  for (auto* child : children) {\n"
+            "    // XPLORER: hidden rows take zero space (Arc bookmark tabs are hidden\n"
+            "    // from the strip; the sidebar bookmark row is the affordance).\n"
+            "    if (!child->GetVisible()) {\n"
+            "      layouts.child_layouts.emplace_back(child, false, gfx::Rect());\n"
+            "      continue;\n"
+            "    }\n"
+            "    // The leading inset should not be applied for tab groups when the tab strip",
+        )
+
 
 def patch_vertical_tab_bookmark_strip(src: Path):
     """Keep Tabs-strip selection on the last user tab while bookmark content shows."""
