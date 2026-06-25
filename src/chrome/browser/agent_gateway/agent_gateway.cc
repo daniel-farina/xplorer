@@ -25,8 +25,12 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/environment.h"
 #include "chrome/browser/agent_gateway/agent_session.h"
 #include "chrome/browser/agent_gateway/tab_ownership.h"
+#include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/browser_window/public/global_browser_collection.h"
+#include "chrome/browser/ui/views/xplorer/xplorer_scheduled_task_tabs.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface_iterator.h"
@@ -52,6 +56,15 @@ namespace {
 AgentGateway* g_instance = nullptr;
 constexpr int kDefaultPort = 9334;
 constexpr int kBacklog = 5;
+
+void ClearLeakedScheduledRunEnv() {
+  std::unique_ptr<base::Environment> env = base::Environment::Create();
+  if (!env) {
+    return;
+  }
+  env->UnSetVar("XPLORER_AGENT_ID");
+  env->UnSetVar("XPLORER_TASK_ID");
+}
 }  // namespace
 
 // static
@@ -122,6 +135,7 @@ void AgentGateway::StartServerOnIOThread(int port) {
   // singleton). Arm it here, on server_thread_, so its base::RepeatingTimer
   // runs on the gateway IO thread (the run machinery hops to the UI thread as
   // needed). Loads schedules.json and re-arms persisted jobs across restarts.
+  ClearLeakedScheduledRunEnv();
   Scheduler::Get()->Start();
 }
 
@@ -136,6 +150,75 @@ namespace {
 // closes cleanly instead of wedging the connection (the default 1 MB read
 // buffer could hang on an oversized body).
 constexpr int kMaxRequestBodyBytes = 1024 * 1024;
+
+constexpr char kScheduledAgentPrefix[] = "schedule:";
+
+bool IsScheduledAgentId(const std::string& agent_id) {
+  return base::StartsWith(agent_id, kScheduledAgentPrefix);
+}
+
+// task_id is only stamped for scheduled agents (schedule:<job_id>). Ad-hoc chat
+// agents must never inherit a stale X-Task-Id header from a prior scheduled run.
+std::string ResolveTaskIdForAgent(const std::string& agent_id,
+                                  const std::string& body_task_id,
+                                  const std::string& header_task_id) {
+  if (!IsScheduledAgentId(agent_id)) {
+    return std::string();
+  }
+  if (!body_task_id.empty()) {
+    return body_task_id;
+  }
+  if (!header_task_id.empty()) {
+    return header_task_id;
+  }
+  return agent_id.substr(sizeof(kScheduledAgentPrefix) - 1);
+}
+
+// True when the tab is a normal user tab (not agent-owned, not a bookmark tab).
+bool IsUnownedUserTab(const TabOwnership* own) {
+  if (!own) {
+    return true;
+  }
+  if (own->bookmark_url.is_valid()) {
+    return false;
+  }
+  return own->task_id.empty() && own->owner.empty();
+}
+
+// Agents may only drive tabs they (or their scheduled task) opened. User and
+// sidebar-bookmark tabs are off limits — POST /tabs / xplorer_new_tab instead.
+// Checks run BEFORE owner is stamped so a mistaken call cannot claim a tab.
+bool AgentMayUseTab(const std::string& agent_id,
+                    const TabOwnership* own,
+                    const std::string& header_task_id,
+                    base::DictValue* err) {
+  if (agent_id.empty() || !own) {
+    return true;
+  }
+  if (own->bookmark_url.is_valid()) {
+    err->Set("error",
+             "cannot use a sidebar bookmark tab — use POST /tabs to open a "
+             "new background tab");
+    return false;
+  }
+  if (IsUnownedUserTab(own)) {
+    err->Set("error",
+             "cannot use a user tab — use POST /tabs (or xplorer_new_tab) to "
+             "open a dedicated background tab");
+    return false;
+  }
+  if (!own->task_id.empty() && !header_task_id.empty() &&
+      own->task_id != header_task_id) {
+    err->Set("error", "tab belongs to another scheduled task");
+    return false;
+  }
+  if (!own->owner.empty() && own->owner != agent_id) {
+    err->Set("error", "tab is owned by another agent");
+    return false;
+  }
+  return true;
+}
+
 }  // namespace
 
 void AgentGateway::OnConnect(int connection_id) {
@@ -394,6 +477,7 @@ void AgentGateway::RouteRequest(int connection_id,
         t.Set("label", own ? own->label : std::string());
         t.Set("task_id", own ? own->task_id : std::string());
         t.Set("background", own ? own->background : false);
+        t.Set("bookmark", own && own->bookmark_url.is_valid());
         t.Set("mine", own && !agent_id.empty() && own->owner == agent_id);
         tabs.Append(std::move(t));
       }
@@ -414,6 +498,11 @@ void AgentGateway::RouteRequest(int connection_id,
     const std::string* owner = body ? body->FindString("owner") : nullptr;
     const std::string* label = body ? body->FindString("label") : nullptr;
     const std::string* task_id = body ? body->FindString("task_id") : nullptr;
+    std::string header_task_id;
+    if (auto it = info.headers.find("x-task-id"); it != info.headers.end())
+      header_task_id = it->second;
+    std::string effective_task_id = ResolveTaskIdForAgent(
+        agent_id, task_id ? *task_id : std::string(), header_task_id);
     // Background by default: agent tabs must never steal the user's focus.
     // {"focus": true} is honored ONLY if the focus arbiter currently permits it
     // (a live user grant). Otherwise it is downgraded to a background open — an
@@ -439,13 +528,31 @@ void AgentGateway::RouteRequest(int connection_id,
     if (params.navigated_or_inserted_contents) {
       TabOwnership* own =
           TabOwnership::GetOrCreate(params.navigated_or_inserted_contents);
-      own->owner = owner ? *owner : agent_id;
+      std::string effective_owner = owner ? *owner : agent_id;
+      if (!IsScheduledAgentId(agent_id) &&
+          base::StartsWith(effective_owner, kScheduledAgentPrefix)) {
+        effective_owner = agent_id.empty() ? "mcp" : agent_id;
+      }
+      own->owner = effective_owner;
       if (label)
         own->label = *label;
-      if (task_id)
-        own->task_id = *task_id;
+      if (!effective_task_id.empty()) {
+        own->task_id = effective_task_id;
+      } else {
+        own->task_id.clear();
+      }
       own->background = !focus;
       d.Set("owner", own->owner);
+      if (IsScheduledTaskTab(own)) {
+        d.Set("task_id", own->task_id);
+        if (BrowserWindowInterface* bwi =
+                GlobalBrowserCollection::GetInstance()->FindBrowserWithTab(
+                    params.navigated_or_inserted_contents)) {
+          Browser* browser = bwi->GetBrowserForMigrationOnly();
+          xplorer::HideScheduledTaskTabRow(
+              browser, params.navigated_or_inserted_contents);
+        }
+      }
     }
     std::move(reply).Run(std::move(d));
     return;
@@ -570,13 +677,30 @@ void AgentGateway::RouteRequest(int connection_id,
     return v ? *v : std::string();
   };
 
+  std::string header_task_id;
+  if (auto it = info.headers.find("x-task-id"); it != info.headers.end())
+    header_task_id = it->second;
+
   // Per-tab metrics + identity: the HUD on this tab reflects only the agent
   // driving THIS tab, not a global blend across agents.
   TabOwnership* tm = TabOwnership::GetOrCreate(wc);
+  if (!agent_id.empty()) {
+    base::DictValue err;
+    if (!AgentMayUseTab(agent_id, tm, header_task_id, &err)) {
+      std::move(done).Run(std::move(err));
+      return;
+    }
+    if (tm->owner.empty()) {
+      tm->owner = agent_id;
+    }
+    const std::string resolved_task_id =
+        ResolveTaskIdForAgent(agent_id, std::string(), header_task_id);
+    if (tm->task_id.empty() && !resolved_task_id.empty()) {
+      tm->task_id = resolved_task_id;
+    }
+  }
   tm->requests++;
   tm->bytes_in += static_cast<int64_t>(info.data.size());
-  if (!agent_id.empty() && tm->owner.empty())
-    tm->owner = agent_id;
   if (auto it = info.headers.find("x-agent-model"); it != info.headers.end())
     tm->model = it->second;
   tm->last_action = verb;

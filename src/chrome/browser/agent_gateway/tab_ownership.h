@@ -15,6 +15,13 @@ class WebContents;
 
 namespace agent_gateway {
 
+class TabOwnership;
+
+// True when a tab belongs to a scheduled background task (not ad-hoc agent chat).
+// Requires both task_id and owner "schedule:<job_id>" so leaked task_id alone
+// cannot pull normal chat tabs into the scheduled group.
+bool IsScheduledTaskTab(const TabOwnership* own);
+
 // Per-tab metadata that an agent can own. Stored as user-data on the
 // WebContents, so it travels with the tab for the tab's whole lifetime and
 // survives tab reordering, unlike the session_id:index handle. This is how

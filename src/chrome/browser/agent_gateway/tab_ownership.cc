@@ -5,9 +5,19 @@
 
 #include <memory>
 
+#include "base/strings/string_util.h"
 #include "content/public/browser/web_contents.h"
 
 namespace agent_gateway {
+
+namespace {
+constexpr char kScheduledOwnerPrefix[] = "schedule:";
+}  // namespace
+
+bool IsScheduledTaskTab(const TabOwnership* own) {
+  return own && !own->task_id.empty() &&
+         base::StartsWith(own->owner, kScheduledOwnerPrefix);
+}
 
 // static
 const void* const TabOwnership::kKey = &TabOwnership::kKey;

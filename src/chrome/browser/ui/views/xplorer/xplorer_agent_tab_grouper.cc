@@ -14,26 +14,38 @@
 #include "base/task/sequenced_task_runner.h"
 #include "chrome/browser/agent_gateway/focus_arbiter.h"
 #include "chrome/browser/agent_gateway/tab_ownership.h"
+#include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+#include "chrome/browser/ui/browser_window/public/global_browser_collection.h"
 #include "chrome/browser/ui/tabs/tab_group_model.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "chrome/browser/ui/views/xplorer/xplorer_bookmark_tabs.h"
+#include "chrome/browser/ui/views/xplorer/xplorer_scheduled_task_tabs.h"
 #include "components/tab_groups/tab_group_color.h"
 #include "components/tab_groups/tab_group_visual_data.h"
 #include "components/tabs/public/tab_group.h"
+#include "components/tabs/public/tab_interface.h"
 #include "content/public/browser/web_contents.h"
 
 namespace xplorer {
 
 namespace {
 constexpr char16_t kAgentGroupPrefix[] = u"Agent tabs";
+constexpr char16_t kScheduledGroupPrefix[] = u"Scheduled task tabs";
 
-bool IsAgentTab(content::WebContents* wc) {
-  agent_gateway::TabOwnership* own = agent_gateway::TabOwnership::Get(wc);
-  return own && !own->owner.empty();
+bool IsScheduledTaskWebContents(content::WebContents* wc) {
+  return agent_gateway::IsScheduledTaskTab(agent_gateway::TabOwnership::Get(wc));
 }
 
-std::u16string AgentGroupTitle(int count) {
-  return std::u16string(kAgentGroupPrefix) + u" (" +
-         base::NumberToString16(count) + u")";
+bool IsAdHocAgentTab(content::WebContents* wc) {
+  agent_gateway::TabOwnership* own = agent_gateway::TabOwnership::Get(wc);
+  return own && !own->owner.empty() &&
+         !agent_gateway::IsScheduledTaskTab(own);
+}
+
+std::u16string GroupTitle(const char16_t* prefix, int count) {
+  return std::u16string(prefix) + u" (" + base::NumberToString16(count) +
+         u")";
 }
 
 std::vector<int> IndicesInGroup(TabStripModel* model,
@@ -47,6 +59,51 @@ std::vector<int> IndicesInGroup(TabStripModel* model,
     }
   }
   return indices;
+}
+
+std::optional<tab_groups::TabGroupId> FindGroupWithPrefix(
+    TabStripModel* model,
+    const char16_t* prefix) {
+  if (!model->group_model()) {
+    return std::nullopt;
+  }
+  for (const tab_groups::TabGroupId& id :
+       model->group_model()->ListTabGroups()) {
+    TabGroup* group = model->group_model()->GetTabGroup(id);
+    if (group && group->visual_data() &&
+        base::StartsWith(group->visual_data()->title(), prefix)) {
+      return id;
+    }
+  }
+  return std::nullopt;
+}
+
+tab_groups::TabGroupId EnsureGroup(TabStripModel* model,
+                                   const char16_t* prefix,
+                                   const std::vector<int>& indices,
+                                   tab_groups::TabGroupColorId color) {
+  std::optional<tab_groups::TabGroupId> existing = FindGroupWithPrefix(model, prefix);
+  tab_groups::TabGroupVisualData visual(
+      GroupTitle(prefix, static_cast<int>(indices.size())), color);
+  if (existing.has_value()) {
+    model->ChangeTabGroupVisuals(existing.value(), visual);
+    return existing.value();
+  }
+  CHECK(!indices.empty());
+  tab_groups::TabGroupId group = model->AddToNewGroup(indices);
+  model->ChangeTabGroupVisuals(group, visual);
+  return group;
+}
+
+void ClearGroupIfEmpty(TabStripModel* model, const char16_t* prefix) {
+  std::optional<tab_groups::TabGroupId> group = FindGroupWithPrefix(model, prefix);
+  if (!group.has_value()) {
+    return;
+  }
+  std::vector<int> grouped = IndicesInGroup(model, group.value());
+  if (!grouped.empty()) {
+    model->RemoveFromGroup(grouped);
+  }
 }
 }  // namespace
 
@@ -91,41 +148,6 @@ void AgentTabGrouper::ScheduleReconcile() {
       base::BindOnce(&AgentTabGrouper::Reconcile, weak_factory_.GetWeakPtr()));
 }
 
-std::optional<tab_groups::TabGroupId> AgentTabGrouper::FindAgentGroup() const {
-  if (!model_->group_model()) {
-    return std::nullopt;
-  }
-  for (const tab_groups::TabGroupId& id :
-       model_->group_model()->ListTabGroups()) {
-    TabGroup* group = model_->group_model()->GetTabGroup(id);
-    if (group && group->visual_data() &&
-        base::StartsWith(group->visual_data()->title(), kAgentGroupPrefix)) {
-      return id;
-    }
-  }
-  return std::nullopt;
-}
-
-tab_groups::TabGroupId AgentTabGrouper::EnsureAgentGroup(int count) {
-  std::optional<tab_groups::TabGroupId> existing = FindAgentGroup();
-  tab_groups::TabGroupVisualData visual(AgentGroupTitle(count),
-                                        tab_groups::TabGroupColorId::kGrey);
-  if (existing.has_value()) {
-    model_->ChangeTabGroupVisuals(existing.value(), visual);
-    return existing.value();
-  }
-  std::vector<int> indices;
-  for (int i = 0; i < model_->count(); ++i) {
-    if (IsAgentTab(model_->GetWebContentsAt(i))) {
-      indices.push_back(i);
-    }
-  }
-  CHECK(!indices.empty());
-  tab_groups::TabGroupId group = model_->AddToNewGroup(indices);
-  model_->ChangeTabGroupVisuals(group, visual);
-  return group;
-}
-
 void AgentTabGrouper::Reconcile() {
   reconcile_scheduled_ = false;
   if (reconciling_ || !model_) {
@@ -133,42 +155,82 @@ void AgentTabGrouper::Reconcile() {
   }
   reconciling_ = true;
 
-  std::vector<int> agent_indices;
-  for (int i = 0; i < model_->count(); ++i) {
-    if (IsAgentTab(model_->GetWebContentsAt(i))) {
-      agent_indices.push_back(i);
+  Browser* browser = nullptr;
+  if (model_->count() > 0) {
+    if (BrowserWindowInterface* bwi =
+            GlobalBrowserCollection::GetInstance()->FindBrowserWithTab(
+                model_->GetWebContentsAt(0))) {
+      browser = bwi->GetBrowserForMigrationOnly();
     }
   }
+  if (browser) {
+    ReassertHiddenScheduledTaskTabRows(browser);
+    ReassertHiddenBookmarkTabRows(browser);
+  }
 
-  std::optional<tab_groups::TabGroupId> agent_group = FindAgentGroup();
-
-  if (agent_indices.empty()) {
-    if (agent_group.has_value()) {
-      std::vector<int> grouped = IndicesInGroup(model_, agent_group.value());
-      if (!grouped.empty()) {
-        model_->RemoveFromGroup(grouped);
+  std::vector<int> scheduled_indices;
+  std::vector<int> adhoc_indices;
+  for (int i = 0; i < model_->count(); ++i) {
+    content::WebContents* wc = model_->GetWebContentsAt(i);
+    agent_gateway::TabOwnership* own = agent_gateway::TabOwnership::Get(wc);
+    // Drop stale task_id stamps that leaked onto ad-hoc agent tabs.
+    if (own && !own->task_id.empty() &&
+        !agent_gateway::IsScheduledTaskTab(own)) {
+      own->task_id.clear();
+      if (browser) {
+        tabs::TabInterface* tab = model_->GetTabAtIndex(i);
+        if (tab && !own->bookmark_url.is_valid()) {
+          SetTabRowVisible(browser, tab, true);
+        }
       }
     }
-    reconciling_ = false;
-    return;
-  }
-
-  tab_groups::TabGroupId group = EnsureAgentGroup(
-      static_cast<int>(agent_indices.size()));
-
-  for (int index : agent_indices) {
-    if (!model_->GetTabGroupForTab(index).has_value()) {
-      model_->AddToExistingGroup({index}, group);
-    } else if (model_->GetTabGroupForTab(index).value() != group) {
-      model_->RemoveFromGroup({index});
-      model_->AddToExistingGroup({index}, group);
+    if (IsScheduledTaskWebContents(wc)) {
+      scheduled_indices.push_back(i);
+    } else if (IsAdHocAgentTab(wc)) {
+      adhoc_indices.push_back(i);
     }
   }
 
-  tab_groups::TabGroupVisualData visual(
-      AgentGroupTitle(static_cast<int>(agent_indices.size())),
-      tab_groups::TabGroupColorId::kGrey);
-  model_->ChangeTabGroupVisuals(group, visual);
+  if (scheduled_indices.empty()) {
+    ClearGroupIfEmpty(model_, kScheduledGroupPrefix);
+  } else {
+    tab_groups::TabGroupId scheduled_group = EnsureGroup(
+        model_, kScheduledGroupPrefix, scheduled_indices,
+        tab_groups::TabGroupColorId::kBlue);
+    for (int index : scheduled_indices) {
+      if (!model_->GetTabGroupForTab(index).has_value()) {
+        model_->AddToExistingGroup({index}, scheduled_group);
+      } else if (model_->GetTabGroupForTab(index).value() != scheduled_group) {
+        model_->RemoveFromGroup({index});
+        model_->AddToExistingGroup({index}, scheduled_group);
+      }
+    }
+    tab_groups::TabGroupVisualData scheduled_visual(
+        GroupTitle(kScheduledGroupPrefix,
+                   static_cast<int>(scheduled_indices.size())),
+        tab_groups::TabGroupColorId::kBlue);
+    model_->ChangeTabGroupVisuals(scheduled_group, scheduled_visual);
+  }
+
+  if (adhoc_indices.empty()) {
+    ClearGroupIfEmpty(model_, kAgentGroupPrefix);
+  } else {
+    tab_groups::TabGroupId agent_group = EnsureGroup(
+        model_, kAgentGroupPrefix, adhoc_indices,
+        tab_groups::TabGroupColorId::kGrey);
+    for (int index : adhoc_indices) {
+      if (!model_->GetTabGroupForTab(index).has_value()) {
+        model_->AddToExistingGroup({index}, agent_group);
+      } else if (model_->GetTabGroupForTab(index).value() != agent_group) {
+        model_->RemoveFromGroup({index});
+        model_->AddToExistingGroup({index}, agent_group);
+      }
+    }
+    tab_groups::TabGroupVisualData agent_visual(
+        GroupTitle(kAgentGroupPrefix, static_cast<int>(adhoc_indices.size())),
+        tab_groups::TabGroupColorId::kGrey);
+    model_->ChangeTabGroupVisuals(agent_group, agent_visual);
+  }
 
   reconciling_ = false;
 }
