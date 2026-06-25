@@ -136,6 +136,25 @@ def patch_native_toolbar(src: Path):
     # --- browser_view_tabbed_layout_impl.cc: layout block + include --------
     layout_impl = (src / "chrome/browser/ui/views/frame/layout/"
                    "browser_view_tabbed_layout_impl.cc")
+
+    def dedupe_xplorer_toolbar_layout(path: Path):
+        text = path.read_text()
+        marker = ("  // XPLORER: native Xplorer pill toolbar, below bookmarks, "
+                  "above the\n")
+        if text.count(marker) <= 1:
+            return
+        first = text.find(marker)
+        second = text.find(marker, first + 1)
+        if second < 0:
+            return
+        end_marker = "    params.SetTop(xplorer_bounds.bottom());\n  }\n\n"
+        end = text.find(end_marker, second)
+        if end < 0:
+            return
+        path.write_text(text[:second] + text[end + len(end_marker):])
+        print(f"  deduped xplorer toolbar layout: {path}")
+
+    dedupe_xplorer_toolbar_layout(layout_impl)
     edit(
         layout_impl,
         '#include "chrome/browser/ui/views/bookmarks/bookmark_bar_view.h"',
@@ -144,34 +163,38 @@ def patch_native_toolbar(src: Path):
         '#include "chrome/browser/ui/views/xplorer/xplorer_toolbar_view.h"'
         "  // XPLORER",
     )
-    edit(
-        layout_impl,
-        "  // Maybe show the separator in the top container.\n"
-        "  if (IsParentedTo(views().top_container_separator, "
-        "views().top_container)) {",
-        "  // XPLORER: native Xplorer pill toolbar, below bookmarks, above the\n"
-        "  // contents separator. Only laid out in top_container when visible\n"
-        "  // and placement is top.\n"
-        "  if (views().xplorer_toolbar &&\n"
-        "      IsParentedTo(views().xplorer_toolbar, views().top_container)) {\n"
-        "    const bool xplorer_visible =\n"
-        "        xplorer::GetToolbarVisible() &&\n"
-        "        xplorer::GetToolbarPlacement() == xplorer::ToolbarPlacement::kTop &&\n"
-        "        views().xplorer_toolbar->GetVisible();\n"
-        "    const gfx::Rect xplorer_bounds(\n"
-        "        params.visual_client_area.x(), params.visual_client_area.y(),\n"
-        "        params.visual_client_area.width(),\n"
-        "        xplorer_visible\n"
-        "            ? views().xplorer_toolbar->GetPreferredSize().height()\n"
-        "            : 0);\n"
-        "    layout.AddChild(views().xplorer_toolbar, xplorer_bounds,\n"
-        "                    xplorer_visible);\n"
-        "    params.SetTop(xplorer_bounds.bottom());\n"
-        "  }\n\n"
-        "  // Maybe show the separator in the top container.\n"
-        "  if (IsParentedTo(views().top_container_separator, "
-        "views().top_container)) {",
-    )
+    xplorer_layout = "layout.AddChild(views().xplorer_toolbar"
+    if xplorer_layout not in layout_impl.read_text():
+        edit(
+            layout_impl,
+            "  // Maybe show the separator in the top container.\n"
+            "  if (IsParentedTo(views().top_container_separator, "
+            "views().top_container)) {",
+            "  // XPLORER: native Xplorer pill toolbar, below bookmarks, above the\n"
+            "  // contents separator. Only laid out in top_container when visible\n"
+            "  // and placement is top.\n"
+            "  if (views().xplorer_toolbar &&\n"
+            "      IsParentedTo(views().xplorer_toolbar, views().top_container)) {\n"
+            "    const bool xplorer_visible =\n"
+            "        xplorer::GetToolbarVisible() &&\n"
+            "        xplorer::GetToolbarPlacement() == xplorer::ToolbarPlacement::kTop &&\n"
+            "        views().xplorer_toolbar->GetVisible();\n"
+            "    const gfx::Rect xplorer_bounds(\n"
+            "        params.visual_client_area.x(), params.visual_client_area.y(),\n"
+            "        params.visual_client_area.width(),\n"
+            "        xplorer_visible\n"
+            "            ? views().xplorer_toolbar->GetPreferredSize().height()\n"
+            "            : 0);\n"
+            "    layout.AddChild(views().xplorer_toolbar, xplorer_bounds,\n"
+            "                    xplorer_visible);\n"
+            "    params.SetTop(xplorer_bounds.bottom());\n"
+            "  }\n\n"
+            "  // Maybe show the separator in the top container.\n"
+            "  if (IsParentedTo(views().top_container_separator, "
+            "views().top_container)) {",
+        )
+    else:
+        print(f"  skip (already applied): {layout_impl} toolbar layout block")
 
     # --- BUILD.gn: compile the new source into the static_library("ui")
     # target next to bookmark_bar_view.cc (avoids a new GN target and the
