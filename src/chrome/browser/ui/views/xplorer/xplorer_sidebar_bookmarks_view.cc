@@ -11,6 +11,8 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+#include "chrome/browser/ui/navigator/browser_navigator.h"
+#include "chrome/browser/ui/navigator/browser_navigator_params.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/xplorer/xplorer_sidebar_row_button.h"
@@ -23,6 +25,7 @@
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/mojom/menu_source_type.mojom.h"
 #include "ui/base/page_transition_types.h"
+#include "ui/base/window_open_disposition.h"
 #include "ui/gfx/favicon_size.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/image/image_skia_operations.h"
@@ -205,13 +208,25 @@ void XplorerSidebarBookmarksView::OnBookmarkPressed(
   if (!tabs) {
     return;
   }
-  content::WebContents* contents = tabs->GetActiveWebContents();
-  if (!contents) {
+  // A sidebar bookmark behaves like a persistent tab (Arc-style): if a tab is
+  // already open at this URL, switch to it; otherwise open it in a new
+  // foreground tab. Never reload the active tab in place — that would replace
+  // whatever the user is currently looking at.
+  const GURL& url = node->url();
+  for (int i = 0; i < tabs->count(); ++i) {
+    content::WebContents* wc = tabs->GetWebContentsAt(i);
+    if (wc && wc->GetLastCommittedURL() == url) {
+      tabs->ActivateTabAt(i);
+      return;
+    }
+  }
+  Browser* target = browser_->GetBrowserForMigrationOnly();
+  if (!target) {
     return;
   }
-  contents->GetController().LoadURL(node->url(), content::Referrer(),
-                                    ui::PAGE_TRANSITION_AUTO_BOOKMARK,
-                                    std::string());
+  NavigateParams params(target, url, ui::PAGE_TRANSITION_AUTO_BOOKMARK);
+  params.disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
+  Navigate(&params);
 }
 
 BEGIN_METADATA(XplorerSidebarBookmarksView)

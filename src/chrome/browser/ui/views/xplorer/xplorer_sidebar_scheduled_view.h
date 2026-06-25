@@ -4,12 +4,16 @@
 #ifndef CHROME_BROWSER_UI_VIEWS_XPLORER_XPLORER_SIDEBAR_SCHEDULED_VIEW_H_
 #define CHROME_BROWSER_UI_VIEWS_XPLORER_XPLORER_SIDEBAR_SCHEDULED_VIEW_H_
 
+#include <string>
+
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/timer/timer.h"
 #include "base/values.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/views/view.h"
+
+class BrowserWindowInterface;
 
 namespace xplorer {
 
@@ -27,7 +31,10 @@ class XplorerSidebarScheduledView : public views::View {
   METADATA_HEADER(XplorerSidebarScheduledView, views::View)
 
  public:
-  XplorerSidebarScheduledView();
+  // |browser| is used to open + navigate the Grok side panel when a job row is
+  // clicked (it may be null, in which case rows are inert). The view does not
+  // own it; the sidebar owning this view outlives it.
+  explicit XplorerSidebarScheduledView(BrowserWindowInterface* browser);
   XplorerSidebarScheduledView(const XplorerSidebarScheduledView&) = delete;
   XplorerSidebarScheduledView& operator=(const XplorerSidebarScheduledView&) =
       delete;
@@ -43,6 +50,11 @@ class XplorerSidebarScheduledView : public views::View {
   // Rebuild the section's children from a {"version":1,"jobs":[...]} snapshot.
   void OnJobs(base::DictValue snapshot);
 
+  // Row click: open the Grok side panel and navigate it to the job's detail page
+  // (/schedules?id=<job_id>).
+  void OnJobPressed(const std::string& job_id);
+
+  const raw_ptr<BrowserWindowInterface> browser_;
   base::RepeatingTimer refresh_timer_;
   base::WeakPtrFactory<XplorerSidebarScheduledView> weak_factory_{this};
 };

@@ -37,6 +37,16 @@ namespace agent_gateway {
 // hops back to the UI thread only as the run machinery itself requires.
 class Scheduler {
  public:
+  // One past-run record kept on a Job (most-recent first, capped). |fired_us| is
+  // when the run fired (epoch microseconds, same convention as the *_us fields);
+  // |status| mirrors last_status (ok | failed | running | skipped | deferred);
+  // |conv_id| is the conversation the reply was appended to (may be empty).
+  struct RunRecord {
+    int64_t fired_us = 0;
+    std::string status;
+    std::string conv_id;
+  };
+
   // A single scheduled job (data model, design §4.1). All times are epoch
   // microseconds (base::Time::ToDeltaSinceWindowsEpoch().InMicroseconds()).
   struct Job {
@@ -73,7 +83,16 @@ class Scheduler {
     // background tabs through the normal POST /tabs path automatically; this knob
     // caps how many open at once.
     int max_concurrent_tabs = 5;
+
+    // Per-job run history, NEWEST FIRST, capped to the most recent
+    // |kMaxHistory| records. Appended in OnRunComplete on each fire; serialized
+    // under a "history" array in JobToDict (fired_us as a string). The /schedules
+    // detail view renders this as the job's run log.
+    std::vector<RunRecord> history;
   };
+
+  // How many RunRecords a Job keeps (oldest dropped past this).
+  static constexpr size_t kMaxHistory = 20;
 
   static Scheduler* Get();
 
@@ -109,6 +128,15 @@ class Scheduler {
   // Remove the job with |id| and persist. Returns true if a job was removed.
   bool RemoveJob(const std::string& id);
 
+  // Fire the job with |id| immediately (POST /api/schedules/{id}/run), via the
+  // SAME dispatch path FireJob uses (app-build when cwd is set, else a chat run),
+  // then stamp last_fire_us/last_status and persist. Does NOT recompute
+  // next_fire_us — a manual run is out-of-band and leaves the regular schedule
+  // untouched. Returns {"ok":true} on dispatch, or {"error":...} if the job is
+  // not found or a run for its conversation is already active (the 409 guard).
+  // Must be called on the scheduler's sequence (the gateway IO thread).
+  base::DictValue RunJobNow(const std::string& id);
+
  private:
   friend class base::NoDestructor<Scheduler>;
 
@@ -118,10 +146,15 @@ class Scheduler {
   // Timer tick: scan jobs, dispatch any whose next_fire_us has arrived.
   void Poll();
 
-  // Fire one job: hand its run to the headless dispatch helper and recompute
-  // next_fire_us (interval -> now+interval; once -> disable). Runs on the timer
-  // thread.
+  // Fire one job: stamp last_fire/last_status, recompute next_fire_us (interval
+  // -> now+interval; once -> disable), then hand the run to DispatchJob. Runs on
+  // the timer thread.
   void FireJob(Job* job);
+
+  // Hand |job|'s run to the headless dispatch helper (app-build when cwd is set,
+  // else a chat run), wiring the async completion back to OnRunComplete. Shared
+  // by FireJob (scheduled) and RunJobNow (manual); does NOT touch next_fire_us.
+  void DispatchJob(const Job& job);
 
   // (Re)compute next_fire_us for |job| from its trigger, relative to |now|.
   // interval: now + interval_sec; once: once_at_us (or disable if in the past

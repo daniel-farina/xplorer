@@ -228,8 +228,12 @@ void Scheduler::FireJob(Job* job) {
     job->next_fire_us = 0;
   }
 
-  const std::string job_id = job->id;
-  const std::string original_target = job->target_conv_id;
+  DispatchJob(*job);
+}
+
+void Scheduler::DispatchJob(const Job& job) {
+  const std::string job_id = job.id;
+  const std::string original_target = job.target_conv_id;
   scoped_refptr<base::SequencedTaskRunner> runner = task_runner_;
   // The run is async and resolves on a ThreadPool thread; hop the result back
   // onto our own sequence before touching jobs_ (looked up by id, since jobs_
@@ -252,17 +256,54 @@ void Scheduler::FireJob(Job* job) {
   // plain chat/browse job runs the chat dispatch. A browse task needs no special
   // route — it is just a chat job whose model is browser-capable, which opens
   // background tabs through the normal POST /tabs path on its own.
-  if (!job->cwd.empty()) {
-    DispatchScheduledAppBuild(job->message, job->model, job->cwd,
-                              job->target_conv_id, std::move(on_done));
+  if (!job.cwd.empty()) {
+    DispatchScheduledAppBuild(job.message, job.model, job.cwd,
+                              job.target_conv_id, std::move(on_done));
   } else {
     // Pass the job's soft tab cap; DispatchScheduledRun appends a one-line
     // "open at most N tabs" instruction to the message when it is > 0. This is
     // an LLM-respected hint only, not a hard limit, because the grok agent does
     // not attribute the tabs it opens to a particular task.
-    DispatchScheduledRun(job->message, job->model, job->target_conv_id,
-                         job->max_concurrent_tabs, std::move(on_done));
+    DispatchScheduledRun(job.message, job.model, job.target_conv_id,
+                         job.max_concurrent_tabs, std::move(on_done));
   }
+}
+
+base::DictValue Scheduler::RunJobNow(const std::string& id) {
+  Job* job = nullptr;
+  for (Job& j : jobs_) {
+    if (j.id == id) {
+      job = &j;
+      break;
+    }
+  }
+  if (!job) {
+    base::DictValue err;
+    err.Set("error", "job not found");
+    return err;
+  }
+
+  // Same 409 guard the message handler uses: if a run for this job's target
+  // conversation is already active, refuse rather than racing the session store.
+  // (A job with an empty target_conv_id auto-creates a conversation on dispatch,
+  // so there is nothing to collide with yet — only guard a known conversation.)
+  if (!job->target_conv_id.empty() &&
+      IsConversationRunActive(job->target_conv_id)) {
+    base::DictValue err;
+    err.Set("error", "job is already running");
+    return err;
+  }
+
+  // Stamp the fire like FireJob does, but do NOT recompute next_fire_us: a manual
+  // run is out-of-band and must not perturb the regular schedule.
+  job->last_fire_us = ToEpochUs(base::Time::Now());
+  job->last_status = "running";
+  DispatchJob(*job);
+  Save();
+
+  base::DictValue ok;
+  ok.Set("ok", true);
+  return ok;
 }
 
 void Scheduler::OnRunComplete(const std::string& job_id,
@@ -277,6 +318,18 @@ void Scheduler::OnRunComplete(const std::string& job_id,
     // to the same conversation.
     if (original_target_conv_id.empty() && !conv_id.empty())
       j.target_conv_id = conv_id;
+
+    // Record this run at the head of the history (newest first), capping to the
+    // most recent kMaxHistory records. |last_fire_us| was stamped when the run
+    // fired (FireJob / RunJobNow); fall back to now if it is somehow unset.
+    RunRecord record;
+    record.fired_us =
+        j.last_fire_us > 0 ? j.last_fire_us : ToEpochUs(base::Time::Now());
+    record.status = status;
+    record.conv_id = conv_id;
+    j.history.insert(j.history.begin(), std::move(record));
+    if (j.history.size() > kMaxHistory)
+      j.history.resize(kMaxHistory);
     break;
   }
   Save();
@@ -384,10 +437,12 @@ base::DictValue Scheduler::UpsertJobFromDict(const base::DictValue& body) {
   bool replaced = false;
   for (Job& existing : jobs_) {
     if (existing.id == job.id) {
-      // Preserve run history across an edit.
+      // Preserve run state + history across an edit (the edit body carries the
+      // trigger/run fields, not the canonical run log).
       job.last_fire_us = existing.last_fire_us;
       if (job.last_status.empty())
         job.last_status = existing.last_status;
+      job.history = std::move(existing.history);
       existing = job;
       replaced = true;
       break;
@@ -479,6 +534,20 @@ base::DictValue Scheduler::JobToDict(const Job& job) {
   d.Set("run", std::move(run));
 
   d.Set("max_concurrent_tabs", job.max_concurrent_tabs);
+
+  // Run history, NEWEST FIRST (job.history is already maintained that way). Each
+  // record's fired_us is emitted as a STRING, matching the *_us-as-string
+  // convention above (precision-safe). The /schedules detail view reads
+  // job.history = [{fired_us, status, conv_id}].
+  base::ListValue history;
+  for (const RunRecord& r : job.history) {
+    base::DictValue rec;
+    rec.Set("fired_us", base::NumberToString(r.fired_us));
+    rec.Set("status", r.status);
+    rec.Set("conv_id", r.conv_id);
+    history.Append(std::move(rec));
+  }
+  d.Set("history", std::move(history));
   return d;
 }
 
@@ -539,6 +608,25 @@ Scheduler::Job Scheduler::JobFromDict(const base::DictValue& d) {
 
   if (std::optional<int> mct = d.FindInt("max_concurrent_tabs"))
     job.max_concurrent_tabs = *mct;
+
+  // Run history, stored NEWEST FIRST with fired_us as a string. Preserve order
+  // and cap defensively to kMaxHistory in case the file holds more.
+  if (const base::ListValue* history = d.FindList("history")) {
+    for (const auto& v : *history) {
+      if (!v.is_dict())
+        continue;
+      const base::DictValue& rec = v.GetDict();
+      RunRecord r;
+      r.fired_us = ReadUsField(rec, "fired_us");
+      if (const std::string* status = rec.FindString("status"))
+        r.status = *status;
+      if (const std::string* conv = rec.FindString("conv_id"))
+        r.conv_id = *conv;
+      job.history.push_back(std::move(r));
+      if (job.history.size() >= kMaxHistory)
+        break;
+    }
+  }
   return job;
 }
 

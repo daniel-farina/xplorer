@@ -321,6 +321,43 @@ bool WantsHtml(const net::HttpServerRequestInfo& info) {
   return it->second.find("text/html") != std::string::npos;
 }
 
+// Extracts the first complete, balanced top-level JSON object ("{...}") from
+// |text|, which may also contain prose and/or ```json markdown fences (the
+// model's reply to the schedule-interpret prompt). Walks from the first '{',
+// tracking brace depth while skipping over string literals (so braces inside
+// quoted values don't unbalance the count) and their backslash escapes. Returns
+// the substring of the first balanced object, or empty if none is found.
+std::string ExtractFirstJsonObject(const std::string& text) {
+  size_t start = text.find('{');
+  if (start == std::string::npos)
+    return std::string();
+  int depth = 0;
+  bool in_string = false;
+  bool escaped = false;
+  for (size_t i = start; i < text.size(); ++i) {
+    const char c = text[i];
+    if (in_string) {
+      if (escaped) {
+        escaped = false;
+      } else if (c == '\\') {
+        escaped = true;
+      } else if (c == '"') {
+        in_string = false;
+      }
+      continue;
+    }
+    if (c == '"') {
+      in_string = true;
+    } else if (c == '{') {
+      ++depth;
+    } else if (c == '}') {
+      if (--depth == 0)
+        return text.substr(start, i - start + 1);
+    }
+  }
+  return std::string();
+}
+
 bool ServeUiFile(net::HttpServer* server,
                  int connection_id,
                  const std::string& name) {
@@ -1343,6 +1380,12 @@ void RegisterActiveRun(const std::string& conv_id, base::ProcessId pid) {
     return;
   base::AutoLock l(ActiveRunsLock());
   ActiveRuns()[conv_id] = pid;
+}
+bool IsActiveRun(const std::string& conv_id) {
+  if (conv_id.empty())
+    return false;
+  base::AutoLock l(ActiveRunsLock());
+  return ActiveRuns().count(conv_id) != 0;
 }
 void UnregisterActiveRun(const std::string& conv_id) {
   if (conv_id.empty())
@@ -2460,6 +2503,10 @@ std::string ResolveAppBuildModel(const std::string* model_override) {
   return kSearchModel;
 }
 
+bool IsConversationRunActive(const std::string& conv_id) {
+  return IsActiveRun(conv_id);
+}
+
 bool GrokNative::TryHandleRequest(
     int connection_id,
     const net::HttpServerRequestInfo& info,
@@ -2561,6 +2608,14 @@ bool GrokNative::TryHandleRequest(
 
   if (info.method == "GET" && (path == "/settings" || path == "/settings/")) {
     return ServeUiFile(server, connection_id, "settings.html");
+  }
+
+  // Scheduled-tasks management view. schedules.css / schedules.js are served
+  // automatically by the static-asset handler above (by basename), like
+  // settings.css/.js. The ?id=<job> query param is read client-side.
+  if (info.method == "GET" &&
+      (path == "/schedules" || path == "/schedules/")) {
+    return ServeUiFile(server, connection_id, "schedules.html");
   }
 
   if (info.method == "GET" &&
@@ -3011,6 +3066,186 @@ bool GrokNative::TryHandleRequest(
     } else {
       SendJson(server, connection_id, net::HTTP_OK, std::move(result));
     }
+    return true;
+  }
+
+  // POST /api/schedules/{id}/interpret — natural-language edit of a job. Body:
+  // {"text":"..."}. We hand the model the job's CURRENT JSON plus the user's
+  // request and ask for ONLY a JSON change object; we then merge that into the
+  // job and Upsert it (recomputing next_fire), optionally firing it. The blocking
+  // grok call runs on a ThreadPool task (like DispatchScheduledRun) and the merge
+  // + reply happen back on this IO thread (the scheduler's own sequence).
+  if (info.method == "POST" &&
+      base::StartsWith(path, "/api/schedules/") &&
+      base::EndsWith(path, "/interpret")) {
+    const std::string id = path.substr(
+        std::string("/api/schedules/").size(),
+        path.size() - std::string("/api/schedules/").size() -
+            std::string("/interpret").size());
+
+    // Locate the job's current dict (we are on the scheduler's sequence here).
+    base::DictValue jobs = Scheduler::Get()->ListJobsDict();
+    base::DictValue current_job;
+    bool found = false;
+    if (const base::ListValue* list = jobs.FindList("jobs")) {
+      for (const base::Value& v : *list) {
+        if (!v.is_dict())
+          continue;
+        const std::string* jid = v.GetDict().FindString("id");
+        if (jid && *jid == id) {
+          current_job = v.GetDict().Clone();
+          found = true;
+          break;
+        }
+      }
+    }
+    if (!found) {
+      base::DictValue err;
+      err.Set("error", "job not found");
+      SendJson(server, connection_id, net::HTTP_NOT_FOUND, std::move(err));
+      return true;
+    }
+
+    auto body = base::JSONReader::ReadDict(info.data, base::JSON_PARSE_RFC);
+    std::string text;
+    if (body) {
+      if (const std::string* t = body->FindString("text"))
+        text = *t;
+    }
+    if (text.empty()) {
+      base::DictValue err;
+      err.Set("error", "interpret requires a non-empty \"text\"");
+      SendJson(server, connection_id, net::HTTP_BAD_REQUEST, std::move(err));
+      return true;
+    }
+
+    std::string current_json;
+    base::JSONWriter::Write(current_job, &current_json);
+    const std::string model = GetConfiguredSearchModel();
+
+    // Build the interpret prompt: current job + user request, JSON-only reply.
+    std::string prompt =
+        "You are editing a scheduled background task for a web browser. Here is "
+        "the task's CURRENT definition as JSON:\n" +
+        current_json +
+        "\n\nThe user wants this change, in their own words:\n\"" + text +
+        "\"\n\nReply with ONLY a single JSON object (no prose, no markdown "
+        "fences) describing the change to apply. Use exactly these optional "
+        "keys:\n"
+        "  \"trigger\": one of {\"cron\":\"<5-field cron>\"} OR "
+        "{\"interval_sec\":<integer seconds>} OR {\"once_at_us\":\"<epoch "
+        "microseconds as a string>\"}\n"
+        "  \"enabled\": true|false\n"
+        "  \"run_now\": true|false   (fire the task immediately in addition to "
+        "any schedule change)\n"
+        "  \"run\": {\"message\":\"<what the task should do>\", "
+        "\"model\":\"<optional model id>\"}\n"
+        "Cron format is standard 5 fields: minute hour day-of-month month "
+        "day-of-week (e.g. \"0 8 * * 1-5\" = 08:00 on weekdays). All times are "
+        "LOCAL time. Include only the keys that change; omit everything else. "
+        "Output the JSON object and nothing else.";
+
+    // The blocking grok run hops onto a ThreadPool task; its reply lands back on
+    // this IO sequence, where we merge + Upsert + optionally fire and respond.
+    base::ThreadPool::CreateSequencedTaskRunner(
+        {base::MayBlock(), base::TaskPriority::USER_VISIBLE})
+        ->PostTaskAndReplyWithResult(
+            FROM_HERE,
+            base::BindOnce(
+                [](std::string prompt, std::string model) {
+                  // No session id: this is a one-shot interpret, not a chat turn.
+                  return RunGrokChat(prompt, std::string(), model);
+                },
+                prompt, model),
+            base::BindOnce(
+                [](net::HttpServer* srv, int cid, std::string job_id,
+                   base::DictValue current_job, base::DictValue reply) {
+                  // Surface a grok failure directly.
+                  if (const std::string* err = reply.FindString("error")) {
+                    base::DictValue out;
+                    out.Set("error",
+                            std::string("could not interpret: ") + *err);
+                    SendJson(srv, cid, net::HTTP_OK, std::move(out));
+                    return;
+                  }
+
+                  const std::string* reply_text = reply.FindString("text");
+                  const std::string json_str =
+                      reply_text ? ExtractFirstJsonObject(*reply_text)
+                                 : std::string();
+                  std::optional<base::DictValue> change;
+                  if (!json_str.empty())
+                    change = base::JSONReader::ReadDict(json_str,
+                                                        base::JSON_PARSE_RFC);
+                  if (!change) {
+                    base::DictValue out;
+                    out.Set("error",
+                            std::string("could not interpret: model did not "
+                                        "return a usable JSON change"));
+                    SendJson(srv, cid, net::HTTP_OK, std::move(out));
+                    return;
+                  }
+
+                  // Merge the change into the current job dict. trigger/run are
+                  // nested objects in the job schema, so merge their members
+                  // rather than wholesale-replacing the parent (a change that
+                  // only touches run.message must not drop run.cwd, etc.).
+                  base::DictValue merged = current_job.Clone();
+                  if (const base::DictValue* trigger = change->FindDict(
+                          "trigger")) {
+                    base::DictValue* dst = merged.EnsureDict("trigger");
+                    // A new trigger kind supersedes the others: clear the
+                    // siblings so e.g. switching to cron drops a stale interval.
+                    dst->Set("cron", base::Value());
+                    dst->Set("interval_sec", base::Value());
+                    dst->Set("once_at_us", base::Value());
+                    for (auto kv : *trigger)
+                      dst->Set(kv.first, kv.second.Clone());
+                  }
+                  if (const base::DictValue* run = change->FindDict("run")) {
+                    base::DictValue* dst = merged.EnsureDict("run");
+                    for (auto kv : *run)
+                      dst->Set(kv.first, kv.second.Clone());
+                  }
+                  if (std::optional<bool> enabled =
+                          change->FindBool("enabled")) {
+                    merged.Set("enabled", *enabled);
+                  }
+
+                  const bool run_now =
+                      change->FindBool("run_now").value_or(false);
+
+                  // Apply on the scheduler's sequence (we are on it here): Upsert
+                  // recomputes next_fire and persists; then optionally fire.
+                  base::DictValue updated =
+                      Scheduler::Get()->UpsertJobFromDict(merged);
+                  if (run_now && !updated.FindString("error"))
+                    Scheduler::Get()->RunJobNow(job_id);
+
+                  SendJson(srv, cid, net::HTTP_OK, std::move(updated));
+                },
+                server, connection_id, id, std::move(current_job)));
+    return true;
+  }
+
+  // POST /api/schedules/{id}/run — fire a job immediately (manual run-now). Does
+  // not change the regular schedule; reuses the ActiveRuns 409 guard.
+  if (info.method == "POST" &&
+      base::StartsWith(path, "/api/schedules/") &&
+      base::EndsWith(path, "/run")) {
+    const std::string id = path.substr(
+        std::string("/api/schedules/").size(),
+        path.size() - std::string("/api/schedules/").size() -
+            std::string("/run").size());
+    base::DictValue result = Scheduler::Get()->RunJobNow(id);
+    net::HttpStatusCode code = net::HTTP_OK;
+    if (const std::string* err = result.FindString("error")) {
+      if (*err == "job not found")
+        code = net::HTTP_NOT_FOUND;
+      else
+        code = net::HTTP_CONFLICT;
+    }
+    SendJson(server, connection_id, code, std::move(result));
     return true;
   }
 

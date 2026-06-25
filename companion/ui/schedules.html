@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en" class="grok-build">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Scheduled tasks — Xplorer</title>
+  <link rel="stylesheet" href="/theme.css">
+  <script>document.documentElement.setAttribute('data-theme',matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');</script>
+  <link rel="stylesheet" href="/toolbar.css">
+  <link rel="stylesheet" href="/schedules.css">
+</head>
+<body data-grok-toolbar="auto">
+  <div id="grok-toolbar-mount"></div>
+  <main class="settings-page sched-shell">
+    <!-- Left column: back-to-chat + task list -->
+    <nav class="sched-list-col" aria-label="Scheduled tasks">
+      <button type="button" id="sched-back" class="sched-back-btn">&larr; Back to chat</button>
+      <button type="button" id="sched-new" class="settings-btn settings-btn-primary sched-new-btn">+ New task</button>
+      <ul id="sched-list" class="sched-list"></ul>
+      <p id="sched-list-empty" class="sched-empty" hidden>
+        No scheduled tasks yet — <button type="button" id="sched-empty-new" class="sched-link-btn">+ New task</button>
+      </p>
+    </nav>
+
+    <!-- Right column: the detail of the selected task -->
+    <div class="sched-main">
+      <!-- Placeholder shown when nothing is selected -->
+      <section id="sched-placeholder" class="sched-placeholder">
+        <header class="settings-head">
+          <h1>Scheduled tasks</h1>
+          <p>Run a Grok prompt on a schedule — on a cron, every N minutes, or once at a set time. Select a task on the left, or create a new one.</p>
+        </header>
+      </section>
+
+      <!-- The detail view (filled in by schedules.js) -->
+      <section id="sched-detail" class="sched-detail" hidden></section>
+    </div>
+  </main>
+
+  <!-- In-page confirm dialog (window.confirm is suppressed in the side panel) -->
+  <div id="sched-confirm" class="sched-confirm-overlay" hidden>
+    <div class="sched-confirm-box" role="alertdialog" aria-modal="true" aria-labelledby="sched-confirm-msg">
+      <p id="sched-confirm-msg" class="sched-confirm-msg"></p>
+      <div class="sched-confirm-actions">
+        <button type="button" id="sched-confirm-cancel" class="settings-btn">Cancel</button>
+        <button type="button" id="sched-confirm-ok" class="settings-btn sched-btn-danger">Delete</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/toolbar.js"></script>
+  <script src="/common.js"></script>
+  <script src="/schedules.js"></script>
+</body>
+</html>

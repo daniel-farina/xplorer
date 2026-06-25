@@ -4,6 +4,7 @@
 #ifndef CHROME_BROWSER_GROK_COMPANION_GROK_COMPANION_UTIL_H_
 #define CHROME_BROWSER_GROK_COMPANION_GROK_COMPANION_UTIL_H_
 
+#include <string>
 #include <vector>
 
 #include "base/callback_list.h"
@@ -123,6 +124,14 @@ void ToggleGrokSidePanel(BrowserWindowInterface* browser);
 // Ensure the Grok side panel (chat UI) is OPEN. Idempotent: shows it if closed,
 // no-op if already open; never closes. Used by /api/sidepanel/open (app-create).
 void OpenGrokSidePanel(BrowserWindowInterface* browser);
+
+// Open the Grok side panel AND navigate its WebContents to the companion URL +
+// |path| (e.g. "/schedules?id=job_ab12"). Opens the panel if closed (idempotent,
+// like OpenGrokSidePanel) then loads the path in the panel's contents, so an
+// already-open panel jumps to the new path too. |path| is resolved relative to
+// GetCompanionURL(); pass a leading-slash absolute path.
+void OpenGrokSidePanelAt(BrowserWindowInterface* browser,
+                         const std::string& path);
 
 // Register the Grok side panel entry on the global side panel registry.
 void RegisterGrokSidePanel(BrowserWindowInterface* browser);

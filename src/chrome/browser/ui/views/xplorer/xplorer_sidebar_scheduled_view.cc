@@ -10,6 +10,8 @@
 #include "base/functional/bind.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/agent_gateway/scheduler.h"
+#include "chrome/browser/grok_companion/grok_companion_util.h"
+#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/views/xplorer/xplorer_sidebar_row_button.h"
 #include "chrome/browser/ui/views/xplorer/xplorer_sidebar_section_label.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
@@ -44,7 +46,9 @@ std::u16string StatusHint(const std::string& last_status) {
 
 }  // namespace
 
-XplorerSidebarScheduledView::XplorerSidebarScheduledView() {
+XplorerSidebarScheduledView::XplorerSidebarScheduledView(
+    BrowserWindowInterface* browser)
+    : browser_(browser) {
   auto* layout = SetLayoutManager(std::make_unique<views::BoxLayout>(
       views::BoxLayout::Orientation::kVertical));
   layout->set_cross_axis_alignment(
@@ -118,10 +122,18 @@ void XplorerSidebarScheduledView::OnJobs(base::DictValue snapshot) {
       text += u" — " + hint;
     }
 
-    // v1 is read-only: clicking a row is a no-op (an empty PressedCallback). It
-    // does not select, focus, or activate anything.
+    // Clicking a row opens the companion side panel and navigates it to the
+    // job's detail page (/schedules?id=<job_id>). Bind the id by value; the
+    // weak ptr guards against the view going away before the click fires. A row
+    // without a usable id falls back to an inert (empty) callback.
+    views::Button::PressedCallback pressed;
+    if (id && !id->empty()) {
+      pressed = base::BindRepeating(
+          &XplorerSidebarScheduledView::OnJobPressed,
+          weak_factory_.GetWeakPtr(), *id);
+    }
     auto button = std::make_unique<XplorerSidebarRowButton>(
-        views::Button::PressedCallback(), text);
+        std::move(pressed), text);
     button->SetProperty(views::kMarginsKey, SidebarRowMargins());
     if (!hint.empty()) {
       button->SetTooltipText(hint);
@@ -130,6 +142,16 @@ void XplorerSidebarScheduledView::OnJobs(base::DictValue snapshot) {
   }
 
   PreferredSizeChanged();
+}
+
+void XplorerSidebarScheduledView::OnJobPressed(const std::string& job_id) {
+  if (!browser_ || job_id.empty()) {
+    return;
+  }
+  // Open the companion side panel on the /schedules detail view for this job.
+  // The served page reads ?id=<job_id> to focus that job; "← Back to chat"
+  // navigates the same panel back to "/".
+  grok_companion::OpenGrokSidePanelAt(browser_, "/schedules?id=" + job_id);
 }
 
 BEGIN_METADATA(XplorerSidebarScheduledView)

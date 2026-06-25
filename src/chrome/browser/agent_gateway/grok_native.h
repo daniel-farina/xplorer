@@ -46,6 +46,11 @@ void RecordGatewayLog(const std::string& level,
 
 base::DictValue LoadCompanionSessions();
 void SaveCompanionSessions(const base::DictValue& data);
+
+// True if a grok run for conversation |conv_id| is currently active (registered
+// in the gateway's ActiveRuns map). Used by the scheduler's manual run-now path
+// to apply the same 409 "conversation is busy" guard the message handler uses.
+bool IsConversationRunActive(const std::string& conv_id);
 std::string ResolveConfiguredModel(const std::string* model_override);
 std::string ResolveAppBuildModel(const std::string* model_override);
 

@@ -596,7 +596,8 @@ def patch_vertical_sidebar(src: Path):
             "    }\n"
             "    // XPLORER: native \"Scheduled\" section below the tab list.\n"
             "    vertical_tab_strip_region_view_->InstallXplorerSidebarScheduled(\n"
-            "        std::make_unique<xplorer::XplorerSidebarScheduledView>());",
+            "        std::make_unique<xplorer::XplorerSidebarScheduledView>(\n"
+            "            browser_.get()));",
         )
 
     browser_ui_gn = src / "chrome/browser/ui/BUILD.gn"

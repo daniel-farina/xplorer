@@ -205,6 +205,16 @@ class CompanionWebView : public views::WebView {
   base::WeakPtrFactory<CompanionWebView> weak_factory_{this};
 };
 
+// Weak handle to the most-recently-created side-panel companion WebContents, so
+// OpenGrokSidePanelAt() can navigate the live panel to a specific path after
+// showing it (the SidePanelEntry is registered once with a fixed "/" URL and
+// reuses its view, so re-Show() does not re-navigate on its own). Cleared
+// automatically when the contents is destroyed (raw WeakPtr). UI thread only.
+base::WeakPtr<content::WebContents>& LiveCompanionContents() {
+  static base::NoDestructor<base::WeakPtr<content::WebContents>> contents;
+  return *contents;
+}
+
 std::unique_ptr<views::View> CreateGrokCompanionView(
     BrowserWindowInterface* browser,
     Profile* profile,
@@ -217,6 +227,8 @@ std::unique_ptr<views::View> CreateGrokCompanionView(
   content::NavigationController::LoadURLParams load(url);
   load.transition_type = ui::PAGE_TRANSITION_AUTO_TOPLEVEL;
   contents->GetController().LoadURLWithParams(load);
+  // Track this contents so a subsequent OpenGrokSidePanelAt() can navigate it.
+  LiveCompanionContents() = contents->GetWeakPtr();
   web_view->AttachContents(std::move(contents));
   web_view->SetPreferredSize(
       gfx::Size(SidePanelEntry::kSidePanelDefaultContentWidth, 0));
@@ -460,6 +472,27 @@ void OpenGrokSidePanel(BrowserWindowInterface* browser) {
   // unlike Toggle() it never closes the panel.
   ui->Show(SidePanelEntry::Key(SidePanelEntry::Id::kSearchCompanion),
            SidePanelOpenTrigger::kToolbarButton);
+}
+
+void OpenGrokSidePanelAt(BrowserWindowInterface* browser,
+                         const std::string& path) {
+  if (!browser)
+    return;
+  // Open (or re-show) the panel first; on a first open this synchronously
+  // creates the CompanionWebView and records its contents in
+  // LiveCompanionContents(). Then navigate that live contents to companion +
+  // |path| — the same LoadURLWithParams pattern OpenGrokSearchPage /
+  // AskGrokAboutPage use — so an already-open panel jumps to the new path too.
+  OpenGrokSidePanel(browser);
+  content::WebContents* contents = LiveCompanionContents().get();
+  if (!contents)
+    return;
+  const GURL dest = GetCompanionURL().Resolve(path);
+  if (!dest.is_valid())
+    return;
+  content::NavigationController::LoadURLParams params(dest);
+  params.transition_type = ui::PAGE_TRANSITION_AUTO_TOPLEVEL;
+  contents->GetController().LoadURLWithParams(params);
 }
 
 }  // namespace grok_companion
