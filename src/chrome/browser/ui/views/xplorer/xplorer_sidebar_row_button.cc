@@ -78,13 +78,15 @@ void XplorerSidebarRowButton::UpdateBackgroundColor() {
   if (!color_provider) {
     return;
   }
-  const SkColor background =
-      selected_
-          ? color_provider->GetColor(
-                kColorToolbarButtonBackgroundHighlightedDefault)
-          : color_provider->GetColor(kColorToolbarBackgroundSubtleEmphasis);
+  const int radius =
+      GetLayoutConstant(LayoutConstant::kVerticalTabCornerRadius);
+  if (!selected_) {
+    SetBackground(nullptr);
+    return;
+  }
   SetBackground(views::CreateRoundedRectBackground(
-      background, GetLayoutConstant(LayoutConstant::kVerticalTabCornerRadius)));
+      color_provider->GetColor(kColorTabBackgroundSelectedFrameInactive),
+      radius));
 }
 
 BEGIN_METADATA(XplorerSidebarRowButton)

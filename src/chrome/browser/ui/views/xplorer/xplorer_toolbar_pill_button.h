@@ -8,6 +8,7 @@
 
 #include "base/memory/raw_ptr.h"
 #include "ui/base/metadata/metadata_header_macros.h"
+#include "ui/base/models/image_model.h"
 #include "ui/views/controls/button/md_text_button.h"
 
 namespace gfx {
@@ -36,6 +37,9 @@ class XplorerToolbarPillButton : public views::MdTextButton {
 
   // Sets the leading vector icon, rendered at the toolbar icon color.
   void SetPillIcon(const gfx::VectorIcon& icon);
+
+  // Sets a raster favicon (sidebar mode). Clears when returning to top bar.
+  void SetPillFavicon(const ui::ImageModel& favicon);
 
   // Marks this pill as the active/selected one (accent background).
   void SetSelected(bool selected);
@@ -68,6 +72,7 @@ class XplorerToolbarPillButton : public views::MdTextButton {
   bool selected_ = false;
   bool sidebar_row_style_ = false;
   bool has_caret_ = false;
+  bool using_favicon_ = false;
   raw_ptr<const gfx::VectorIcon> icon_ = nullptr;
 };
 

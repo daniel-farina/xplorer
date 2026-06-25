@@ -24,12 +24,15 @@
 #include "ui/compositor/layer_tree_owner.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/geometry/vector2d.h"
+#include "chrome/browser/favicon/favicon_service_factory.h"
 #include "chrome/browser/grok_companion/grok_companion_util.h"
+#include "components/favicon/core/favicon_service.h"
+#include "components/favicon_base/favicon_types.h"
+#include "components/keyed_service/core/service_access_type.h"
 #include "chrome/browser/ui/views/xplorer/xplorer_sidebar_prefs.h"
 #include "chrome/browser/ui/views/xplorer/xplorer_toolbar_placement.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/color/chrome_color_id.h"
-#include "chrome/browser/ui/layout_constants.h"
 #include "chrome/browser/ui/views/xplorer/xplorer_toolbar_icons.h"
 #include "chrome/browser/ui/views/xplorer/xplorer_toolbar_pill_button.h"
 #include "components/tabs/public/tab_interface.h"
@@ -43,7 +46,9 @@
 #include "ui/events/event.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/rect.h"
+#include "ui/gfx/favicon_size.h"
 #include "ui/gfx/geometry/size.h"
+#include "ui/gfx/image/image_skia_operations.h"
 #include "ui/menus/simple_menu_model.h"
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/background.h"
@@ -318,9 +323,7 @@ void XplorerToolbarView::RebuildButtons() {
 }
 
 void XplorerToolbarView::ApplyVerticalButtonChrome() {
-  const int horizontal =
-      GetLayoutConstant(LayoutConstant::kVerticalTabStripHorizontalPadding);
-  const gfx::Insets row_margins = gfx::Insets::TLBR(2, horizontal, 2, horizontal);
+  const gfx::Insets row_margins = gfx::Insets::TLBR(2, 0, 2, 0);
   for (PillViews& views : pill_buttons_) {
     if (!views.main) {
       continue;
@@ -332,6 +335,55 @@ void XplorerToolbarView::ApplyVerticalButtonChrome() {
       views.main->ClearProperty(views::kMarginsKey);
     }
   }
+  if (vertical_layout_) {
+    LoadSidebarPillFavicons();
+  } else {
+    favicon_task_tracker_.TryCancelAll();
+  }
+}
+
+void XplorerToolbarView::LoadSidebarPillFavicons() {
+  if (!vertical_layout_ || !profile_) {
+    return;
+  }
+  favicon_task_tracker_.TryCancelAll();
+  favicon::FaviconService* favicon_service =
+      FaviconServiceFactory::GetForProfile(profile_.get(),
+                                           ServiceAccessType::IMPLICIT_ACCESS);
+  if (!favicon_service) {
+    return;
+  }
+  for (size_t i = 0; i < pills_.size() && i < pill_buttons_.size(); ++i) {
+    if (!pill_buttons_[i].main) {
+      continue;
+    }
+    if (base::StartsWith(pills_[i].href, kSwitchHomePrefix)) {
+      continue;
+    }
+    const GURL url = ResolveHref(pills_[i].href);
+    if (!url.is_valid() || !url.SchemeIsHTTPOrHTTPS()) {
+      continue;
+    }
+    favicon_service->GetFaviconImageForPageURL(
+        url,
+        base::BindOnce(&XplorerToolbarView::OnPillFaviconLoaded,
+                       weak_factory_.GetWeakPtr(), i),
+        &favicon_task_tracker_);
+  }
+}
+
+void XplorerToolbarView::OnPillFaviconLoaded(
+    size_t pill_index,
+    const favicon_base::FaviconImageResult& result) {
+  if (!vertical_layout_ || pill_index >= pill_buttons_.size() ||
+      !pill_buttons_[pill_index].main || result.image.IsEmpty()) {
+    return;
+  }
+  const gfx::ImageSkia resized = gfx::ImageSkiaOperations::CreateResizedImage(
+      result.image.AsImageSkia(), skia::ImageOperations::RESIZE_BEST,
+      gfx::Size(gfx::kFaviconSize, gfx::kFaviconSize));
+  pill_buttons_[pill_index].main->SetPillFavicon(
+      ui::ImageModel::FromImageSkia(resized));
 }
 
 void XplorerToolbarView::SetVerticalLayout(bool vertical) {

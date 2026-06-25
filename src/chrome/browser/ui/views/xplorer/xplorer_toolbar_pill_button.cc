@@ -62,7 +62,16 @@ XplorerToolbarPillButton::~XplorerToolbarPillButton() = default;
 
 void XplorerToolbarPillButton::SetPillIcon(const gfx::VectorIcon& icon) {
   icon_ = &icon;
+  using_favicon_ = false;
   UpdateIconImage();
+}
+
+void XplorerToolbarPillButton::SetPillFavicon(const ui::ImageModel& favicon) {
+  if (!sidebar_row_style_ || favicon.IsEmpty()) {
+    return;
+  }
+  using_favicon_ = true;
+  SetImageModel(views::Button::STATE_NORMAL, favicon);
 }
 
 void XplorerToolbarPillButton::SetSelected(bool selected) {
@@ -85,6 +94,7 @@ void XplorerToolbarPillButton::SetSidebarRowStyle(bool sidebar_row) {
         GetLayoutConstant(LayoutConstant::kVerticalTabCornerRadius));
     label()->SetTextStyle(views::style::STYLE_BODY_4);
   } else {
+    using_favicon_ = false;
     SetImageLabelSpacing(kImageLabelSpacing);
     SetCornerRadius(kCornerRadius);
     label()->SetTextStyle(views::style::STYLE_BODY_4_EMPHASIS);
@@ -127,20 +137,30 @@ void XplorerToolbarPillButton::UpdateBackgroundColor() {
   if (!color_provider) {
     return;
   }
+  const int radius =
+      sidebar_row_style_
+          ? GetLayoutConstant(LayoutConstant::kVerticalTabCornerRadius)
+          : kCornerRadius;
+  if (sidebar_row_style_) {
+    if (!selected_) {
+      SetBackground(nullptr);
+      return;
+    }
+    SetBackground(views::CreateRoundedRectBackground(
+        color_provider->GetColor(kColorTabBackgroundSelectedFrameInactive),
+        radius));
+    return;
+  }
   const SkColor background =
       selected_
           ? color_provider->GetColor(
                 kColorToolbarButtonBackgroundHighlightedDefault)
           : color_provider->GetColor(kColorToolbarBackgroundSubtleEmphasis);
-  const int radius =
-      sidebar_row_style_
-          ? GetLayoutConstant(LayoutConstant::kVerticalTabCornerRadius)
-          : kCornerRadius;
   SetBackground(views::CreateRoundedRectBackground(background, radius));
 }
 
 void XplorerToolbarPillButton::UpdateIconImage() {
-  if (!icon_ || !GetColorProvider()) {
+  if (using_favicon_ || !icon_ || !GetColorProvider()) {
     return;
   }
   const SkColor icon_color = sidebar_row_style_

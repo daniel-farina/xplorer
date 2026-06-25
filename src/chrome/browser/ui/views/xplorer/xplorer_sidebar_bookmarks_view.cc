@@ -11,7 +11,6 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
-#include "chrome/browser/ui/layout_constants.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/xplorer/xplorer_sidebar_row_button.h"
@@ -24,7 +23,10 @@
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/mojom/menu_source_type.mojom.h"
 #include "ui/base/page_transition_types.h"
+#include "ui/gfx/favicon_size.h"
 #include "ui/gfx/geometry/insets.h"
+#include "ui/gfx/image/image_skia_operations.h"
+
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/view_class_properties.h"
 
@@ -34,9 +36,7 @@ namespace {
 constexpr int kMaxBookmarks = 12;
 
 gfx::Insets SidebarRowMargins() {
-  const int h =
-      GetLayoutConstant(LayoutConstant::kVerticalTabStripHorizontalPadding);
-  return gfx::Insets::TLBR(2, h, 2, h);
+  return gfx::Insets::TLBR(2, 0, 2, 0);
 }
 }  // namespace
 
@@ -144,8 +144,7 @@ void XplorerSidebarBookmarksView::Rebuild() {
 
   auto* header = AddChildView(std::make_unique<XplorerSidebarSectionLabel>(
       u"Bookmarks"));
-  header->SetProperty(views::kMarginsKey,
-                      gfx::Insets::TLBR(4, SidebarRowMargins().left(), 0, 0));
+  header->SetProperty(views::kMarginsKey, gfx::Insets::TLBR(4, 0, 0, 0));
 
   const bookmarks::BookmarkNode* bar = model_->bookmark_bar_node();
   int shown = 0;
@@ -175,10 +174,15 @@ void XplorerSidebarBookmarksView::UpdateRowIcon(
     return;
   }
   const gfx::Image& image = model_->GetFavicon(node);
-  ui::ImageModel icon =
-      image.IsEmpty()
-          ? favicon::GetDefaultFaviconModel(kColorBookmarkBarBackground)
-          : ui::ImageModel::FromImage(image);
+  ui::ImageModel icon;
+  if (image.IsEmpty()) {
+    icon = favicon::GetDefaultFaviconModel(kColorBookmarkBarBackground);
+  } else {
+    const gfx::ImageSkia resized = gfx::ImageSkiaOperations::CreateResizedImage(
+        image.AsImageSkia(), skia::ImageOperations::RESIZE_BEST,
+        gfx::Size(gfx::kFaviconSize, gfx::kFaviconSize));
+    icon = ui::ImageModel::FromImageSkia(resized);
+  }
   button->SetRowIcon(icon);
 }
 

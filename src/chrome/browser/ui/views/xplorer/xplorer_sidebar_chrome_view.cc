@@ -9,7 +9,6 @@
 #include "chrome/browser/ui/views/xplorer/xplorer_sidebar_section_label.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
-#include "chrome/browser/ui/layout_constants.h"
 #include "chrome/browser/ui/views/xplorer/xplorer_sidebar_prefs.h"
 #include "chrome/browser/ui/views/xplorer/xplorer_toolbar_view.h"
 #include "ui/base/mojom/menu_source_type.mojom.h"
@@ -24,11 +23,7 @@
 namespace xplorer {
 
 namespace {
-gfx::Insets SectionLabelMargins() {
-  const int h =
-      GetLayoutConstant(LayoutConstant::kVerticalTabStripHorizontalPadding);
-  return gfx::Insets::TLBR(4, h, 0, 0);
-}
+constexpr gfx::Insets kSectionLabelMargins = gfx::Insets::TLBR(4, 0, 0, 0);
 }  // namespace
 
 XplorerSidebarChromeView::XplorerSidebarChromeView(
@@ -55,7 +50,7 @@ XplorerSidebarChromeView::XplorerSidebarChromeView(
   bookmarks_separator_ = AddChildView(std::make_unique<views::Separator>());
   auto* tabs_label = AddChildView(
       std::make_unique<XplorerSidebarSectionLabel>(u"Tabs"));
-  tabs_label->SetProperty(views::kMarginsKey, SectionLabelMargins());
+  tabs_label->SetProperty(views::kMarginsKey, kSectionLabelMargins);
 
   UpdateForToolbarPlacement(GetToolbarPlacement());
 }

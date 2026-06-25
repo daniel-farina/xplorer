@@ -10,6 +10,8 @@
 #include <vector>
 
 #include "base/callback_list.h"
+#include "base/task/cancelable_task_tracker.h"
+#include "components/favicon_base/favicon_types.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/values.h"
@@ -146,6 +148,9 @@ class XplorerToolbarView : public views::AccessiblePaneView,
   // marks the active home pill as selected.
   void RebuildButtons();
   void ApplyVerticalButtonChrome();
+  void LoadSidebarPillFavicons();
+  void OnPillFaviconLoaded(size_t pill_index,
+                            const favicon_base::FaviconImageResult& result);
   // Click dispatch for a pill: opens the dropdown when the press lands in the
   // integrated caret zone (and the pill has children), else navigates.
   void OnPillActivated(size_t pill_index, const ui::Event& event);
@@ -217,6 +222,7 @@ class XplorerToolbarView : public views::AccessiblePaneView,
 
   bool vertical_layout_ = false;
 
+  base::CancelableTaskTracker favicon_task_tracker_;
   base::WeakPtrFactory<XplorerToolbarView> weak_factory_{this};
 };
 
