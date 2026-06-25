@@ -7,6 +7,7 @@
 #include <optional>
 
 #include "base/memory/raw_ptr.h"
+#include "base/memory/weak_ptr.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
 #include "components/tab_groups/tab_group_id.h"
 
@@ -30,12 +31,21 @@ class AgentTabGrouper : public TabStripModelObserver {
       const TabStripSelectionChange& selection) override;
 
  private:
+  // Posts a coalesced Reconcile() to run after the current TabStripModel
+  // operation finishes. Reconcile() mutates the model (AddToNewGroup etc.),
+  // which must NOT run synchronously inside OnTabStripModelChanged — that
+  // re-enters TabStripModel and trips its re-entrancy guard (CHECK !*guard_flag)
+  // when, e.g., a background agent tab is activated. Deferring runs the grouping
+  // outside the guarded section.
+  void ScheduleReconcile();
   void Reconcile();
   std::optional<tab_groups::TabGroupId> FindAgentGroup() const;
   tab_groups::TabGroupId EnsureAgentGroup(int count);
 
   const raw_ptr<TabStripModel> model_;
   bool reconciling_ = false;
+  bool reconcile_scheduled_ = false;
+  base::WeakPtrFactory<AgentTabGrouper> weak_factory_{this};
 };
 
 }  // namespace xplorer

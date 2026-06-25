@@ -7,9 +7,11 @@
 #include <vector>
 
 #include "base/check.h"
+#include "base/functional/bind.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task/sequenced_task_runner.h"
 #include "chrome/browser/agent_gateway/focus_arbiter.h"
 #include "chrome/browser/agent_gateway/tab_ownership.h"
 #include "chrome/browser/ui/tabs/tab_group_model.h"
@@ -71,7 +73,22 @@ void AgentTabGrouper::OnTabStripModelChanged(
   if (selection.reason & TabStripModelObserver::CHANGE_REASON_USER_GESTURE) {
     agent_gateway::FocusArbiter::Get()->ResetToUser();
   }
-  Reconcile();
+  ScheduleReconcile();
+}
+
+void AgentTabGrouper::ScheduleReconcile() {
+  // Defer Reconcile() out of the observer callback: it mutates the
+  // TabStripModel (AddToNewGroup / AddToExistingGroup / ChangeTabGroupVisuals),
+  // which re-enters the model and trips its re-entrancy guard if done
+  // synchronously during a notification (e.g. while a tab is being activated).
+  // Coalesce rapid changes into a single deferred pass.
+  if (reconcile_scheduled_ || !model_) {
+    return;
+  }
+  reconcile_scheduled_ = true;
+  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE,
+      base::BindOnce(&AgentTabGrouper::Reconcile, weak_factory_.GetWeakPtr()));
 }
 
 std::optional<tab_groups::TabGroupId> AgentTabGrouper::FindAgentGroup() const {
@@ -110,6 +127,7 @@ tab_groups::TabGroupId AgentTabGrouper::EnsureAgentGroup(int count) {
 }
 
 void AgentTabGrouper::Reconcile() {
+  reconcile_scheduled_ = false;
   if (reconciling_ || !model_) {
     return;
   }
