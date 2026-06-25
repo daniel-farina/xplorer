@@ -17,12 +17,22 @@ FocusArbiter::FocusArbiter() = default;
 FocusArbiter::~FocusArbiter() = default;
 
 bool FocusArbiter::MayActivate(const std::string& requester_agent_id) {
-  // The user/UI (no X-Agent-Id) may always activate.
-  if (requester_agent_id.empty())
-    return true;
   base::AutoLock guard(lock_);
-  // An agent may activate only if it holds the current grant.
-  return owner_ == requester_agent_id;
+  // Default-deny: gateway-initiated foregrounding is allowed ONLY while a
+  // user-granted focus is active (set via the user-only POST /focus). With no
+  // grant, NO agent — chat, app-build, or browse, however many run at once —
+  // can foreground a tab, so none can steal the user's focus or fight each
+  // other. The user foregrounds tabs natively (the tab-strip click never hits
+  // the gateway; the AgentTabGrouper observer keeps focus with the user) or via
+  // the explicit "focus this task" grant. This does not rely on agents
+  // self-identifying (they don't send X-Agent-Id), which is why the policy is
+  // enforced server-side rather than per-agent-id.
+  if (owner_.empty())
+    return false;
+  // Inside a user-granted window, allow the grant holder. Agents currently send
+  // no X-Agent-Id, so an empty requester is permitted within the window; if a
+  // session ever identifies itself it must match the grant holder.
+  return requester_agent_id.empty() || requester_agent_id == owner_;
 }
 
 void FocusArbiter::SetOwner(const std::string& agent_id,

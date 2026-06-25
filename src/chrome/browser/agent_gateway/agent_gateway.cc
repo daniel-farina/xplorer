@@ -415,9 +415,13 @@ void AgentGateway::RouteRequest(int connection_id,
     const std::string* label = body ? body->FindString("label") : nullptr;
     const std::string* task_id = body ? body->FindString("task_id") : nullptr;
     // Background by default: agent tabs must never steal the user's focus.
-    // Only an explicit {"focus": true} opens in the foreground; even then it is
-    // intent only and does not bypass focus arbitration (see FocusArbiter).
-    const bool focus = body && body->FindBool("focus").value_or(false);
+    // {"focus": true} is honored ONLY if the focus arbiter currently permits it
+    // (a live user grant). Otherwise it is downgraded to a background open — an
+    // agent cannot foreground a new tab on its own. This closes the
+    // focus:true-bypasses-the-arbiter hole.
+    const bool focus_requested = body && body->FindBool("focus").value_or(false);
+    const bool focus =
+        focus_requested && FocusArbiter::Get()->MayActivate(agent_id);
     NavigateParams params(ProfileManager::GetLastUsedProfile(),
                           GURL(url ? *url : "about:blank"),
                           ui::PAGE_TRANSITION_TYPED);

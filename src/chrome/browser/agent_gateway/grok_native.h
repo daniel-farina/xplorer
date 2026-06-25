@@ -79,6 +79,22 @@ void DispatchScheduledRun(
     base::OnceCallback<void(const std::string& status,
                             const std::string& conv_id)> on_done);
 
+// Headless app-build dispatch for the scheduler. Like DispatchScheduledRun, but
+// runs a blocking app-build (grok with --cwd <cwd> + the app-build rules — the
+// same command POST /apps/{id}/build/stream runs) and appends the reply to
+// |target_conv_id| (auto-created if empty). The model defaults via
+// ResolveAppBuildModel when |model| is empty. The blocking run is posted to a
+// base::ThreadPool {MayBlock, USER_VISIBLE} task, so this returns immediately.
+// |on_done| (optional) fires on that task with "ok" | "failed" | "skipped" and
+// the conv_id the reply was appended to. Used when a scheduled Job has a cwd.
+void DispatchScheduledAppBuild(
+    const std::string& message,
+    const std::string& model,
+    const std::string& cwd,
+    const std::string& target_conv_id,
+    base::OnceCallback<void(const std::string& status,
+                            const std::string& conv_id)> on_done);
+
 class GrokNative {
  public:
   // Returns true if |info| was handled (response sent or async work started).

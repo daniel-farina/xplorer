@@ -98,21 +98,30 @@ void Scheduler::FireJob(Job* job) {
   // onto our own sequence before touching jobs_ (looked up by id, since jobs_
   // may be mutated by CRUD in the meantime). base::Unretained is safe: the
   // Scheduler is a process-lifetime singleton.
-  DispatchScheduledRun(
-      job->message, job->model, job->target_conv_id,
-      base::BindOnce(
-          [](scoped_refptr<base::SequencedTaskRunner> runner, Scheduler* self,
-             std::string job_id, std::string original_target,
-             const std::string& status, const std::string& conv_id) {
-            if (!runner)
-              return;
-            runner->PostTask(
-                FROM_HERE,
-                base::BindOnce(&Scheduler::OnRunComplete,
-                               base::Unretained(self), job_id, original_target,
-                               status, conv_id));
-          },
-          runner, base::Unretained(this), job_id, original_target));
+  auto on_done = base::BindOnce(
+      [](scoped_refptr<base::SequencedTaskRunner> runner, Scheduler* self,
+         std::string job_id, std::string original_target,
+         const std::string& status, const std::string& conv_id) {
+        if (!runner)
+          return;
+        runner->PostTask(
+            FROM_HERE,
+            base::BindOnce(&Scheduler::OnRunComplete, base::Unretained(self),
+                           job_id, original_target, status, conv_id));
+      },
+      runner, base::Unretained(this), job_id, original_target);
+
+  // An app-build job (non-empty cwd) runs the blocking app-build dispatch; a
+  // plain chat/browse job runs the chat dispatch. A browse task needs no special
+  // route — it is just a chat job whose model is browser-capable, which opens
+  // background tabs through the normal POST /tabs path on its own.
+  if (!job->cwd.empty()) {
+    DispatchScheduledAppBuild(job->message, job->model, job->cwd,
+                              job->target_conv_id, std::move(on_done));
+  } else {
+    DispatchScheduledRun(job->message, job->model, job->target_conv_id,
+                         std::move(on_done));
+  }
 }
 
 void Scheduler::OnRunComplete(const std::string& job_id,
@@ -287,6 +296,8 @@ base::DictValue Scheduler::JobToDict(const Job& job) {
   run.Set("message", job.message);
   run.Set("model", job.model);
   run.Set("target_conv_id", job.target_conv_id);
+  run.Set("cwd", job.cwd);
+  run.Set("app_id", job.app_id);
   d.Set("run", std::move(run));
 
   d.Set("max_concurrent_tabs", job.max_concurrent_tabs);
@@ -342,6 +353,10 @@ Scheduler::Job Scheduler::JobFromDict(const base::DictValue& d) {
       job.model = *model;
     if (const std::string* conv = run->FindString("target_conv_id"))
       job.target_conv_id = *conv;
+    if (const std::string* cwd = run->FindString("cwd"))
+      job.cwd = *cwd;
+    if (const std::string* app_id = run->FindString("app_id"))
+      job.app_id = *app_id;
   }
 
   if (std::optional<int> mct = d.FindInt("max_concurrent_tabs"))

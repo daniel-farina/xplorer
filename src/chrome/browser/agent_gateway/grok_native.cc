@@ -2071,6 +2071,42 @@ base::DictValue RunGrokChat(const std::string& message,
   return fallback;
 }
 
+// Blocking analogue of the streaming RunGrokAgentStream: runs an app-build with
+// --cwd <cwd> + kAppBuildRules and captures the final reply (no live HTTP
+// stream). Mirrors RunGrokChat's GetAppOutputWithExitCode + JSON-parse shape so
+// the scheduler can persist the assistant reply the same way. Blocks; call from
+// a base::ThreadPool {MayBlock} task.
+base::DictValue RunGrokAppBuild(const std::string& message,
+                                const std::string& session_id,
+                                const std::string& model,
+                                const base::FilePath& cwd) {
+  base::CommandLine cmd = BuildGrokAgentCommand(
+      message, session_id, model, /*streaming=*/false, cwd, kAppBuildRules);
+#if BUILDFLAG(IS_WIN)
+  cmd = MaybeWrapForWindowsShell(cmd);
+#endif
+  int exit_code = 0;
+  std::string output;
+  if (!base::GetAppOutputWithExitCode(cmd, &output, &exit_code) ||
+      exit_code != 0) {
+    base::DictValue err;
+    std::string err_text = output.empty() ? "grok build failed" : output;
+    if (err_text.find("auth") != std::string::npos ||
+        err_text.find("login") != std::string::npos) {
+      err_text += " — run: grok login --oauth";
+    }
+    err.Set("error", err_text);
+    return err;
+  }
+  if (auto parsed = base::JSONReader::ReadDict(output, base::JSON_PARSE_RFC))
+    return std::move(*parsed);
+  base::DictValue fallback;
+  fallback.Set("text", output);
+  if (!session_id.empty())
+    fallback.Set("sessionId", session_id);
+  return fallback;
+}
+
 // Headless dispatch for the scheduler. Mirrors the non-streaming RunAsync path
 // of POST /api/conversations/{id}/message (busy guard -> append user msg ->
 // register run -> blocking RunGrokChat -> persist reply), but with no live HTTP
@@ -2170,8 +2206,14 @@ void DispatchScheduledRun(
                 // blocking RunGrokChat does not expose a PID (it uses
                 // GetAppOutputWithExitCode), so register a null pid — /stop will
                 // report "not running" for it, but the 409 guard still holds.
+                // Default an unset model the same way the message handler does
+                // (empty -> the configured search model) so a job that omits a
+                // model still runs instead of failing with "unknown model id".
+                std::string resolved_model =
+                    ResolveModel(model.empty() ? nullptr : &model);
                 RegisterActiveRun(conv_id, base::kNullProcessId);
-                base::DictValue result = RunGrokChat(message, session_id, model);
+                base::DictValue result =
+                    RunGrokChat(message, session_id, resolved_model);
                 UnregisterActiveRun(conv_id);
 
                 if (const std::string* err = result.FindString("error")) {
@@ -2191,6 +2233,134 @@ void DispatchScheduledRun(
                 finish("ok", conv_id);
               },
               message, model, target_conv_id, std::move(on_done)));
+}
+
+// Headless app-build dispatch for the scheduler. Mirrors DispatchScheduledRun
+// (auto-create/locate conversation -> busy guard -> append user msg -> register
+// run -> blocking run -> persist reply), but invokes the BLOCKING app-build run
+// RunGrokAppBuild(message, session_id, model, cwd) instead of RunGrokChat. The
+// model defaults via ResolveAppBuildModel (matching POST /apps/{id}/build/stream)
+// so an unset model still builds. Fired by Scheduler::FireJob when job.cwd is set.
+void DispatchScheduledAppBuild(
+    const std::string& message,
+    const std::string& model,
+    const std::string& cwd,
+    const std::string& target_conv_id,
+    base::OnceCallback<void(const std::string& status,
+                            const std::string& conv_id)> on_done) {
+  base::ThreadPool::CreateSequencedTaskRunner(
+      {base::MayBlock(), base::TaskPriority::USER_VISIBLE})
+      ->PostTask(
+          FROM_HERE,
+          base::BindOnce(
+              [](std::string message, std::string model, std::string cwd,
+                 std::string conv_id,
+                 base::OnceCallback<void(const std::string&,
+                                         const std::string&)>
+                     on_done) {
+                auto finish = [&](const std::string& status,
+                                  const std::string& cid) {
+                  if (on_done)
+                    std::move(on_done).Run(status, cid);
+                };
+
+                base::DictValue data = LoadSessions();
+                base::ListValue* convs = data.FindList("conversations");
+                if (!convs) {
+                  data.Set("conversations", base::ListValue());
+                  convs = data.FindList("conversations");
+                }
+
+                // Locate the target conversation; auto-create one if the job
+                // has no target_conv_id (mirrors POST /api/conversations).
+                base::DictValue* conv = nullptr;
+                if (!conv_id.empty()) {
+                  for (auto& v : *convs) {
+                    if (!v.is_dict())
+                      continue;
+                    const std::string* cid = v.GetDict().FindString("id");
+                    if (cid && *cid == conv_id) {
+                      conv = &v.GetDict();
+                      break;
+                    }
+                  }
+                }
+                if (!conv) {
+                  base::DictValue fresh;
+                  conv_id = base::HexEncode(base::RandBytesAsVector(8));
+                  fresh.Set("id", conv_id);
+                  fresh.Set("title",
+                            message.substr(0, std::min<size_t>(48,
+                                                               message.size())));
+                  fresh.Set("session_id", base::Value());
+                  fresh.Set("messages", base::ListValue());
+                  convs->Append(std::move(fresh));
+                  conv = &convs->back().GetDict();
+                }
+
+                // Busy guard: if a run for this conversation is already active,
+                // skip this fire (same 409 semantics as the message handler).
+                {
+                  base::AutoLock l(ActiveRunsLock());
+                  if (ActiveRuns().count(conv_id)) {
+                    finish("skipped", conv_id);
+                    return;
+                  }
+                }
+
+                // Append the job's user message + persist before running, so the
+                // conversation reflects the fire even if grok later fails.
+                base::ListValue* msgs = conv->FindList("messages");
+                if (!msgs) {
+                  conv->Set("messages", base::ListValue());
+                  msgs = conv->FindList("messages");
+                }
+                base::DictValue user_msg;
+                user_msg.Set("role", "user");
+                user_msg.Set("content", message);
+                msgs->Append(std::move(user_msg));
+                if (const std::string* title = conv->FindString("title");
+                    title && *title == "New chat") {
+                  conv->Set("title",
+                            message.substr(0, std::min<size_t>(48,
+                                                               message.size())));
+                }
+                std::string session_id;
+                if (const std::string* sid = conv->FindString("session_id"))
+                  session_id = *sid;
+                SaveSessions(data);
+
+                // Register the run so /stop can cancel it and the busy guard
+                // rejects overlapping fires. The blocking run uses
+                // GetAppOutputWithExitCode (no PID), so register a null pid.
+                // Default an unset model via ResolveAppBuildModel — the same
+                // default POST /apps/{id}/build/stream uses — so a build job
+                // that omits a model still runs.
+                std::string resolved_model =
+                    ResolveAppBuildModel(model.empty() ? nullptr : &model);
+                RegisterActiveRun(conv_id, base::kNullProcessId);
+                base::DictValue result = RunGrokAppBuild(
+                    message, session_id, resolved_model,
+                    base::FilePath::FromUTF8Unsafe(cwd));
+                UnregisterActiveRun(conv_id);
+
+                if (const std::string* err = result.FindString("error")) {
+                  // Record the failure as an assistant message so the user sees
+                  // why the scheduled build did not produce a result.
+                  SaveChatAssistantReply(
+                      conv_id, std::string("Scheduled build failed: ") + *err,
+                      session_id);
+                  finish("failed", conv_id);
+                  return;
+                }
+
+                const std::string* new_sid = result.FindString("sessionId");
+                const std::string* text = result.FindString("text");
+                SaveChatAssistantReply(conv_id, text ? *text : std::string(),
+                                       new_sid ? *new_sid : std::string());
+                finish("ok", conv_id);
+              },
+              message, model, cwd, target_conv_id, std::move(on_done)));
 }
 
 bool ExtractSearchImage(const base::DictValue* body, SearchImageInput* out) {

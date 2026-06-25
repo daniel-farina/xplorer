@@ -60,6 +60,18 @@ class Scheduler {
     std::string model;
     std::string target_conv_id;   // where replies are appended; auto-created if empty
 
+    // App-build runs. A non-empty |cwd| switches the fire from a plain chat run
+    // (DispatchScheduledRun) to a headless app-build run (DispatchScheduledAppBuild),
+    // which invokes grok with --cwd <cwd> + the app-build rules — the same
+    // command POST /apps/{id}/build/stream runs, but blocking and headless.
+    // |app_id| is informational (which app this job builds); the run keys off cwd.
+    std::string cwd;              // empty == plain chat run; non-empty == app-build
+    std::string app_id;           // informational; the app this build targets
+
+    // A "browse" task needs no separate code path: it is simply a chat Job whose
+    // |model| is browser-capable. A scheduled chat run with such a model spawns
+    // background tabs through the normal POST /tabs path automatically; this knob
+    // caps how many open at once.
     int max_concurrent_tabs = 5;
   };
 

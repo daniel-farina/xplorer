@@ -26,25 +26,24 @@ namespace agent_gateway {
 
 namespace {
 
-void PrepareTabForCapture(content::WebContents* wc) {
+// Whether |wc| is the active tab of a visible window. Agent captures must NOT
+// foreground a tab (that would steal focus from the user — the last focus-steal
+// hole), so instead of activating/raising the tab we only probe its current
+// state: a visible/active tab can be grabbed straight off its native view; a
+// hidden/background tab goes through the compositor path, which keeps its
+// renderer producing frames via IncrementCapturerCount without raising the
+// window. This is read-only and changes nothing about tab/window state.
+bool IsTabCurrentlyVisible(content::WebContents* wc) {
   if (!wc)
-    return;
-  wc->WasShown();
-  wc->Focus();
+    return false;
   for (BrowserWindowInterface* browser : GetAllBrowserWindowInterfaces()) {
     TabStripModel* model = browser->GetTabStripModel();
-    for (int i = 0; i < model->count(); ++i) {
-      if (model->GetWebContentsAt(i) != wc)
-        continue;
-      model->ActivateTabAt(i);
-      if (ui::BaseWindow* window = browser->GetWindow()) {
-        if (!window->IsVisible())
-          window->Show();
-        window->Activate();
-      }
-      return;
-    }
+    if (model->GetActiveWebContents() != wc)
+      continue;
+    ui::BaseWindow* window = browser->GetWindow();
+    return window && window->IsVisible();
   }
+  return false;
 }
 
 void ReplyPng(base::OnceCallback<void(base::DictValue)> cb,
@@ -124,7 +123,16 @@ void CaptureTabScreenshot(
     return;
   }
 
-  PrepareTabForCapture(web_contents);
+  // Never activate the tab or raise/Show the window: that would steal focus
+  // from whatever the user is doing. Only a tab that is ALREADY the active tab
+  // of a visible window can be grabbed off its native view (an occluded view
+  // has no up-to-date snapshot). Any hidden/background tab — the common case
+  // for agent-opened background tabs — goes straight to the compositor path,
+  // which holds a capturer count so the renderer produces frames while hidden.
+  if (!IsTabCurrentlyVisible(web_contents)) {
+    CaptureViaCompositor(web_contents, std::move(callback));
+    return;
+  }
 
   gfx::Rect region(web_contents->GetSize());
   if (region.IsEmpty()) {
