@@ -368,10 +368,27 @@ function renderToolbarEditor(pills) {
   refreshCatalogOptions();
 }
 
-/** Collect the ordered array from the editor DOM. */
+function applyToolbarAppearanceFields(toolbar = {}) {
+  const placementEl = document.getElementById('toolbar-placement');
+  const visibleEl = document.getElementById('toolbar-visible');
+  if (placementEl) {
+    placementEl.value = toolbar.placement === 'top' ? 'top' : 'sidebar';
+  }
+  if (visibleEl) {
+    visibleEl.checked = toolbar.visible !== false;
+  }
+}
+
+/** Collect pills plus placement/visible from the toolbar pane. */
 function collectToolbarConfig() {
   const pills = [];
-  if (!toolbarEditor) return { pills };
+  if (!toolbarEditor) {
+    return {
+      pills,
+      placement: document.getElementById('toolbar-placement')?.value || 'sidebar',
+      visible: document.getElementById('toolbar-visible')?.checked !== false,
+    };
+  }
   toolbarEditor.querySelectorAll('.tb-pill').forEach((card) => {
     const id = card.dataset.pill;
     const label = card.querySelector('.tb-label')?.value.trim() || '';
@@ -389,7 +406,9 @@ function collectToolbarConfig() {
     if (children.length) entry.children = children;
     pills.push(entry);
   });
-  return { pills };
+  const placement = document.getElementById('toolbar-placement')?.value || 'sidebar';
+  const visible = document.getElementById('toolbar-visible')?.checked !== false;
+  return { pills, placement, visible };
 }
 
 /** Current set of pill ids present in the editor (to dedupe catalog adds). */
@@ -419,8 +438,11 @@ function refreshCatalogOptions() {
 
 async function loadToolbarEditor() {
   let pills;
+  let toolbarMeta = {};
   try {
     const settings = await fetchSettings();
+    toolbarMeta = settings.toolbar || {};
+    applyToolbarAppearanceFields(toolbarMeta);
     const stored = settings.toolbar && settings.toolbar.pills;
     if (Array.isArray(stored) && stored.length) {
       pills = stored.map((p) => ({
@@ -484,7 +506,7 @@ document.getElementById('toolbar-save')?.addEventListener('click', async () => {
   setToolbarStatus('Saving…');
   try {
     await saveSettings({ toolbar: collectToolbarConfig() });
-    setToolbarStatus('Saved — reload other tabs to see changes', 'ok');
+    setToolbarStatus('Saved — changes apply immediately in Xplorer', 'ok');
     setTimeout(() => setToolbarStatus(''), 3000);
   } catch (e) {
     setToolbarStatus(e.message, 'err');
@@ -495,7 +517,8 @@ document.getElementById('toolbar-reset')?.addEventListener('click', async () => 
   setToolbarStatus('Resetting…');
   try {
     // Empty array → static toolbar.html default on every surface.
-    await saveSettings({ toolbar: { pills: [] } });
+    const toolbar = collectToolbarConfig();
+    await saveSettings({ toolbar: { pills: [], placement: toolbar.placement, visible: toolbar.visible } });
     renderToolbarEditor(cloneDefaultPills());
     setToolbarStatus('Reset to default', 'ok');
     setTimeout(() => setToolbarStatus(''), 3000);

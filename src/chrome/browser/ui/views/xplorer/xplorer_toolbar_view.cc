@@ -89,7 +89,7 @@ constexpr int kButtonSpacing = 6;
 // Menu command-id ranges. Disjoint so the right-click context menu and the
 // child dropdown (separate SimpleMenuModels) never collide.
 constexpr int kCmdCustomize = 1;
-constexpr int kCmdHideToolbar = 2;
+constexpr int kCmdShowToolbar = 2;
 constexpr int kCmdMoveToSidebar = 3;
 constexpr int kCmdMoveToTop = 4;
 constexpr int kCmdEditPillBase = 1000;    // + pill index
@@ -147,7 +147,7 @@ XplorerToolbarView::XplorerToolbarView(BrowserWindowInterface* browser,
   // base::Unretained is safe.
   toolbar_config_subscription_ =
       grok_companion::AddToolbarConfigChangedCallback(base::BindRepeating(
-          &XplorerToolbarView::Reload, base::Unretained(this)));
+          &XplorerToolbarView::OnToolbarConfigChanged, base::Unretained(this)));
 
   // Track the foreground tab so the home-pill highlight follows the current
   // page rather than the persisted search-home mode. Re-observe on every tab
@@ -165,6 +165,11 @@ XplorerToolbarView::~XplorerToolbarView() = default;
 void XplorerToolbarView::Reload() {
   LoadPills();
   RebuildButtons();
+}
+
+void XplorerToolbarView::OnToolbarConfigChanged() {
+  Reload();
+  ApplyToolbarPlacementForBrowser(browser_);
 }
 
 void XplorerToolbarView::OnActiveTabChanged(BrowserWindowInterface* browser) {
@@ -565,20 +570,16 @@ void XplorerToolbarView::ExecuteCommand(int command_id, int event_flags) {
     OpenCustomizePage();
     return;
   }
-  if (command_id == kCmdHideToolbar) {
-    // Immediate hide for this window; persistence across restart is a follow-up
-    // (a toolbar.hidden flag read by the layout gate).
-    SetVisible(false);
+  if (command_id == kCmdShowToolbar) {
+    SetToolbarVisible(!GetToolbarVisible());
     return;
   }
   if (command_id == kCmdMoveToSidebar) {
     SetToolbarPlacement(ToolbarPlacement::kSidebar);
-    ApplyToolbarPlacementForBrowser(browser_);
     return;
   }
   if (command_id == kCmdMoveToTop) {
     SetToolbarPlacement(ToolbarPlacement::kTop);
-    ApplyToolbarPlacementForBrowser(browser_);
     return;
   }
   // Child dropdown items (range [3000, ...)).
@@ -608,6 +609,9 @@ void XplorerToolbarView::ExecuteCommand(int command_id, int event_flags) {
 
 bool XplorerToolbarView::IsCommandIdChecked(int command_id) const {
   const ToolbarPlacement placement = GetToolbarPlacement();
+  if (command_id == kCmdShowToolbar) {
+    return GetToolbarVisible();
+  }
   if (command_id == kCmdMoveToSidebar) {
     return placement == ToolbarPlacement::kSidebar;
   }
@@ -811,8 +815,8 @@ void XplorerToolbarView::ShowContextMenuForViewImpl(
   context_menu_model_ = std::make_unique<ui::SimpleMenuModel>(this);
   context_menu_model_->AddItem(
       kCmdCustomize, base::UTF8ToUTF16(std::string("Customize toolbar...")));
-  context_menu_model_->AddItem(
-      kCmdHideToolbar, base::UTF8ToUTF16(std::string("Hide toolbar")));
+  context_menu_model_->AddCheckItem(
+      kCmdShowToolbar, base::UTF8ToUTF16(std::string("Show toolbar")));
   context_menu_model_->AddSeparator(ui::NORMAL_SEPARATOR);
   context_menu_model_->AddCheckItem(
       kCmdMoveToSidebar,

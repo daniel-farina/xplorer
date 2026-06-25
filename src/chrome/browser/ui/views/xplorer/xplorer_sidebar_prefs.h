@@ -18,6 +18,12 @@ ToolbarPlacement GetToolbarPlacement();
 // Persists toolbar.placement ("top" | "sidebar") to grok_settings.json.
 void SetToolbarPlacement(ToolbarPlacement placement);
 
+// Reads toolbar.visible from grok_settings.json (defaults to true).
+bool GetToolbarVisible();
+
+// Persists toolbar.visible to grok_settings.json.
+void SetToolbarVisible(bool visible);
+
 }  // namespace xplorer
 
 #endif  // CHROME_BROWSER_UI_VIEWS_XPLORER_XPLORER_SIDEBAR_PREFS_H_

@@ -140,6 +140,7 @@ def patch_native_toolbar(src: Path):
         layout_impl,
         '#include "chrome/browser/ui/views/bookmarks/bookmark_bar_view.h"',
         '#include "chrome/browser/ui/views/bookmarks/bookmark_bar_view.h"\n'
+        '#include "chrome/browser/ui/views/xplorer/xplorer_sidebar_prefs.h"  // XPLORER\n'
         '#include "chrome/browser/ui/views/xplorer/xplorer_toolbar_view.h"'
         "  // XPLORER",
     )
@@ -149,10 +150,14 @@ def patch_native_toolbar(src: Path):
         "  if (IsParentedTo(views().top_container_separator, "
         "views().top_container)) {",
         "  // XPLORER: native Xplorer pill toolbar, below bookmarks, above the\n"
-        "  // contents separator. Scaffold: always visible.\n"
+        "  // contents separator. Only laid out in top_container when visible\n"
+        "  // and placement is top.\n"
         "  if (views().xplorer_toolbar &&\n"
         "      IsParentedTo(views().xplorer_toolbar, views().top_container)) {\n"
-        "    const bool xplorer_visible = true;\n"
+        "    const bool xplorer_visible =\n"
+        "        xplorer::GetToolbarVisible() &&\n"
+        "        xplorer::GetToolbarPlacement() == xplorer::ToolbarPlacement::kTop &&\n"
+        "        views().xplorer_toolbar->GetVisible();\n"
         "    const gfx::Rect xplorer_bounds(\n"
         "        params.visual_client_area.x(), params.visual_client_area.y(),\n"
         "        params.visual_client_area.width(),\n"

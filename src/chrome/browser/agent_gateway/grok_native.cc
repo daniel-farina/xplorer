@@ -431,6 +431,17 @@ void SaveSettings(const base::DictValue& settings) {
     base::WriteFile(path, json);
 }
 
+// Merge incoming toolbar keys into the stored dict so pill saves do not wipe
+// placement/visible (and vice versa).
+void MergeToolbarSettings(const base::DictValue& incoming) {
+  base::DictValue settings = LoadSettings();
+  base::DictValue* toolbar = settings.EnsureDict("toolbar");
+  for (const auto [key, value] : incoming) {
+    toolbar->Set(key, value.Clone());
+  }
+  SaveSettings(settings);
+}
+
 std::string GetConfiguredModel() {
   base::DictValue settings = LoadSettings();
   if (const std::string* model = settings.FindString("model");
@@ -2500,9 +2511,7 @@ bool GrokNative::TryHandleRequest(
       updated = true;
     }
     if (toolbar) {
-      base::DictValue settings = LoadSettings();
-      settings.Set("toolbar", toolbar->Clone());
-      SaveSettings(settings);
+      MergeToolbarSettings(*toolbar);
       // Live-reload the native toolbar (views live on the UI thread).
       content::GetUIThreadTaskRunner({})->PostTask(
           FROM_HERE,
@@ -2593,15 +2602,15 @@ bool GrokNative::TryHandleRequest(
       SendJson(server, connection_id, net::HTTP_BAD_REQUEST, std::move(err));
       return true;
     }
-    base::DictValue settings = LoadSettings();
-    settings.Set("toolbar", tb->Clone());
-    SaveSettings(settings);
+    MergeToolbarSettings(*tb);
     content::GetUIThreadTaskRunner({})->PostTask(
         FROM_HERE,
         base::BindOnce(&grok_companion::NotifyToolbarConfigChanged));
     base::DictValue out;
     out.Set("ok", true);
-    out.Set("toolbar", tb->Clone());
+    const base::DictValue settings = LoadSettings();
+    const base::DictValue* stored = settings.FindDict("toolbar");
+    out.Set("toolbar", stored ? stored->Clone() : tb->Clone());
     SendJson(server, connection_id, net::HTTP_OK, std::move(out));
     return true;
   }

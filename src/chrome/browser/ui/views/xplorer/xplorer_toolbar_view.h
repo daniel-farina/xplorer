@@ -147,6 +147,7 @@ class XplorerToolbarView : public views::AccessiblePaneView,
   // Builds the pill buttons (+ chevrons) for |pills_|, attaches icons, and
   // marks the active home pill as selected.
   void RebuildButtons();
+  void OnToolbarConfigChanged();
   void ApplyVerticalButtonChrome();
   void LoadSidebarPillFavicons();
   void OnPillFaviconLoaded(size_t pill_index,

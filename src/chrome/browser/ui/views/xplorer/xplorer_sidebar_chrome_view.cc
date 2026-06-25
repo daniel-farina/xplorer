@@ -52,7 +52,7 @@ XplorerSidebarChromeView::XplorerSidebarChromeView(
       std::make_unique<XplorerSidebarSectionLabel>(u"Tabs"));
   tabs_label->SetProperty(views::kMarginsKey, kSectionLabelMargins);
 
-  UpdateForToolbarPlacement(GetToolbarPlacement());
+  UpdateChromeState();
 }
 
 XplorerSidebarChromeView::~XplorerSidebarChromeView() = default;
@@ -93,14 +93,12 @@ void XplorerSidebarChromeView::AttachToolbar(XplorerToolbarView* toolbar) {
       views::FlexSpecification(views::MinimumFlexSizeRule::kPreferred,
                                views::MaximumFlexSizeRule::kPreferred)
           .WithWeight(0));
-  toolbar_host_->SetVisible(true);
-  toolbar->SetVisible(true);
-  UpdateForToolbarPlacement(ToolbarPlacement::kSidebar);
+  UpdateChromeState();
 }
 
-void XplorerSidebarChromeView::UpdateForToolbarPlacement(
-    ToolbarPlacement placement) {
-  const bool show_bookmarks_block = placement == ToolbarPlacement::kSidebar;
+void XplorerSidebarChromeView::UpdateChromeState() {
+  const bool show_bookmarks_block =
+      GetToolbarPlacement() == ToolbarPlacement::kSidebar && GetToolbarVisible();
   if (bookmarks_) {
     bookmarks_->SetVisible(show_bookmarks_block);
   }
