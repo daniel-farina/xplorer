@@ -33,6 +33,143 @@ int64_t ToEpochUs(base::Time t) {
   return t.ToDeltaSinceWindowsEpoch().InMicroseconds();
 }
 
+// --- Standard 5-field cron evaluation (minute hour day-of-month month
+// day-of-week), self-contained, no new deps. Used by ComputeNextFire when a job
+// carries a cron string instead of an interval/once trigger. ---
+//
+// A single cron field is a comma list of terms; each term is one of:
+//   *            any value in [lo, hi]
+//   N            a single number
+//   */S          every S-th value across the whole [lo, hi] range
+//   A-B          inclusive range
+//   A-B/S        inclusive range, stepped by S
+// CronFieldMatches returns true if |value| satisfies the field; on any malformed
+// term it returns false (the caller treats a non-matching/malformed expression
+// as "never").
+
+// Matches one comma-separated term against |value| within [lo, hi]. Returns
+// false on a malformed term so a bad expression never matches (=> "never").
+bool CronTermMatches(const std::string& term, int value, int lo, int hi) {
+  if (term.empty())
+    return false;
+
+  // Split an optional "/step" suffix.
+  std::string base_part = term;
+  int step = 1;
+  if (size_t slash = term.find('/'); slash != std::string::npos) {
+    base_part = term.substr(0, slash);
+    const std::string step_str = term.substr(slash + 1);
+    if (step_str.empty() || !base::StringToInt(step_str, &step) || step <= 0)
+      return false;
+  }
+
+  int range_lo = lo;
+  int range_hi = hi;
+  if (base_part == "*") {
+    // Whole range (optionally stepped via the "/step" handled above).
+  } else if (size_t dash = base_part.find('-');
+             dash != std::string::npos) {
+    // A-B inclusive range.
+    const std::string lo_str = base_part.substr(0, dash);
+    const std::string hi_str = base_part.substr(dash + 1);
+    if (!base::StringToInt(lo_str, &range_lo) ||
+        !base::StringToInt(hi_str, &range_hi))
+      return false;
+  } else {
+    // Single number. With a "/step" suffix (e.g. "5/10") cron treats it as a
+    // range from the number to the field maximum; without a step it is exact.
+    int single = 0;
+    if (!base::StringToInt(base_part, &single))
+      return false;
+    range_lo = single;
+    range_hi = (step > 1) ? hi : single;
+  }
+
+  // Validate the resolved range against the field bounds.
+  if (range_lo < lo || range_hi > hi || range_lo > range_hi)
+    return false;
+  if (value < range_lo || value > range_hi)
+    return false;
+  // Honor the step relative to the range start.
+  return ((value - range_lo) % step) == 0;
+}
+
+// Returns true if |value| matches the cron |field| (a comma list of terms)
+// within [lo, hi]. A malformed term causes the whole field to fail to match.
+bool CronFieldMatches(const std::string& field, int value, int lo, int hi) {
+  if (field.empty())
+    return false;
+  size_t start = 0;
+  while (start <= field.size()) {
+    size_t comma = field.find(',', start);
+    const std::string term = (comma == std::string::npos)
+                                 ? field.substr(start)
+                                 : field.substr(start, comma - start);
+    if (CronTermMatches(term, value, lo, hi))
+      return true;
+    if (comma == std::string::npos)
+      break;
+    start = comma + 1;
+  }
+  return false;
+}
+
+// Returns true if the 5-field cron |expr| matches the exploded local time |e|.
+// |e.day_of_week| is 0=Sunday..6=Saturday, which is exactly cron's dow
+// convention. Standard semantics for the day fields: minute AND hour AND month
+// must all match, combined with the day match. The day match is:
+//   - if BOTH day-of-month and day-of-week are restricted (neither is "*"),
+//     the day matches when EITHER one matches (the cron "OR when both
+//     restricted" rule);
+//   - otherwise (one or both are "*"), the day fields are ANDed normally.
+// On a malformed expression (wrong field count, etc.) returns false so the
+// caller leaves the job unscheduled ("never").
+bool CronMatches(const std::string& expr, const base::Time::Exploded& e) {
+  // Split on whitespace into exactly five fields.
+  std::vector<std::string> fields;
+  size_t i = 0;
+  while (i < expr.size()) {
+    while (i < expr.size() && (expr[i] == ' ' || expr[i] == '\t'))
+      ++i;
+    size_t begin = i;
+    while (i < expr.size() && expr[i] != ' ' && expr[i] != '\t')
+      ++i;
+    if (i > begin)
+      fields.push_back(expr.substr(begin, i - begin));
+  }
+  if (fields.size() != 5)
+    return false;
+
+  const std::string& f_min = fields[0];
+  const std::string& f_hour = fields[1];
+  const std::string& f_dom = fields[2];
+  const std::string& f_mon = fields[3];
+  const std::string& f_dow = fields[4];
+
+  if (!CronFieldMatches(f_min, e.minute, 0, 59))
+    return false;
+  if (!CronFieldMatches(f_hour, e.hour, 0, 23))
+    return false;
+  if (!CronFieldMatches(f_mon, e.month, 1, 12))
+    return false;
+
+  const bool dom_restricted = (f_dom != "*");
+  const bool dow_restricted = (f_dow != "*");
+  const bool dom_ok = CronFieldMatches(f_dom, e.day_of_month, 1, 31);
+  const bool dow_ok = CronFieldMatches(f_dow, e.day_of_week, 0, 6);
+
+  bool day_ok;
+  if (dom_restricted && dow_restricted) {
+    // Both restricted: OR them (standard Vixie-cron behavior).
+    day_ok = dom_ok || dow_ok;
+  } else {
+    // One (or both) is "*": AND. A "*" field always matches its own [lo, hi],
+    // so this reduces to "the restricted field, if any, must match".
+    day_ok = dom_ok && dow_ok;
+  }
+  return day_ok;
+}
+
 }  // namespace
 
 // static
@@ -119,8 +256,12 @@ void Scheduler::FireJob(Job* job) {
     DispatchScheduledAppBuild(job->message, job->model, job->cwd,
                               job->target_conv_id, std::move(on_done));
   } else {
+    // Pass the job's soft tab cap; DispatchScheduledRun appends a one-line
+    // "open at most N tabs" instruction to the message when it is > 0. This is
+    // an LLM-respected hint only, not a hard limit, because the grok agent does
+    // not attribute the tabs it opens to a particular task.
     DispatchScheduledRun(job->message, job->model, job->target_conv_id,
-                         std::move(on_done));
+                         job->max_concurrent_tabs, std::move(on_done));
   }
 }
 
@@ -152,7 +293,44 @@ void Scheduler::ComputeNextFire(Job* job, base::Time now) {
     job->next_fire_us = job->once_at_us;
     return;
   }
-  // Cron is not evaluated in Phase 2; leave unscheduled.
+  if (!job->cron.empty()) {
+    // Cron trigger: find the next LOCAL minute strictly after |now| whose
+    // exploded time matches the expression. We iterate minute-by-minute (cron's
+    // resolution is one minute) starting at |now| rounded UP to the next whole
+    // minute, so a candidate is always strictly in the future. The search is
+    // bounded to ~1 year; if nothing matches in that window (e.g. an
+    // unsatisfiable or malformed expression — CronMatches returns false for the
+    // latter) we leave the job unscheduled ("never").
+    base::Time::Exploded e;
+    now.LocalExplode(&e);
+    // Round up to the next whole minute: zero seconds/millis and advance one
+    // minute so we never re-fire the current (already-past) minute.
+    e.second = 0;
+    e.millisecond = 0;
+    base::Time candidate;
+    if (!base::Time::FromLocalExploded(e, &candidate)) {
+      // The truncated-to-minute local time was invalid (e.g. a DST spring-
+      // forward gap). Fall back to |now| itself as the search anchor; the
+      // minute-stepping below will walk past the gap.
+      candidate = now;
+    }
+    candidate += base::Minutes(1);
+
+    constexpr int kMaxMinutes = 366 * 24 * 60;  // ~1 year search cap.
+    job->next_fire_us = 0;  // Default to "never" unless a match is found.
+    for (int step = 0; step < kMaxMinutes; ++step) {
+      base::Time::Exploded ce;
+      candidate.LocalExplode(&ce);
+      if (CronMatches(job->cron, ce)) {
+        job->next_fire_us = ToEpochUs(candidate);
+        return;
+      }
+      candidate += base::Minutes(1);
+    }
+    // No match within the cap: leave next_fire_us = 0 (never).
+    return;
+  }
+  // No usable trigger: leave unscheduled.
   job->next_fire_us = 0;
 }
 

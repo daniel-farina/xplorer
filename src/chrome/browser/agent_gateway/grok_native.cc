@@ -2117,6 +2117,7 @@ void DispatchScheduledRun(
     const std::string& message,
     const std::string& model,
     const std::string& target_conv_id,
+    int max_concurrent_tabs,
     base::OnceCallback<void(const std::string& status,
                             const std::string& conv_id)> on_done) {
   base::ThreadPool::CreateSequencedTaskRunner(
@@ -2125,7 +2126,7 @@ void DispatchScheduledRun(
           FROM_HERE,
           base::BindOnce(
               [](std::string message, std::string model,
-                 std::string conv_id,
+                 std::string conv_id, int max_concurrent_tabs,
                  base::OnceCallback<void(const std::string&,
                                          const std::string&)>
                      on_done) {
@@ -2134,6 +2135,21 @@ void DispatchScheduledRun(
                   if (on_done)
                     std::move(on_done).Run(status, cid);
                 };
+
+                // SOFT cap on browser tabs: append a one-line instruction so the
+                // agent opens at most |max_concurrent_tabs| tabs for this task.
+                // This is NOT hard-enforced — the grok agent does not attribute
+                // the tabs it opens to a particular task, so the gateway cannot
+                // count or cap them per run. The cap is only respected to the
+                // extent the LLM honors the instruction. Applied to both the
+                // persisted user message and the text actually run, so the
+                // saved conversation reflects exactly what was sent.
+                if (max_concurrent_tabs > 0) {
+                  message +=
+                      " (For this task, open at most " +
+                      base::NumberToString(max_concurrent_tabs) +
+                      " browser tabs.)";
+                }
 
                 base::DictValue data = LoadSessions();
                 base::ListValue* convs = data.FindList("conversations");
@@ -2232,7 +2248,8 @@ void DispatchScheduledRun(
                                        new_sid ? *new_sid : std::string());
                 finish("ok", conv_id);
               },
-              message, model, target_conv_id, std::move(on_done)));
+              message, model, target_conv_id, max_concurrent_tabs,
+              std::move(on_done)));
 }
 
 // Headless app-build dispatch for the scheduler. Mirrors DispatchScheduledRun

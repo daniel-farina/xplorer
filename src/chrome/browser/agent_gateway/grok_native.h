@@ -72,10 +72,18 @@ void RunGrokAgentStream(
 // with the final status string ("ok" | "failed" | "skipped") and the conv_id
 // the run was appended to (newly minted if |target_conv_id| was empty). The
 // scheduler uses it to stamp last_status / last_fire_us back onto the job.
+//
+// |max_concurrent_tabs|, when > 0, is a SOFT cap on how many browser tabs the
+// run should open: we append a one-line instruction to |message| asking the
+// agent to open at most that many tabs. This is NOT hard-enforced — the real
+// grok agent does not attribute the tabs it opens to a particular task, so the
+// gateway cannot count or cap them per run; the cap is only respected to the
+// extent the LLM honors the instruction. <= 0 leaves the message untouched.
 void DispatchScheduledRun(
     const std::string& message,
     const std::string& model,
     const std::string& target_conv_id,
+    int max_concurrent_tabs,
     base::OnceCallback<void(const std::string& status,
                             const std::string& conv_id)> on_done);
 
