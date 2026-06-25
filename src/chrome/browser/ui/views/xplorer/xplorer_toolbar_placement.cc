@@ -11,6 +11,7 @@
 #include "chrome/browser/ui/views/xplorer/xplorer_sidebar_prefs.h"
 #include "chrome/browser/ui/views/xplorer/xplorer_toolbar_view.h"
 #include "content/public/browser/browser_thread.h"
+#include "ui/views/view_class_properties.h"
 
 namespace xplorer {
 
@@ -34,7 +35,6 @@ void ApplyToolbarPlacement(BrowserView* browser_view,
       toolbar->SetVerticalLayout(true);
     }
   } else {
-    toolbar->SetVerticalLayout(false);
     views::View* top = browser_view->top_container();
     if (top && toolbar->parent() != top) {
       if (toolbar->parent()) {
@@ -42,6 +42,8 @@ void ApplyToolbarPlacement(BrowserView* browser_view,
       }
       top->AddChildView(toolbar);
     }
+    toolbar->ClearProperty(views::kFlexBehaviorKey);
+    toolbar->SetVerticalLayout(false);
   }
 
   toolbar->SetVisible(visible);

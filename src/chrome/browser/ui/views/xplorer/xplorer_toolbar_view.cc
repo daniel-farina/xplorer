@@ -172,7 +172,17 @@ void XplorerToolbarView::Reload() {
 
 void XplorerToolbarView::OnToolbarConfigChanged() {
   Reload();
-  ScheduleApplyToolbarPlacementForBrowser(browser_);
+  if (browser_) {
+    ApplyToolbarPlacementForBrowser(browser_);
+  }
+}
+
+void XplorerToolbarView::ApplyPendingToolbarStateRefresh() {
+  if (!pending_toolbar_state_refresh_ || !browser_) {
+    return;
+  }
+  pending_toolbar_state_refresh_ = false;
+  ApplyToolbarPlacementForBrowser(browser_);
 }
 
 void XplorerToolbarView::OnActiveTabChanged(BrowserWindowInterface* browser) {
@@ -399,13 +409,15 @@ void XplorerToolbarView::SetVerticalLayout(bool vertical) {
     return;
   }
   vertical_layout_ = vertical;
-  // Sidebar rail: transparent so the vertical tab strip background shows through.
-  if (vertical) {
-    SetBackground(nullptr);
-  } else {
-    SetBackground(views::CreateSolidBackground(kColorToolbar));
-  }
   ApplyVerticalButtonChrome();
+  // Sidebar rail: transparent so the vertical tab strip background shows through.
+  if (GetWidget()) {
+    if (vertical) {
+      SetBackground(nullptr);
+    } else {
+      SetBackground(views::CreateSolidBackground(kColorToolbar));
+    }
+  }
   InvalidateLayout();
   PreferredSizeChanged();
 }
@@ -575,17 +587,17 @@ void XplorerToolbarView::ExecuteCommand(int command_id, int event_flags) {
   }
   if (command_id == kCmdShowToolbar) {
     SetToolbarVisible(!GetToolbarVisible());
-    ScheduleApplyToolbarPlacementForBrowser(browser_);
+    pending_toolbar_state_refresh_ = true;
     return;
   }
   if (command_id == kCmdMoveToSidebar) {
     SetToolbarPlacement(ToolbarPlacement::kSidebar);
-    ScheduleApplyToolbarPlacementForBrowser(browser_);
+    pending_toolbar_state_refresh_ = true;
     return;
   }
   if (command_id == kCmdMoveToTop) {
     SetToolbarPlacement(ToolbarPlacement::kTop);
-    ScheduleApplyToolbarPlacementForBrowser(browser_);
+    pending_toolbar_state_refresh_ = true;
     return;
   }
   // Child dropdown items (range [3000, ...)).
@@ -862,6 +874,10 @@ void XplorerToolbarView::ShowContextMenuForViewImpl(
       widget, /*button_controller=*/nullptr,
       gfx::Rect(screen_point, gfx::Size()),
       views::MenuAnchorPosition::kTopLeft, source_type);
+  // Reparent/layout while the Cocoa context menu is still tearing down crashes
+  // (SIGSEGV in SetVerticalLayout/SetBackground). Apply only after RunMenuAt
+  // returns and the menu is fully closed.
+  ApplyPendingToolbarStateRefresh();
 }
 
 BEGIN_METADATA(XplorerToolbarView)
