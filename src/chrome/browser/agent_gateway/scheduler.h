@@ -142,6 +142,10 @@ class Scheduler {
   // sequence (gateway IO thread).
   void OnConversationRunStopped(const std::string& conv_id);
 
+  // Records a "running" history row once the headless dispatch knows conv_id.
+  // Safe to call from any thread — hops onto the scheduler sequence.
+  void NotifyRunStarted(const std::string& job_id, const std::string& conv_id);
+
  private:
   friend class base::NoDestructor<Scheduler>;
 
@@ -176,6 +180,8 @@ class Scheduler {
   // Records the result of a fired run back onto the job (last_status, and the
   // auto-created conv id for future fires) + persists. MUST run on the
   // scheduler's own task runner (the gateway IO thread), since it mutates jobs_.
+  void OnRunStarted(const std::string& job_id, const std::string& conv_id);
+
   void OnRunComplete(const std::string& job_id,
                      const std::string& original_target_conv_id,
                      const std::string& status,

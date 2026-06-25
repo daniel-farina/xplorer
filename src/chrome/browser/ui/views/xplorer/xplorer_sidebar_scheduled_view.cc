@@ -36,6 +36,8 @@ gfx::Insets SidebarRowMargins() {
 std::u16string StatusHint(const std::string& last_status) {
   if (last_status == "running")
     return u"running…";
+  if (last_status == "cancelled")
+    return u"cancelled";
   if (last_status == "failed")
     return u"failed";
   if (last_status == "deferred")
@@ -157,10 +159,67 @@ void XplorerSidebarScheduledView::OnJobPressed(const std::string& job_id) {
   if (!browser_ || job_id.empty()) {
     return;
   }
-  // Open the companion side panel on the /schedules detail view for this job.
-  // The served page reads ?id=<job_id> to focus that job; "← Back to chat"
-  // navigates the same panel back to "/".
-  grok_companion::OpenGrokSidePanelAt(browser_, "/schedules?id=" + job_id);
+  // Running jobs open their live conversation so the user can watch progress
+  // and hit Stop; idle jobs open the /schedules detail editor.
+  agent_gateway::Scheduler::Get()->GetJobsAsync(base::BindOnce(
+      [](base::WeakPtr<XplorerSidebarScheduledView> self,
+         BrowserWindowInterface* browser, std::string job_id,
+         base::DictValue snapshot) {
+        if (!self || !browser) {
+          return;
+        }
+        const base::ListValue* jobs = snapshot.FindList("jobs");
+        if (!jobs) {
+          grok_companion::OpenGrokSidePanelAt(browser,
+                                              "/schedules?id=" + job_id);
+          return;
+        }
+        for (const base::Value& entry : *jobs) {
+          if (!entry.is_dict())
+            continue;
+          const base::DictValue& job = entry.GetDict();
+          const std::string* id = job.FindString("id");
+          if (!id || *id != job_id)
+            continue;
+          const std::string* last_status = job.FindString("last_status");
+          if (!last_status || *last_status != "running") {
+            grok_companion::OpenGrokSidePanelAt(browser,
+                                                "/schedules?id=" + job_id);
+            return;
+          }
+          std::string conv_id;
+          if (const base::ListValue* history = job.FindList("history")) {
+            for (const base::Value& h : *history) {
+              if (!h.is_dict())
+                continue;
+              const std::string* st = h.GetDict().FindString("status");
+              if (!st || *st != "running")
+                continue;
+              if (const std::string* cid = h.GetDict().FindString("conv_id")) {
+                conv_id = *cid;
+                break;
+              }
+            }
+          }
+          if (conv_id.empty()) {
+            if (const base::DictValue* run = job.FindDict("run")) {
+              if (const std::string* cid = run->FindString("target_conv_id"))
+                conv_id = *cid;
+            }
+          }
+          if (!conv_id.empty()) {
+            grok_companion::OpenGrokSidePanelAt(
+                browser, "/?conv=" + conv_id + "&schedule=" + job_id);
+          } else {
+            grok_companion::OpenGrokSidePanelAt(browser,
+                                                "/schedules?id=" + job_id);
+          }
+          return;
+        }
+        grok_companion::OpenGrokSidePanelAt(browser,
+                                            "/schedules?id=" + job_id);
+      },
+      weak_factory_.GetWeakPtr(), browser_, job_id));
 }
 
 BEGIN_METADATA(XplorerSidebarScheduledView)

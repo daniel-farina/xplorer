@@ -85,6 +85,8 @@ void RunGrokAgentStream(
 // gateway cannot count or cap them per run; the cap is only respected to the
 // extent the LLM honors the instruction. <= 0 leaves the message untouched.
 void DispatchScheduledRun(
+    const std::string& job_id,
+    const std::string& job_label,
     const std::string& message,
     const std::string& model,
     const std::string& target_conv_id,
@@ -101,6 +103,8 @@ void DispatchScheduledRun(
 // |on_done| (optional) fires on that task with "ok" | "failed" | "skipped" and
 // the conv_id the reply was appended to. Used when a scheduled Job has a cwd.
 void DispatchScheduledAppBuild(
+    const std::string& job_id,
+    const std::string& job_label,
     const std::string& message,
     const std::string& model,
     const std::string& cwd,

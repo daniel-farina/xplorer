@@ -229,13 +229,60 @@ void Scheduler::OnConversationRunStopped(const std::string& conv_id) {
   for (Job& job : jobs_) {
     if (job.last_status != "running")
       continue;
-    if (job.target_conv_id != conv_id)
+    bool matches = (job.target_conv_id == conv_id);
+    if (!matches && !job.history.empty() && job.history[0].status == "running" &&
+        job.history[0].conv_id == conv_id) {
+      matches = true;
+    }
+    if (!matches)
       continue;
-    job.last_status = "failed";
+    job.last_status = "cancelled";
+    if (!job.history.empty() && job.history[0].status == "running" &&
+        (job.history[0].conv_id.empty() || job.history[0].conv_id == conv_id)) {
+      job.history[0].status = "cancelled";
+    }
     changed = true;
   }
   if (changed)
     Save();
+}
+
+void Scheduler::NotifyRunStarted(const std::string& job_id,
+                                 const std::string& conv_id) {
+  if (!task_runner_) {
+    OnRunStarted(job_id, conv_id);
+    return;
+  }
+  task_runner_->PostTask(
+      FROM_HERE, base::BindOnce(&Scheduler::OnRunStarted,
+                                base::Unretained(this), job_id, conv_id));
+}
+
+void Scheduler::OnRunStarted(const std::string& job_id,
+                             const std::string& conv_id) {
+  for (Job& j : jobs_) {
+    if (j.id != job_id)
+      continue;
+    if (!conv_id.empty())
+      j.target_conv_id = conv_id;
+    const int64_t fired_us =
+        j.last_fire_us > 0 ? j.last_fire_us : ToEpochUs(base::Time::Now());
+    if (!j.history.empty() && j.history[0].status == "running" &&
+        j.history[0].fired_us == fired_us) {
+      if (!conv_id.empty())
+        j.history[0].conv_id = conv_id;
+    } else {
+      RunRecord record;
+      record.fired_us = fired_us;
+      record.status = "running";
+      record.conv_id = conv_id;
+      j.history.insert(j.history.begin(), std::move(record));
+      if (j.history.size() > kMaxHistory)
+        j.history.resize(kMaxHistory);
+    }
+    break;
+  }
+  Save();
 }
 
 void Scheduler::Poll() {
@@ -303,15 +350,16 @@ void Scheduler::DispatchJob(const Job& job) {
   // route — it is just a chat job whose model is browser-capable, which opens
   // background tabs through the normal POST /tabs path on its own.
   if (!job.cwd.empty()) {
-    DispatchScheduledAppBuild(job.message, job.model, job.cwd,
+    DispatchScheduledAppBuild(job.id, job.label, job.message, job.model, job.cwd,
                               job.target_conv_id, std::move(on_done));
   } else {
     // Pass the job's soft tab cap; DispatchScheduledRun appends a one-line
     // "open at most N tabs" instruction to the message when it is > 0. This is
     // an LLM-respected hint only, not a hard limit, because the grok agent does
     // not attribute the tabs it opens to a particular task.
-    DispatchScheduledRun(job.message, job.model, job.target_conv_id,
-                         job.max_concurrent_tabs, std::move(on_done));
+    DispatchScheduledRun(job.id, job.label, job.message, job.model,
+                         job.target_conv_id, job.max_concurrent_tabs,
+                         std::move(on_done));
   }
 }
 
@@ -365,17 +413,22 @@ void Scheduler::OnRunComplete(const std::string& job_id,
     if (original_target_conv_id.empty() && !conv_id.empty())
       j.target_conv_id = conv_id;
 
-    // Record this run at the head of the history (newest first), capping to the
-    // most recent kMaxHistory records. |last_fire_us| was stamped when the run
-    // fired (FireJob / RunJobNow); fall back to now if it is somehow unset.
-    RunRecord record;
-    record.fired_us =
+    const int64_t fired_us =
         j.last_fire_us > 0 ? j.last_fire_us : ToEpochUs(base::Time::Now());
-    record.status = status;
-    record.conv_id = conv_id;
-    j.history.insert(j.history.begin(), std::move(record));
-    if (j.history.size() > kMaxHistory)
-      j.history.resize(kMaxHistory);
+    if (!j.history.empty() && j.history[0].status == "running" &&
+        j.history[0].fired_us == fired_us) {
+      j.history[0].status = status;
+      if (!conv_id.empty())
+        j.history[0].conv_id = conv_id;
+    } else {
+      RunRecord record;
+      record.fired_us = fired_us;
+      record.status = status;
+      record.conv_id = conv_id;
+      j.history.insert(j.history.begin(), std::move(record));
+      if (j.history.size() > kMaxHistory)
+        j.history.resize(kMaxHistory);
+    }
     break;
   }
   Save();

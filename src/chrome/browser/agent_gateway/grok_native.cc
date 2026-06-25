@@ -6,6 +6,7 @@
 #include "build/build_config.h"
 
 #if BUILDFLAG(IS_POSIX)
+#include <fcntl.h>
 #include <unistd.h>
 #endif
 
@@ -16,9 +17,11 @@
 #endif
 
 #include <cstring>
+#include <optional>
 
 #include <deque>
 #include <map>
+#include <utility>
 #include <set>
 #include <utility>
 
@@ -49,6 +52,7 @@
 #include "chrome/browser/agent_gateway/app_store.h"
 #include "chrome/browser/agent_gateway/browser_api.h"
 #include "chrome/browser/agent_gateway/focus_arbiter.h"
+#include "base/environment.h"
 #include "chrome/browser/agent_gateway/scheduler.h"
 #include "chrome/browser/agent_gateway/xplorer_paths.h"
 #include "chrome/browser/grok_companion/grok_companion_util.h"
@@ -635,6 +639,25 @@ const char* ChatRulesForMessage(const std::string& message) {
   if (MessageNeedsBrowserTools(message))
     return kBrowserChatRules;
   return kChatRules;
+}
+
+std::string ScheduledBrowserRules(const std::string& job_id,
+                                  const std::string& label) {
+  std::string rules(kBrowserChatRules);
+  rules += " You are running a SCHEDULED BACKGROUND TASK ";
+  if (!label.empty()) {
+    rules += "\"";
+    rules += label;
+    rules += "\" ";
+  }
+  rules += "(id=" + job_id +
+           "). CRITICAL TAB RULES: always open pages with xplorer_new_tab — "
+           "NEVER call xplorer_navigate without an explicit tab id that this "
+           "task opened. Every xplorer_new_tab must pass task_id=\"" +
+           job_id +
+           "\". Do not navigate, close, or reuse user tabs or bookmark sidebar "
+           "tabs.";
+  return rules;
 }
 
 std::string ModelDisplayName(const std::string& model) {
@@ -1412,10 +1435,159 @@ bool StopActiveRun(const std::string& conv_id) {
     pid = it->second;
     ActiveRuns().erase(it);
   }
-  base::Process p = base::Process::Open(pid);
-  if (p.IsValid())
-    p.Terminate(/*exit_code=*/0, /*wait=*/false);
+  if (pid != base::kNullProcessId) {
+    base::Process p = base::Process::Open(pid);
+    if (p.IsValid())
+      p.Terminate(/*exit_code=*/0, /*wait=*/false);
+  }
   return true;
+}
+
+// Launches |cmd| with stdout captured to a pipe. Returns the child process and
+// a read handle for stdout (invalid on failure).
+struct GrokStdoutProcess {
+  base::Process process;
+#if BUILDFLAG(IS_WIN)
+  base::win::ScopedHandle read_handle;
+#else
+  base::File read_file;
+#endif
+};
+
+std::optional<GrokStdoutProcess> LaunchGrokStdoutProcess(
+    const base::CommandLine& cmd,
+    const std::map<std::string, std::string>& extra_env = {}) {
+  GrokStdoutProcess io;
+#if BUILDFLAG(IS_WIN)
+  SECURITY_ATTRIBUTES sa = {};
+  sa.nLength = sizeof(sa);
+  sa.bInheritHandle = TRUE;
+  HANDLE stdout_read = nullptr;
+  HANDLE stdout_write = nullptr;
+  if (!::CreatePipe(&stdout_read, &stdout_write, &sa, 0))
+    return std::nullopt;
+  ::SetHandleInformation(stdout_read, HANDLE_FLAG_INHERIT, 0);
+  io.read_handle.Set(stdout_read);
+
+  base::LaunchOptions options;
+  options.start_hidden = true;
+  options.environment = extra_env;
+  base::win::ScopedHandle nul_in(
+      ::CreateFileW(L"NUL", GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE,
+                    &sa, OPEN_EXISTING, 0, nullptr));
+  if (nul_in.is_valid()) {
+    options.stdin_handle = nul_in.Get();
+    options.handles_to_inherit.push_back(nul_in.Get());
+  }
+  options.stdout_handle = stdout_write;
+  options.handles_to_inherit.push_back(stdout_write);
+  base::win::ScopedHandle nul_err(
+      ::CreateFileW(L"NUL", GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE,
+                    &sa, OPEN_EXISTING, 0, nullptr));
+  if (nul_err.is_valid()) {
+    options.stderr_handle = nul_err.Get();
+    options.handles_to_inherit.push_back(nul_err.Get());
+  }
+  io.process = base::LaunchProcess(MaybeWrapForWindowsShell(cmd), options);
+  ::CloseHandle(stdout_write);
+#else
+  int pipe_fds[2];
+  if (pipe(pipe_fds) != 0)
+    return std::nullopt;
+  const int devnull = open("/dev/null", O_RDWR);
+  base::LaunchOptions options;
+  options.environment = extra_env;
+  options.fds_to_remap.emplace_back(pipe_fds[1], STDOUT_FILENO);
+  if (devnull >= 0) {
+    options.fds_to_remap.emplace_back(devnull, STDIN_FILENO);
+    options.fds_to_remap.emplace_back(devnull, STDERR_FILENO);
+  }
+  io.process = base::LaunchProcess(cmd, options);
+  close(pipe_fds[1]);
+  if (devnull >= 0)
+    close(devnull);
+  io.read_file = base::File(pipe_fds[0]);
+#endif
+  if (!io.process.IsValid())
+    return std::nullopt;
+  return io;
+}
+
+// Blocking grok run with a real child PID so POST /conversations/{id}/stop can
+// terminate scheduled/headless runs (GetAppOutputWithExitCode has no PID).
+base::DictValue RunGrokCommandWithCancel(
+    const base::CommandLine& cmd,
+    const std::string& conv_id,
+    const std::map<std::string, std::string>& extra_env) {
+  std::optional<GrokStdoutProcess> io = LaunchGrokStdoutProcess(cmd, extra_env);
+  if (!io.has_value()) {
+    base::DictValue err;
+    err.Set("error", "failed to launch grok");
+    return err;
+  }
+  RegisterActiveRun(conv_id, io->process.Pid());
+
+  std::string output;
+  char read_buf[4096];
+  bool cancelled = false;
+  while (true) {
+    if (!IsActiveRun(conv_id)) {
+      cancelled = true;
+      io->process.Terminate(/*exit_code=*/0, /*wait=*/false);
+      break;
+    }
+#if BUILDFLAG(IS_WIN)
+    DWORD win_read = 0;
+    if (!::ReadFile(io->read_handle.Get(), read_buf, sizeof(read_buf), &win_read,
+                    nullptr) ||
+        win_read == 0) {
+      break;
+    }
+    output.append(read_buf, win_read);
+#else
+    int n = HANDLE_EINTR(
+        read(io->read_file.GetPlatformFile(), read_buf, sizeof(read_buf)));
+    if (n <= 0)
+      break;
+    output.append(read_buf, n);
+#endif
+  }
+
+  int exit_code = -1;
+  io->process.WaitForExit(&exit_code);
+  if (!cancelled)
+    UnregisterActiveRun(conv_id);
+
+  if (cancelled) {
+    base::DictValue err;
+    err.Set("error", "cancelled");
+    err.Set("cancelled", true);
+    return err;
+  }
+  if (exit_code != 0) {
+    base::DictValue err;
+    err.Set("error", output.empty() ? "grok failed" : output);
+    return err;
+  }
+  if (auto parsed = base::JSONReader::ReadDict(output, base::JSON_PARSE_RFC))
+    return std::move(*parsed);
+  base::DictValue fallback;
+  fallback.Set("text", output);
+  return fallback;
+}
+
+base::DictValue EnrichSessionsWithRunning(base::DictValue data) {
+  base::ListValue* convs = data.FindList("conversations");
+  if (!convs)
+    return data;
+  for (base::Value& v : *convs) {
+    if (!v.is_dict())
+      continue;
+    const std::string* id = v.GetDict().FindString("id");
+    if (id)
+      v.GetDict().Set("running", IsActiveRun(*id));
+  }
+  return data;
 }
 
 void PumpGrokStream(net::HttpServer* server,
@@ -2086,9 +2258,13 @@ base::DictValue RunGrokSearch(const std::string& query,
 
 base::DictValue RunGrokChat(const std::string& message,
                             const std::string& session_id,
-                            const std::string& model) {
-  base::CommandLine cmd = BuildGrokChatCommand(
-      message, session_id, model, false, ChatRulesForMessage(message));
+                            const std::string& model,
+                            const std::string& rules_override) {
+  const std::string rules =
+      rules_override.empty() ? std::string(ChatRulesForMessage(message))
+                             : rules_override;
+  base::CommandLine cmd =
+      BuildGrokChatCommand(message, session_id, model, false, rules);
 #if BUILDFLAG(IS_WIN)
   cmd = MaybeWrapForWindowsShell(cmd);
 #endif
@@ -2157,6 +2333,8 @@ base::DictValue RunGrokAppBuild(const std::string& message,
 // user can read it later. The blocking grok run is hopped onto a ThreadPool
 // task so the caller (the scheduler poll on the IO thread) does not block.
 void DispatchScheduledRun(
+    const std::string& job_id,
+    const std::string& job_label,
     const std::string& message,
     const std::string& model,
     const std::string& target_conv_id,
@@ -2168,8 +2346,9 @@ void DispatchScheduledRun(
       ->PostTask(
           FROM_HERE,
           base::BindOnce(
-              [](std::string message, std::string model,
-                 std::string conv_id, int max_concurrent_tabs,
+              [](std::string job_id, std::string job_label, std::string message,
+                 std::string model, std::string conv_id,
+                 int max_concurrent_tabs,
                  base::OnceCallback<void(const std::string&,
                                          const std::string&)>
                      on_done) {
@@ -2260,24 +2439,29 @@ void DispatchScheduledRun(
                   session_id = *sid;
                 SaveSessions(data);
 
-                // Register the run so POST /api/conversations/{id}/stop can
-                // cancel it and the busy guard rejects overlapping fires. The
-                // blocking RunGrokChat does not expose a PID (it uses
-                // GetAppOutputWithExitCode), so register a null pid — /stop will
-                // report "not running" for it, but the 409 guard still holds.
-                // Default an unset model the same way the message handler does
-                // (empty -> the configured search model) so a job that omits a
-                // model still runs instead of failing with "unknown model id".
+                Scheduler::Get()->NotifyRunStarted(job_id, conv_id);
+
+                // Launch grok with a real PID so POST /api/conversations/{id}/stop
+                // can terminate scheduled runs mid-flight.
                 std::string resolved_model =
                     ResolveModel(model.empty() ? nullptr : &model);
-                RegisterActiveRun(conv_id, base::kNullProcessId);
+                std::map<std::string, std::string> child_env;
+                child_env["XPLORER_AGENT_ID"] = "schedule:" + job_id;
+                child_env["XPLORER_TASK_ID"] = job_id;
+                base::CommandLine cmd = BuildGrokChatCommand(
+                    message, session_id, resolved_model, false,
+                    ScheduledBrowserRules(job_id, job_label));
+#if BUILDFLAG(IS_WIN)
+                cmd = MaybeWrapForWindowsShell(cmd);
+#endif
                 base::DictValue result =
-                    RunGrokChat(message, session_id, resolved_model);
-                UnregisterActiveRun(conv_id);
+                    RunGrokCommandWithCancel(cmd, conv_id, child_env);
 
                 if (const std::string* err = result.FindString("error")) {
-                  // Record the failure as an assistant message so the user sees
-                  // why the scheduled run did not produce a result.
+                  if (result.FindBool("cancelled").value_or(false)) {
+                    finish("cancelled", conv_id);
+                    return;
+                  }
                   SaveChatAssistantReply(
                       conv_id, std::string("Scheduled run failed: ") + *err,
                       session_id);
@@ -2291,8 +2475,8 @@ void DispatchScheduledRun(
                                        new_sid ? *new_sid : std::string());
                 finish("ok", conv_id);
               },
-              message, model, target_conv_id, max_concurrent_tabs,
-              std::move(on_done)));
+              job_id, job_label, message, model, target_conv_id,
+              max_concurrent_tabs, std::move(on_done)));
 }
 
 // Headless app-build dispatch for the scheduler. Mirrors DispatchScheduledRun
@@ -2302,6 +2486,8 @@ void DispatchScheduledRun(
 // model defaults via ResolveAppBuildModel (matching POST /apps/{id}/build/stream)
 // so an unset model still builds. Fired by Scheduler::FireJob when job.cwd is set.
 void DispatchScheduledAppBuild(
+    const std::string& job_id,
+    const std::string& job_label,
     const std::string& message,
     const std::string& model,
     const std::string& cwd,
@@ -2313,8 +2499,8 @@ void DispatchScheduledAppBuild(
       ->PostTask(
           FROM_HERE,
           base::BindOnce(
-              [](std::string message, std::string model, std::string cwd,
-                 std::string conv_id,
+              [](std::string job_id, std::string job_label, std::string message,
+                 std::string model, std::string cwd, std::string conv_id,
                  base::OnceCallback<void(const std::string&,
                                          const std::string&)>
                      on_done) {
@@ -2390,23 +2576,27 @@ void DispatchScheduledAppBuild(
                   session_id = *sid;
                 SaveSessions(data);
 
-                // Register the run so /stop can cancel it and the busy guard
-                // rejects overlapping fires. The blocking run uses
-                // GetAppOutputWithExitCode (no PID), so register a null pid.
-                // Default an unset model via ResolveAppBuildModel — the same
-                // default POST /apps/{id}/build/stream uses — so a build job
-                // that omits a model still runs.
+                Scheduler::Get()->NotifyRunStarted(job_id, conv_id);
+
                 std::string resolved_model =
                     ResolveAppBuildModel(model.empty() ? nullptr : &model);
-                RegisterActiveRun(conv_id, base::kNullProcessId);
-                base::DictValue result = RunGrokAppBuild(
-                    message, session_id, resolved_model,
-                    base::FilePath::FromUTF8Unsafe(cwd));
-                UnregisterActiveRun(conv_id);
+                std::map<std::string, std::string> child_env;
+                child_env["XPLORER_AGENT_ID"] = "schedule:" + job_id;
+                child_env["XPLORER_TASK_ID"] = job_id;
+                base::CommandLine cmd = BuildGrokAgentCommand(
+                    message, session_id, resolved_model, /*streaming=*/false,
+                    base::FilePath::FromUTF8Unsafe(cwd), kAppBuildRules);
+#if BUILDFLAG(IS_WIN)
+                cmd = MaybeWrapForWindowsShell(cmd);
+#endif
+                base::DictValue result =
+                    RunGrokCommandWithCancel(cmd, conv_id, child_env);
 
                 if (const std::string* err = result.FindString("error")) {
-                  // Record the failure as an assistant message so the user sees
-                  // why the scheduled build did not produce a result.
+                  if (result.FindBool("cancelled").value_or(false)) {
+                    finish("cancelled", conv_id);
+                    return;
+                  }
                   SaveChatAssistantReply(
                       conv_id, std::string("Scheduled build failed: ") + *err,
                       session_id);
@@ -2420,7 +2610,8 @@ void DispatchScheduledAppBuild(
                                        new_sid ? *new_sid : std::string());
                 finish("ok", conv_id);
               },
-              message, model, cwd, target_conv_id, std::move(on_done)));
+              job_id, job_label, message, model, cwd, target_conv_id,
+              std::move(on_done)));
 }
 
 bool ExtractSearchImage(const base::DictValue* body, SearchImageInput* out) {
@@ -3037,7 +3228,8 @@ bool GrokNative::TryHandleRequest(
   }
 
   if (info.method == "GET" && path == "/api/conversations") {
-    SendJson(server, connection_id, net::HTTP_OK, LoadSessions());
+    SendJson(server, connection_id, net::HTTP_OK,
+             EnrichSessionsWithRunning(LoadSessions()));
     return true;
   }
 
@@ -3154,7 +3346,7 @@ bool GrokNative::TryHandleRequest(
             base::BindOnce(
                 [](std::string prompt, std::string model) {
                   // No session id: this is a one-shot interpret, not a chat turn.
-                  return RunGrokChat(prompt, std::string(), model);
+                  return RunGrokChat(prompt, std::string(), model, "");
                 },
                 prompt, model),
             base::BindOnce(
@@ -3649,7 +3841,7 @@ bool GrokNative::TryHandleRequest(
         base::BindOnce(
             [](std::string cid, std::string sid, std::string message,
                std::string model) {
-              base::DictValue result = RunGrokChat(message, sid, model);
+              base::DictValue result = RunGrokChat(message, sid, model, "");
               base::DictValue data = LoadSessions();
               base::ListValue* convs = data.FindList("conversations");
               if (convs) {
