@@ -37,6 +37,13 @@ class TabOwnership : public base::SupportsUserData::Data {
   // The model driving this tab (e.g. "Grok"), from X-Agent-Model.
   std::string model;
   std::string last_action;
+  // Which scheduled/user task owns this tab ("" == ad-hoc). Lets GET /tabs
+  // answer "which tabs belong to task X" and the UI offer per-task focus.
+  std::string task_id;
+  // True if this tab was opened as a background agent tab (inactive/hidden);
+  // false for user/foreground tabs. Agent tabs default to background so they
+  // never steal the user's focus.
+  bool background = false;
 
   // Per-tab activity counters — what the in-tab HUD shows, so each tab
   // reflects only the agent controlling it (not a global blend).

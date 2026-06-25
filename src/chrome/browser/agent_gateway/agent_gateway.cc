@@ -358,6 +358,8 @@ void AgentGateway::RouteRequest(int connection_id,
         TabOwnership* own = TabOwnership::Get(wc);
         t.Set("owner", own ? own->owner : std::string());
         t.Set("label", own ? own->label : std::string());
+        t.Set("task_id", own ? own->task_id : std::string());
+        t.Set("background", own ? own->background : false);
         t.Set("mine", own && !agent_id.empty() && own->owner == agent_id);
         tabs.Append(std::move(t));
       }
@@ -377,10 +379,21 @@ void AgentGateway::RouteRequest(int connection_id,
     const std::string* url = body ? body->FindString("url") : nullptr;
     const std::string* owner = body ? body->FindString("owner") : nullptr;
     const std::string* label = body ? body->FindString("label") : nullptr;
+    const std::string* task_id = body ? body->FindString("task_id") : nullptr;
+    // Background by default: agent tabs must never steal the user's focus.
+    // Only an explicit {"focus": true} opens in the foreground; even then it is
+    // intent only and does not bypass focus arbitration (see FocusArbiter).
+    const bool focus = body && body->FindBool("focus").value_or(false);
     NavigateParams params(ProfileManager::GetLastUsedProfile(),
                           GURL(url ? *url : "about:blank"),
                           ui::PAGE_TRANSITION_TYPED);
-    params.disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
+    // NEW_BACKGROUND_TAB: Chromium clears ADD_ACTIVE and creates the contents
+    // initially_hidden, so the active index never moves and the window is not
+    // raised. (Falls back to foreground only on an empty strip — see scheduler
+    // window-pinning; an agent POST during a live session always has a
+    // non-empty last-used window, so it stays background.)
+    params.disposition = focus ? WindowOpenDisposition::NEW_FOREGROUND_TAB
+                               : WindowOpenDisposition::NEW_BACKGROUND_TAB;
     Navigate(&params);
     base::DictValue d;
     d.Set("ok", true);
@@ -391,6 +404,9 @@ void AgentGateway::RouteRequest(int connection_id,
       own->owner = owner ? *owner : agent_id;
       if (label)
         own->label = *label;
+      if (task_id)
+        own->task_id = *task_id;
+      own->background = !focus;
       d.Set("owner", own->owner);
     }
     std::move(reply).Run(std::move(d));
