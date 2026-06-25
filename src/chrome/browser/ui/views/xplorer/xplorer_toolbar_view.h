@@ -94,6 +94,9 @@ class XplorerToolbarView : public views::AccessiblePaneView,
   void SetVerticalLayout(bool vertical);
   bool vertical_layout() const { return vertical_layout_; }
 
+  // Applies placement/visibility once the context menu has fully closed.
+  void ApplyPendingToolbarStateRefresh();
+
   // views::View:
   gfx::Size CalculatePreferredSize(
       const views::SizeBounds& available_size) const override;
@@ -222,6 +225,7 @@ class XplorerToolbarView : public views::AccessiblePaneView,
   int drop_index_ = -1;
 
   bool vertical_layout_ = false;
+  bool pending_toolbar_state_refresh_ = false;
 
   base::CancelableTaskTracker favicon_task_tracker_;
   base::WeakPtrFactory<XplorerToolbarView> weak_factory_{this};
