@@ -135,6 +135,7 @@ class XplorerToolbarView : public views::AccessiblePaneView,
  protected:
   // views::View:
   void OnPaint(gfx::Canvas* canvas) override;
+  void OnThemeChanged() override;
 
  private:
   // A pill's view: a single styled button. Pills with children render an
@@ -152,6 +153,8 @@ class XplorerToolbarView : public views::AccessiblePaneView,
   void RebuildButtons();
   void OnToolbarConfigChanged();
   void ApplyVerticalButtonChrome();
+  // Sidebar rail: transparent; top bar: solid toolbar fill.
+  void ApplySidebarBackground();
   void LoadSidebarPillFavicons();
   void OnPillFaviconLoaded(size_t pill_index,
                             const favicon_base::FaviconImageResult& result);

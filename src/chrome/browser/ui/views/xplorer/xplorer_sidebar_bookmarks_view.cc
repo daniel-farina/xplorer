@@ -145,6 +145,11 @@ void XplorerSidebarBookmarksView::ShowContextMenuForViewImpl(
   }
 }
 
+void XplorerSidebarBookmarksView::OnThemeChanged() {
+  views::View::OnThemeChanged();
+  SetBackground(nullptr);
+}
+
 void XplorerSidebarBookmarksView::Rebuild() {
   RemoveAllChildViews();
   rows_.clear();

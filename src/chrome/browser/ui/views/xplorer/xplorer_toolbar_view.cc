@@ -404,20 +404,32 @@ void XplorerToolbarView::OnPillFaviconLoaded(
       ui::ImageModel::FromImageSkia(resized));
 }
 
+void XplorerToolbarView::ApplySidebarBackground() {
+  // Sidebar rail: transparent so the vertical tab strip background shows
+  // through. Do not gate on GetWidget() — SetVerticalLayout(true) runs during
+  // reparent into the sidebar before a widget exists, and the solid
+  // kColorToolbar fill from the constructor would otherwise persist.
+  if (vertical_layout_) {
+    SetBackground(nullptr);
+    return;
+  }
+  if (GetColorProvider()) {
+    SetBackground(views::CreateSolidBackground(kColorToolbar));
+  }
+}
+
+void XplorerToolbarView::OnThemeChanged() {
+  AccessiblePaneView::OnThemeChanged();
+  ApplySidebarBackground();
+}
+
 void XplorerToolbarView::SetVerticalLayout(bool vertical) {
   if (vertical_layout_ == vertical) {
     return;
   }
   vertical_layout_ = vertical;
   ApplyVerticalButtonChrome();
-  // Sidebar rail: transparent so the vertical tab strip background shows through.
-  if (GetWidget()) {
-    if (vertical) {
-      SetBackground(nullptr);
-    } else {
-      SetBackground(views::CreateSolidBackground(kColorToolbar));
-    }
-  }
+  ApplySidebarBackground();
   InvalidateLayout();
   PreferredSizeChanged();
 }

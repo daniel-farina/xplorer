@@ -69,10 +69,13 @@ gfx::Size XplorerSidebarRowButton::CalculatePreferredSize(
 }
 
 void XplorerSidebarRowButton::OnThemeChanged() {
+  // MdTextButton::OnThemeChanged paints kColorButtonBackground even for
+  // kText style; override after so sidebar rows stay transparent.
   MdTextButton::OnThemeChanged();
   SetEnabledTextColors(kColorTabForegroundInactiveFrameInactive);
   ConfigureInkDropForRefresh2023(this, kColorToolbarInkDropHover,
                                  kColorToolbarInkDropRipple);
+  SetBackground(nullptr);
   UpdateBackgroundColor();
 }
 

@@ -43,6 +43,9 @@ class XplorerSidebarBookmarksView : public views::View,
 
   void Rebuild();
 
+  // views::View:
+  void OnThemeChanged() override;
+
   // bookmarks::BookmarkModelObserver:
   void BookmarkModelLoaded(bool ids_reassigned) override;
   void BookmarkNodeAdded(const bookmarks::BookmarkNode* parent,
