@@ -10,6 +10,8 @@ source_set("agent_gateway") {
     "agent_session.h",
     "browser_api.cc",
     "browser_api.h",
+    "focus_arbiter.cc",
+    "focus_arbiter.h",
     "grok_companion_launcher.cc",
     "grok_companion_launcher.h",
     "grok_native.cc",

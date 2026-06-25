@@ -4,6 +4,7 @@
 #include "chrome/browser/agent_gateway/agent_gateway.h"
 
 #include "chrome/browser/agent_gateway/browser_api.h"
+#include "chrome/browser/agent_gateway/focus_arbiter.h"
 #include "chrome/browser/agent_gateway/grok_companion_launcher.h"
 #include "chrome/browser/agent_gateway/xplorer_paths.h"
 #include "chrome/browser/agent_gateway/grok_native.h"
@@ -224,6 +225,32 @@ void AgentGateway::RouteRequest(int connection_id,
   // GET /stats — live metrics (also rendered in the in-tab HUD).
   if (parts.size() == 1 && parts[0] == "stats") {
     std::move(reply).Run(metrics_.ToDict());
+    return;
+  }
+
+  // POST /focus {"owner": "<agent_id>", "conv_id"?} — user-only grant of the
+  // foreground to one agent task (G5: deliberate foreground only). Empty/absent
+  // owner resets focus to the user. An agent request (carrying X-Agent-Id) may
+  // NOT call this — only the user-driven sidebar UI (no X-Agent-Id) can, so an
+  // agent can never grant itself focus.
+  if (parts.size() == 1 && parts[0] == "focus" && info.method == "POST") {
+    base::DictValue d;
+    if (!agent_id.empty()) {
+      d.Set("error", "focus grant is user-only");
+    } else {
+      auto body = base::JSONReader::ReadDict(info.data, base::JSON_PARSE_RFC);
+      const std::string* owner = body ? body->FindString("owner") : nullptr;
+      const std::string* conv_id = body ? body->FindString("conv_id") : nullptr;
+      if (owner && !owner->empty()) {
+        FocusArbiter::Get()->SetOwner(*owner,
+                                      conv_id ? *conv_id : std::string());
+      } else {
+        FocusArbiter::Get()->ResetToUser();
+      }
+      d.Set("ok", true);
+      d.Set("owner", FocusArbiter::Get()->owner());
+    }
+    std::move(reply).Run(std::move(d));
     return;
   }
 
@@ -448,6 +475,16 @@ void AgentGateway::RouteRequest(int connection_id,
 
   // POST /tabs/{id}/activate — focus a tab.
   if (parts.size() > 2 && parts[2] == "activate" && info.method == "POST") {
+    // Focus arbitration: an agent may foreground a tab only if it holds the
+    // current grant (set via the user-only POST /focus). The user/UI (no
+    // X-Agent-Id) is always allowed. This is the gate that stops agents from
+    // stealing focus or fighting over the active tab.
+    if (!FocusArbiter::Get()->MayActivate(agent_id)) {
+      base::DictValue err;
+      err.Set("error", "focus denied: another activity owns focus");
+      std::move(reply).Run(std::move(err));
+      return;
+    }
     BrowserApi::ActivateTab(parts[1],
                             base::BindOnce([](decltype(reply) r, base::DictValue d) {
                               std::move(r).Run(std::move(d));
@@ -456,6 +493,13 @@ void AgentGateway::RouteRequest(int connection_id,
   }
   // POST /tabs/{id}/split {"layout": "side_by_side"|"stacked"}
   if (parts.size() > 2 && parts[2] == "split" && info.method == "POST") {
+    // Split activates the tab, so it is gated by the same focus arbitration.
+    if (!FocusArbiter::Get()->MayActivate(agent_id)) {
+      base::DictValue err;
+      err.Set("error", "focus denied: another activity owns focus");
+      std::move(reply).Run(std::move(err));
+      return;
+    }
     auto body = base::JSONReader::ReadDict(info.data, base::JSON_PARSE_RFC);
     const std::string* layout = body ? body->FindString("layout") : nullptr;
     BrowserApi::SplitTab(parts[1], layout ? *layout : "side_by_side",

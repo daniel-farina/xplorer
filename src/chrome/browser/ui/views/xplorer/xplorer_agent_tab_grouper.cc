@@ -10,6 +10,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "chrome/browser/agent_gateway/focus_arbiter.h"
 #include "chrome/browser/agent_gateway/tab_ownership.h"
 #include "chrome/browser/ui/tabs/tab_group_model.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
@@ -62,6 +63,14 @@ void AgentTabGrouper::OnTabStripModelChanged(
     TabStripModel* tab_strip_model,
     const TabStripModelChange& change,
     const TabStripSelectionChange& selection) {
+  // User priority: a real user tab gesture (click / keyboard select) revokes
+  // any agent focus grant — the user always wins, even mid agent task. A direct
+  // user tab click never reaches the gateway, so this observer is the only place
+  // it can be detected. The agent's own granted /activate carries
+  // CHANGE_REASON_NONE and does NOT reset the grant.
+  if (selection.reason & TabStripModelObserver::CHANGE_REASON_USER_GESTURE) {
+    agent_gateway::FocusArbiter::Get()->ResetToUser();
+  }
   Reconcile();
 }
 

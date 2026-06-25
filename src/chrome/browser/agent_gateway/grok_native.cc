@@ -48,6 +48,7 @@
 #include "base/time/time.h"
 #include "chrome/browser/agent_gateway/app_store.h"
 #include "chrome/browser/agent_gateway/browser_api.h"
+#include "chrome/browser/agent_gateway/focus_arbiter.h"
 #include "chrome/browser/agent_gateway/xplorer_paths.h"
 #include "chrome/browser/grok_companion/grok_companion_util.h"
 #include "chrome/browser/agent_gateway/tab_screenshot.h"
@@ -1345,8 +1346,15 @@ void RegisterActiveRun(const std::string& conv_id, base::ProcessId pid) {
 void UnregisterActiveRun(const std::string& conv_id) {
   if (conv_id.empty())
     return;
-  base::AutoLock l(ActiveRunsLock());
-  ActiveRuns().erase(conv_id);
+  {
+    base::AutoLock l(ActiveRunsLock());
+    ActiveRuns().erase(conv_id);
+  }
+  // A finished/cancelled run releases any focus grant it held, so a completed
+  // foreground task does not keep focus rights forever (independent of the
+  // user-gesture reset in the tab-strip observer). Lock released first to avoid
+  // nesting ActiveRunsLock under the arbiter lock.
+  FocusArbiter::Get()->OnRunEnded(conv_id);
 }
 // Terminate the grok process for |conv_id| if one is running. Returns whether a
 // run was found. Cross-platform via base::Process::Open(pid).Terminate().
