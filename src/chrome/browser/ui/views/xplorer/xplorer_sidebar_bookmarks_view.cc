@@ -6,14 +6,16 @@
 #include <memory>
 
 #include "base/functional/bind.h"
+#include "chrome/browser/agent_gateway/tab_ownership.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/ui/bookmarks/bookmark_utils.h"
 #include "chrome/browser/favicon/favicon_utils.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+#include "chrome/browser/ui/navigator/browser_navigator.h"
+#include "chrome/browser/ui/navigator/browser_navigator_params.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
-#include "chrome/browser/ui/views/xplorer/xplorer_bookmark_tabs.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/xplorer/xplorer_sidebar_row_button.h"
 #include "chrome/browser/ui/views/xplorer/xplorer_sidebar_section_label.h"
@@ -23,6 +25,7 @@
 #include "content/public/browser/web_contents.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/mojom/menu_source_type.mojom.h"
+#include "ui/base/page_transition_types.h"
 #include "ui/gfx/favicon_size.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/image/image_skia_operations.h"
@@ -238,7 +241,42 @@ void XplorerSidebarBookmarksView::OnBookmarkPressed(
   if (!node || !node->is_url() || !browser_) {
     return;
   }
-  OpenBookmarkTab(browser_, node->url(), node->id());
+  Browser* target = browser_->GetBrowserForMigrationOnly();
+  TabStripModel* tabs = browser_->GetTabStripModel();
+  if (!target || !tabs) {
+    return;
+  }
+  const GURL url = node->url();
+
+  // Open-or-activate within the Bookmarks group: a bookmark tab is any tab
+  // stamped with a non-zero bookmark_node_id. Match by id first; if the seeder's
+  // synthetic ids don't line up with the BookmarkModel node id, fall back to a
+  // URL match so a click still activates the existing tab instead of duplicating.
+  for (int i = 0; i < tabs->count(); ++i) {
+    content::WebContents* wc = tabs->GetWebContentsAt(i);
+    if (!wc) {
+      continue;
+    }
+    agent_gateway::TabOwnership* own = agent_gateway::TabOwnership::Get(wc);
+    if (!own || own->bookmark_node_id == 0) {
+      continue;
+    }
+    if (own->bookmark_node_id == node->id() ||
+        wc->GetLastCommittedURL() == url || wc->GetVisibleURL() == url) {
+      tabs->ActivateTabAt(i);
+      UpdateActiveHighlight();
+      return;
+    }
+  }
+
+  NavigateParams params(target, url, ui::PAGE_TRANSITION_AUTO_BOOKMARK);
+  params.disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
+  Navigate(&params);
+  if (params.navigated_or_inserted_contents) {
+    agent_gateway::TabOwnership::GetOrCreate(
+        params.navigated_or_inserted_contents)
+        ->bookmark_node_id = node->id();
+  }
   UpdateActiveHighlight();
 }
 
@@ -266,17 +304,23 @@ void XplorerSidebarBookmarksView::UpdateActiveHighlight() {
   }
   TabStripModel* tabs = browser_->GetTabStripModel();
   content::WebContents* active = tabs ? tabs->GetActiveWebContents() : nullptr;
+  agent_gateway::TabOwnership* active_own =
+      active ? agent_gateway::TabOwnership::Get(active) : nullptr;
+  const int64_t active_node_id =
+      active_own ? active_own->bookmark_node_id : 0;
+  const GURL active_url =
+      active ? active->GetLastCommittedURL() : GURL();
   for (const BookmarkRow& row : rows_) {
     if (!row.button) {
       continue;
     }
+    // Highlight the row whose bookmark node id matches the active tab's
+    // bookmark_node_id tag; fall back to a URL match (the seeder's synthetic
+    // ids may differ from BookmarkModel node ids).
     bool selected = false;
-    if (active) {
-      if (row.node_id != 0) {
-        selected = IsBookmarkTabForNode(active, row.node_id);
-      } else if (row.url.is_valid()) {
-        selected = IsBookmarkTabOnUrl(active, row.url);
-      }
+    if (active_own && active_node_id != 0) {
+      selected = (row.node_id == active_node_id) ||
+                 (row.url.is_valid() && row.url == active_url);
     }
     row.button->SetSelected(selected);
   }

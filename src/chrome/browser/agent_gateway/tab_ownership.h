@@ -7,7 +7,6 @@
 #include <string>
 
 #include "base/supports_user_data.h"
-#include "url/gurl.h"
 
 namespace content {
 class WebContents;
@@ -53,9 +52,9 @@ class TabOwnership : public base::SupportsUserData::Data {
   // never steal the user's focus.
   bool background = false;
 
-  // Sidebar bookmark tab: |bookmark_node_id| maps to a BookmarkModel node;
-  // row stays out of the Tabs strip. |bookmark_url| is the opened URL.
-  GURL bookmark_url;
+  // Marks a tab opened from the sidebar Bookmarks group. Non-zero ==
+  // member of the native "Bookmarks" tab group; used for grouping + the
+  // sidebar's active-row highlight.
   int64_t bookmark_node_id = 0;
 
   // Per-tab activity counters — what the in-tab HUD shows, so each tab

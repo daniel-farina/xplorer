@@ -18,7 +18,6 @@ class View;
 
 namespace xplorer {
 
-class XplorerSidebarBookmarksView;
 class XplorerToolbarView;
 
 // Arc-style chrome injected at the top of the vertical tab strip: bookmarks,
@@ -34,9 +33,10 @@ class XplorerSidebarChromeView : public views::View,
       delete;
   ~XplorerSidebarChromeView() override;
 
-  // Hosts the shared XplorerToolbarView when toolbar.placement == sidebar.
+  // Hosts the shared XplorerToolbarView (legacy sidebar placement). The
+  // Grok-apps pill toolbar is no longer attached here; kept only so
+  // UpdateChromeState() can keep the (empty) host hidden.
   views::View* toolbar_host() { return toolbar_host_; }
-  void AttachToolbar(XplorerToolbarView* toolbar);
 
   // Shows/hides the bookmarks + Grok toolbar block from placement + visible.
   void UpdateChromeState();
@@ -49,8 +49,7 @@ class XplorerSidebarChromeView : public views::View,
 
  private:
   const raw_ptr<BrowserWindowInterface> browser_;
-  const raw_ptr<Profile> profile_;
-  raw_ptr<XplorerSidebarBookmarksView> bookmarks_ = nullptr;
+  [[maybe_unused]] const raw_ptr<Profile> profile_;
   raw_ptr<views::View> toolbar_host_ = nullptr;
   raw_ptr<views::View> bookmarks_separator_ = nullptr;
 };

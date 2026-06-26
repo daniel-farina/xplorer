@@ -5,7 +5,6 @@
 
 #include <memory>
 
-#include "chrome/browser/ui/views/xplorer/xplorer_sidebar_bookmarks_view.h"
 #include "chrome/browser/ui/views/xplorer/xplorer_sidebar_section_label.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
@@ -37,9 +36,8 @@ XplorerSidebarChromeView::XplorerSidebarChromeView(
   layout->set_cross_axis_alignment(
       views::BoxLayout::CrossAxisAlignment::kStretch);
 
-  bookmarks_ = AddChildView(
-      std::make_unique<XplorerSidebarBookmarksView>(browser_, profile_));
-
+  // Bookmarks are now a native "Bookmarks" tab group (seeded by AgentTabGrouper);
+  // the old custom sidebar bookmark list is gone.
   auto toolbar_host = std::make_unique<views::View>();
   toolbar_host->SetBackground(nullptr);
   auto* host_layout = toolbar_host->SetLayoutManager(
@@ -78,35 +76,9 @@ void XplorerSidebarChromeView::ShowContextMenuForViewImpl(
   }
 }
 
-void XplorerSidebarChromeView::AttachToolbar(XplorerToolbarView* toolbar) {
-  if (!toolbar_host_ || !toolbar) {
-    return;
-  }
-  if (toolbar->parent() != toolbar_host_) {
-    if (toolbar->parent()) {
-      toolbar->parent()->RemoveChildView(toolbar);
-    }
-    toolbar_host_->AddChildView(toolbar);
-  }
-  if (!toolbar->vertical_layout()) {
-    toolbar->SetVerticalLayout(true);
-  }
-  toolbar->SetProperty(
-      views::kFlexBehaviorKey,
-      views::FlexSpecification(views::MinimumFlexSizeRule::kPreferred,
-                               views::MaximumFlexSizeRule::kPreferred)
-          .WithWeight(0));
-  UpdateChromeState();
-}
-
 void XplorerSidebarChromeView::UpdateChromeState() {
   const bool show_toolbar_in_sidebar =
       GetToolbarPlacement() == ToolbarPlacement::kSidebar && GetToolbarVisible();
-  // Bookmarks always live in the sidebar rail (Arc-style), independent of where
-  // the Grok pill toolbar is placed.
-  if (bookmarks_) {
-    bookmarks_->SetVisible(true);
-  }
   if (toolbar_host_) {
     toolbar_host_->SetVisible(show_toolbar_in_sidebar);
   }

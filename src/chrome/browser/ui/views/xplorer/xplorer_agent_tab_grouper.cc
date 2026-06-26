@@ -3,6 +3,9 @@
 
 #include "chrome/browser/ui/views/xplorer/xplorer_agent_tab_grouper.h"
 
+#include <algorithm>
+#include <cstdint>
+#include <iterator>
 #include <string>
 #include <vector>
 
@@ -14,24 +17,58 @@
 #include "base/task/sequenced_task_runner.h"
 #include "chrome/browser/agent_gateway/focus_arbiter.h"
 #include "chrome/browser/agent_gateway/tab_ownership.h"
+#include "chrome/browser/grok_companion/grok_companion_util.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/browser_window/public/global_browser_collection.h"
+#include "chrome/browser/ui/navigator/browser_navigator.h"
+#include "chrome/browser/ui/navigator/browser_navigator_params.h"
 #include "chrome/browser/ui/tabs/tab_group_model.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
-#include "chrome/browser/ui/views/xplorer/xplorer_bookmark_tabs.h"
 #include "chrome/browser/ui/views/xplorer/xplorer_scheduled_task_tabs.h"
 #include "components/tab_groups/tab_group_color.h"
 #include "components/tab_groups/tab_group_visual_data.h"
 #include "components/tabs/public/tab_group.h"
 #include "components/tabs/public/tab_interface.h"
 #include "content/public/browser/web_contents.h"
+#include "ui/base/page_transition_types.h"
+#include "url/gurl.h"
 
 namespace xplorer {
 
 namespace {
 constexpr char16_t kAgentGroupPrefix[] = u"Agent tabs";
 constexpr char16_t kScheduledGroupPrefix[] = u"Scheduled task tabs";
+constexpr char16_t kBookmarksGroupPrefix[] = u"Bookmarks";
+
+// Hardcoded xAI default bookmarks, seeded as always-open tabs in the native
+// "Bookmarks" group at launch. Transcribed (label, href) IN ORDER from
+// xplorer_toolbar_view.cc kDefaultPills — keep the two in sync. Gateway-relative
+// hrefs ("/apps", "/switch-home?...") resolve against the companion base; absolute
+// https hrefs are used as-is. The synthetic id stamped on each tab is its array
+// index + 1.
+constexpr struct {
+  const char* label;
+  const char* href;
+} kDefaultBookmarks[] = {
+    {"X Chat", "https://x.com/i/chat"},
+    {"Grok Build", "/apps"},
+    {"Grok Web", "/switch-home?mode=web"},
+    {"Imagine", "https://grok.com/imagine"},
+    {"Groki", "/switch-home?mode=wiki"},
+    {"x.com", "https://x.com/"},
+    {"Grok on X", "https://x.com/i/grok"},
+};
+
+// Resolves a bookmark href to a navigable URL: gateway-relative paths (leading
+// '/') resolve against the companion base; everything else is taken as-is.
+GURL ResolveBookmarkHref(const char* href) {
+  std::string h(href);
+  if (!h.empty() && h.front() == '/') {
+    return grok_companion::GetCompanionURL().Resolve(h);
+  }
+  return GURL(h);
+}
 
 bool IsScheduledTaskWebContents(content::WebContents* wc) {
   return agent_gateway::IsScheduledTaskTab(agent_gateway::TabOwnership::Get(wc));
@@ -110,6 +147,7 @@ void ClearGroupIfEmpty(TabStripModel* model, const char16_t* prefix) {
 AgentTabGrouper::AgentTabGrouper(TabStripModel* model) : model_(model) {
   model_->AddObserver(this);
   Reconcile();
+  MaybeScheduleSeed();
 }
 
 AgentTabGrouper::~AgentTabGrouper() {
@@ -131,6 +169,7 @@ void AgentTabGrouper::OnTabStripModelChanged(
     agent_gateway::FocusArbiter::Get()->ResetToUser();
   }
   ScheduleReconcile();
+  MaybeScheduleSeed();
 }
 
 void AgentTabGrouper::ScheduleReconcile() {
@@ -165,11 +204,11 @@ void AgentTabGrouper::Reconcile() {
   }
   if (browser) {
     ReassertHiddenScheduledTaskTabRows(browser);
-    ReassertHiddenBookmarkTabRows(browser);
   }
 
   std::vector<int> scheduled_indices;
   std::vector<int> adhoc_indices;
+  std::vector<int> bookmark_indices;
   for (int i = 0; i < model_->count(); ++i) {
     content::WebContents* wc = model_->GetWebContentsAt(i);
     agent_gateway::TabOwnership* own = agent_gateway::TabOwnership::Get(wc);
@@ -188,6 +227,8 @@ void AgentTabGrouper::Reconcile() {
       scheduled_indices.push_back(i);
     } else if (IsAdHocAgentTab(wc)) {
       adhoc_indices.push_back(i);
+    } else if (own && own->bookmark_node_id != 0) {
+      bookmark_indices.push_back(i);
     }
   }
 
@@ -232,7 +273,101 @@ void AgentTabGrouper::Reconcile() {
     model_->ChangeTabGroupVisuals(agent_group, agent_visual);
   }
 
+  if (bookmark_indices.empty()) {
+    ClearGroupIfEmpty(model_, kBookmarksGroupPrefix);
+  } else {
+    tab_groups::TabGroupId bookmark_group = EnsureGroup(
+        model_, kBookmarksGroupPrefix, bookmark_indices,
+        tab_groups::TabGroupColorId::kYellow);
+    for (int index : bookmark_indices) {
+      if (!model_->GetTabGroupForTab(index).has_value()) {
+        model_->AddToExistingGroup({index}, bookmark_group);
+      } else if (model_->GetTabGroupForTab(index).value() != bookmark_group) {
+        model_->RemoveFromGroup({index});
+        model_->AddToExistingGroup({index}, bookmark_group);
+      }
+    }
+    tab_groups::TabGroupVisualData bookmark_visual(
+        GroupTitle(kBookmarksGroupPrefix,
+                   static_cast<int>(bookmark_indices.size())),
+        tab_groups::TabGroupColorId::kYellow);
+    model_->ChangeTabGroupVisuals(bookmark_group, bookmark_visual);
+  }
+
   reconciling_ = false;
+}
+
+void AgentTabGrouper::MaybeScheduleSeed() {
+  if (seeded_ || seed_scheduled_ || !model_ || model_->count() == 0) {
+    return;
+  }
+  seed_scheduled_ = true;
+  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE, base::BindOnce(&AgentTabGrouper::SeedDefaultBookmarks,
+                                weak_factory_.GetWeakPtr()));
+}
+
+void AgentTabGrouper::SeedDefaultBookmarks() {
+  seed_scheduled_ = false;
+  if (seeded_ || !model_) {
+    return;
+  }
+
+  Browser* browser = nullptr;
+  if (model_->count() > 0) {
+    if (BrowserWindowInterface* bwi =
+            GlobalBrowserCollection::GetInstance()->FindBrowserWithTab(
+                model_->GetWebContentsAt(0))) {
+      browser = bwi->GetBrowserForMigrationOnly();
+    }
+  }
+  if (!browser) {
+    // No browser yet; a later OnTabStripModelChanged re-schedules the seed.
+    return;
+  }
+  seeded_ = true;
+
+  // Collect synthetic ids already present so we don't re-open on a second
+  // grouper for the same model (and to stay idempotent across launches once
+  // tabs are restored with the tag).
+  std::vector<int64_t> present_ids;
+  for (int i = 0; i < model_->count(); ++i) {
+    agent_gateway::TabOwnership* own =
+        agent_gateway::TabOwnership::Get(model_->GetWebContentsAt(i));
+    if (own && own->bookmark_node_id != 0) {
+      present_ids.push_back(own->bookmark_node_id);
+    }
+  }
+
+  bool opened_any = false;
+  int64_t synthetic_id = 0;
+  for (const auto& bookmark : kDefaultBookmarks) {
+    ++synthetic_id;
+    if (std::find(present_ids.begin(), present_ids.end(), synthetic_id) !=
+        present_ids.end()) {
+      continue;
+    }
+    const GURL url = ResolveBookmarkHref(bookmark.href);
+    if (!url.is_valid()) {
+      continue;
+    }
+    // Open in the background so the user's active tab keeps focus.
+    NavigateParams params(browser, url, ui::PAGE_TRANSITION_AUTO_BOOKMARK);
+    params.disposition = WindowOpenDisposition::NEW_BACKGROUND_TAB;
+    Navigate(&params);
+    if (params.navigated_or_inserted_contents) {
+      agent_gateway::TabOwnership::GetOrCreate(
+          params.navigated_or_inserted_contents)
+          ->bookmark_node_id = synthetic_id;
+      opened_any = true;
+    }
+  }
+
+  // Let the deferred Reconcile form the native "Bookmarks" group; never group
+  // synchronously here (TabStripModel re-entrancy).
+  if (opened_any) {
+    ScheduleReconcile();
+  }
 }
 
 }  // namespace xplorer

@@ -25,26 +25,20 @@ void ApplyToolbarPlacement(BrowserView* browser_view,
     return;
   }
 
-  const ToolbarPlacement placement = GetToolbarPlacement();
   const bool visible = GetToolbarVisible();
 
-  if (placement == ToolbarPlacement::kSidebar && sidebar_chrome) {
-    if (toolbar->parent() != sidebar_chrome->toolbar_host()) {
-      sidebar_chrome->AttachToolbar(toolbar);
-    } else if (!toolbar->vertical_layout()) {
-      toolbar->SetVerticalLayout(true);
+  // XPLORER: the Grok-apps pill toolbar no longer appears in the sidebar rail
+  // (bookmarks are a native tab group now). Keep only the top-container
+  // placement so the row can't reappear in the sidebar.
+  views::View* top = browser_view->top_container();
+  if (top && toolbar->parent() != top) {
+    if (toolbar->parent()) {
+      toolbar->parent()->RemoveChildView(toolbar);
     }
-  } else {
-    views::View* top = browser_view->top_container();
-    if (top && toolbar->parent() != top) {
-      if (toolbar->parent()) {
-        toolbar->parent()->RemoveChildView(toolbar);
-      }
-      top->AddChildView(toolbar);
-    }
-    toolbar->ClearProperty(views::kFlexBehaviorKey);
-    toolbar->SetVerticalLayout(false);
+    top->AddChildView(toolbar);
   }
+  toolbar->ClearProperty(views::kFlexBehaviorKey);
+  toolbar->SetVerticalLayout(false);
 
   toolbar->SetVisible(visible);
 

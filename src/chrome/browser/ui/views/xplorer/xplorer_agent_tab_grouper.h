@@ -40,12 +40,22 @@ class AgentTabGrouper : public TabStripModelObserver {
   // outside the guarded section.
   void ScheduleReconcile();
   void Reconcile();
+  // One-shot launch seeder: opens the hardcoded xAI default bookmarks as real
+  // background tabs (stamped TabOwnership::bookmark_node_id) so Reconcile()
+  // forms the native "Bookmarks" group. Guarded by |seeded_| to run once.
+  void SeedDefaultBookmarks();
+  // Schedules a deferred SeedDefaultBookmarks() once the strip has a tab (so a
+  // Browser exists). Called from the ctor and OnTabStripModelChanged; a no-op
+  // once seeded or already scheduled.
+  void MaybeScheduleSeed();
   std::optional<tab_groups::TabGroupId> FindAgentGroup() const;
   tab_groups::TabGroupId EnsureAgentGroup(int count);
 
   const raw_ptr<TabStripModel> model_;
   bool reconciling_ = false;
   bool reconcile_scheduled_ = false;
+  bool seeded_ = false;
+  bool seed_scheduled_ = false;
   base::WeakPtrFactory<AgentTabGrouper> weak_factory_{this};
 };
 

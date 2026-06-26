@@ -96,105 +96,11 @@ def patch_native_toolbar(src: Path):
         '#include "chrome/browser/ui/views/xplorer/xplorer_toolbar_view.h"'
         "  // XPLORER",
     )
-    edit(
-        browser_view_cc,
-        "  toolbar_ = top_container_->AddChildView(\n"
-        "      std::make_unique<ToolbarView>(browser_.get(), this));\n",
-        "  toolbar_ = top_container_->AddChildView(\n"
-        "      std::make_unique<ToolbarView>(browser_.get(), this));\n\n"
-        "  // XPLORER: native pill toolbar, owned by top_container_, always\n"
-        "  // present (parented eagerly, between bookmarks and the separator).\n"
-        "  xplorer_toolbar_ = top_container_->AddChildView(\n"
-        "      std::make_unique<xplorer::XplorerToolbarView>(\n"
-        "          browser_.get(), browser_->profile()));\n",
-    )
-    edit(
-        browser_view_cc,
-        "  layout_views.top_container_separator = top_container_separator_;",
-        "  layout_views.top_container_separator = top_container_separator_;\n"
-        "  layout_views.xplorer_toolbar = xplorer_toolbar_;  // XPLORER",
-    )
-
-    # --- browser_view_layout.h: forward-decl + struct field ----------------
-    layout_h = src / "chrome/browser/ui/views/frame/layout/browser_view_layout.h"
-    edit(
-        layout_h,
-        "class BookmarkBarView;",
-        "class BookmarkBarView;\n"
-        "namespace xplorer {\n"
-        "class XplorerToolbarView;\n"
-        "}  // namespace xplorer  // XPLORER",
-    )
-    edit(
-        layout_h,
-        "  raw_ptr<views::View> top_container_separator = nullptr;",
-        "  raw_ptr<views::View> top_container_separator = nullptr;\n\n"
-        "  // XPLORER: native pill toolbar strip (top_container child).\n"
-        "  raw_ptr<xplorer::XplorerToolbarView> xplorer_toolbar = nullptr;",
-    )
-
-    # --- browser_view_tabbed_layout_impl.cc: layout block + include --------
-    layout_impl = (src / "chrome/browser/ui/views/frame/layout/"
-                   "browser_view_tabbed_layout_impl.cc")
-
-    def dedupe_xplorer_toolbar_layout(path: Path):
-        text = path.read_text()
-        marker = ("  // XPLORER: native Xplorer pill toolbar, below bookmarks, "
-                  "above the\n")
-        if text.count(marker) <= 1:
-            return
-        first = text.find(marker)
-        second = text.find(marker, first + 1)
-        if second < 0:
-            return
-        end_marker = "    params.SetTop(xplorer_bounds.bottom());\n  }\n\n"
-        end = text.find(end_marker, second)
-        if end < 0:
-            return
-        path.write_text(text[:second] + text[end + len(end_marker):])
-        print(f"  deduped xplorer toolbar layout: {path}")
-
-    dedupe_xplorer_toolbar_layout(layout_impl)
-    edit(
-        layout_impl,
-        '#include "chrome/browser/ui/views/bookmarks/bookmark_bar_view.h"',
-        '#include "chrome/browser/ui/views/bookmarks/bookmark_bar_view.h"\n'
-        '#include "chrome/browser/ui/views/xplorer/xplorer_sidebar_prefs.h"  // XPLORER\n'
-        '#include "chrome/browser/ui/views/xplorer/xplorer_toolbar_view.h"'
-        "  // XPLORER",
-    )
-    xplorer_layout = "layout.AddChild(views().xplorer_toolbar"
-    if xplorer_layout not in layout_impl.read_text():
-        edit(
-            layout_impl,
-            "  // Maybe show the separator in the top container.\n"
-            "  if (IsParentedTo(views().top_container_separator, "
-            "views().top_container)) {",
-            "  // XPLORER: native Xplorer pill toolbar, below bookmarks, above the\n"
-            "  // contents separator. Only laid out in top_container when visible\n"
-            "  // and placement is top.\n"
-            "  if (views().xplorer_toolbar &&\n"
-            "      IsParentedTo(views().xplorer_toolbar, views().top_container)) {\n"
-            "    const bool xplorer_visible =\n"
-            "        xplorer::GetToolbarVisible() &&\n"
-            "        xplorer::GetToolbarPlacement() == xplorer::ToolbarPlacement::kTop &&\n"
-            "        views().xplorer_toolbar->GetVisible();\n"
-            "    const gfx::Rect xplorer_bounds(\n"
-            "        params.visual_client_area.x(), params.visual_client_area.y(),\n"
-            "        params.visual_client_area.width(),\n"
-            "        xplorer_visible\n"
-            "            ? views().xplorer_toolbar->GetPreferredSize().height()\n"
-            "            : 0);\n"
-            "    layout.AddChild(views().xplorer_toolbar, xplorer_bounds,\n"
-            "                    xplorer_visible);\n"
-            "    params.SetTop(xplorer_bounds.bottom());\n"
-            "  }\n\n"
-            "  // Maybe show the separator in the top container.\n"
-            "  if (IsParentedTo(views().top_container_separator, "
-            "views().top_container)) {",
-        )
-    else:
-        print(f"  skip (already applied): {layout_impl} toolbar layout block")
+    # XPLORER: the Grok-apps pill toolbar is no longer created/parented in
+    # top_container_ (bookmarks are now a native tab group). XplorerToolbarView
+    # stays compiled as the bookmark seed source / dead code; browser_view keeps
+    # a nullptr xplorer_toolbar_ member + accessor so the sidebar/placement
+    # context-menu callers still link (they null-guard).
 
     # --- BUILD.gn: compile the new source into the static_library("ui")
     # target next to bookmark_bar_view.cc (avoids a new GN target and the
@@ -623,8 +529,6 @@ def patch_vertical_sidebar(src: Path):
             '      "views/xplorer/xplorer_sidebar_chrome_view.h",  # XPLORER\n'
             '      "views/xplorer/xplorer_sidebar_bookmarks_view.cc",  # XPLORER\n'
             '      "views/xplorer/xplorer_sidebar_bookmarks_view.h",  # XPLORER\n'
-            '      "views/xplorer/xplorer_bookmark_tabs.cc",  # XPLORER\n'
-            '      "views/xplorer/xplorer_bookmark_tabs.h",  # XPLORER\n'
             '      "views/xplorer/xplorer_sidebar_row_button.cc",  # XPLORER\n'
             '      "views/xplorer/xplorer_sidebar_row_button.h",  # XPLORER\n'
             '      "views/xplorer/xplorer_sidebar_section_label.cc",  # XPLORER\n'
@@ -803,121 +707,6 @@ def patch_vertical_sidebar(src: Path):
             "      continue;\n"
             "    }\n"
             "    // The leading inset should not be applied for tab groups when the tab strip",
-        )
-
-
-def patch_vertical_tab_bookmark_strip(src: Path):
-    """Keep Tabs-strip selection on the last user tab while bookmark content shows."""
-    vtv_cc = src / "chrome/browser/ui/views/tabs/vertical/vertical_tab_view.cc"
-    anchor = "  active_ = tab_strip_model->IsTabInForeground(index);"
-    replacement = (
-        "  // XPLORER: bookmark tabs are sidebar-only; don't steal strip selection.\n"
-        "  active_ = xplorer::ShouldShowAsActiveInStrip(tab);"
-    )
-    if anchor in vtv_cc.read_text() and replacement not in vtv_cc.read_text():
-        edit(
-            vtv_cc,
-            '#include "chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_view.h"',
-            '#include "chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_view.h"\n'
-            '#include "chrome/browser/ui/views/xplorer/xplorer_bookmark_tabs.h"  // XPLORER',
-        )
-        edit(vtv_cc, anchor, replacement)
-
-    vts_view_cc = (src / "chrome/browser/ui/views/tabs/vertical/"
-                   "vertical_tab_strip_view.cc")
-    scroll_anchor = (
-        "  TabCollectionNode* activated_node =\n"
-        "      collection_node_->GetNodeForHandle(active_tab->GetHandle());\n"
-        "  CHECK(activated_node);\n"
-        "  ScrollToView(activated_node->view());"
-    )
-    # Restate the anchor's first line (the declaration) so edit() REPLACES the
-    # block instead of splicing after it (which duplicated activated_node and
-    # tripped -Wshadow). Reuse the existing activated_node — don't re-declare.
-    scroll_replacement = (
-        "  TabCollectionNode* activated_node =\n"
-        "      collection_node_->GetNodeForHandle(active_tab->GetHandle());\n"
-        "  CHECK(activated_node);\n"
-        "  // XPLORER: bookmark tabs have no visible strip row, so skip scroll.\n"
-        "  if (!xplorer::IsBookmarkWebContents(active_tab->GetContents())) {\n"
-        "    ScrollToView(activated_node->view());\n"
-        "  }"
-    )
-    vts_text = vts_view_cc.read_text()
-    if scroll_anchor in vts_text and (
-            "bookmark tabs have no visible strip row" not in vts_text):
-        edit(
-            vts_view_cc,
-            '#include "chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_view.h"',
-            '#include "chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_view.h"\n'
-            '#include "chrome/browser/ui/views/xplorer/xplorer_bookmark_tabs.h"  // XPLORER',
-        )
-        edit(vts_view_cc, scroll_anchor, scroll_replacement)
-
-
-def patch_bookmark_bar_navigation(src: Path):
-    """Route bookmark-bar clicks through Arc-style dedicated bookmark tabs."""
-    bbv = src / "chrome/browser/ui/views/bookmarks/bookmark_bar_view.cc"
-    if "xplorer::OpenBookmarkTab" not in bbv.read_text():
-        edit(
-            bbv,
-            '#include "chrome/browser/ui/views/frame/browser_view.h"',
-            '#include "chrome/browser/ui/views/frame/browser_view.h"\n'
-            '#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"  '
-            "// XPLORER\n"
-            '#include "chrome/browser/ui/views/xplorer/xplorer_bookmark_tabs.h"  // XPLORER',
-        )
-        edit(
-            bbv,
-            "  RecordAppLaunch(browser_->profile(), node->url());\n"
-            "  bookmarks::OpenAllIfAllowed(\n"
-            "      browser_, {node}, ui::DispositionFromEventFlags(event.flags()),\n"
-            "      bookmarks::OpenAllBookmarksContext::kNone,\n"
-            "      page_load_metrics::NavigationHandleUserData::InitiatorLocation::\n"
-            "          kBookmarkBar,\n"
-            "      {{BookmarkLaunchLocation::kAttachedBar, base::TimeTicks::Now()}});",
-            "  RecordAppLaunch(browser_->profile(), node->url());\n"
-            "  // XPLORER: Arc-style dedicated bookmark tabs (same as sidebar).\n"
-            "  xplorer::OpenBookmarkTab(browser_, node->url(), node->id());",
-        )
-
-    bmd = src / "chrome/browser/ui/views/bookmarks/bookmark_menu_delegate.cc"
-    bmd_text = bmd.read_text()
-    old_menu_guard = (
-        "  if (selection.size() == 1 && selection[0]->is_url() &&\n"
-        "      initial_disposition == WindowOpenDisposition::CURRENT_TAB) {"
-    )
-    new_menu_guard = (
-        "  if (selection.size() == 1 && selection[0]->is_url()) {"
-    )
-    if old_menu_guard in bmd_text:
-        bmd.write_text(bmd_text.replace(old_menu_guard, new_menu_guard, 1))
-        print(f"  updated menu guard: {bmd}")
-    if "xplorer::OpenBookmarkTab" not in bmd.read_text():
-        edit(
-            bmd,
-            '#include "chrome/browser/ui/views/bookmarks/bookmark_bar_view.h"',
-            '#include "chrome/browser/ui/views/bookmarks/bookmark_bar_view.h"\n'
-            '#include "chrome/browser/ui/views/xplorer/xplorer_bookmark_tabs.h"  // XPLORER',
-        )
-        edit(
-            bmd,
-            "  std::vector<raw_ptr<const BookmarkNode, VectorExperimental>> selection =\n"
-            "      menu_id_to_node_map_.find(id)->second.GetUnderlyingNodes(\n"
-            "          GetBookmarkMergedSurfaceService());\n"
-            "  bookmarks::OpenAllIfAllowed(browser_, selection, initial_disposition,\n"
-            "                              context);",
-            "  std::vector<raw_ptr<const BookmarkNode, VectorExperimental>> selection =\n"
-            "      menu_id_to_node_map_.find(id)->second.GetUnderlyingNodes(\n"
-            "          GetBookmarkMergedSurfaceService());\n"
-            "  // XPLORER: single URL picks get a dedicated bookmark tab.\n"
-            "  if (selection.size() == 1 && selection[0]->is_url()) {\n"
-            "    xplorer::OpenBookmarkTab(browser_, selection[0]->url(),\n"
-            "                             selection[0]->id());\n"
-            "    return;\n"
-            "  }\n"
-            "  bookmarks::OpenAllIfAllowed(browser_, selection, initial_disposition,\n"
-            "                              context);",
         )
 
 
@@ -1933,9 +1722,6 @@ def main(src: Path):
 
     # Arc-style vertical sidebar: bookmarks + optional toolbar + agent tab group.
     patch_vertical_sidebar(src)
-
-    patch_vertical_tab_bookmark_strip(src)
-    patch_bookmark_bar_navigation(src)
 
     patch_xplorer_settings_access(src)
 

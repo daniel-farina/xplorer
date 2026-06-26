@@ -10,7 +10,15 @@ namespace content {
 class WebContents;
 }  // namespace content
 
+namespace tabs {
+class TabInterface;
+}  // namespace tabs
+
 namespace xplorer {
+
+// Hides or shows a tab's row in the vertical tab strip. Shared by the
+// scheduled-task hiding path (and previously the Arc bookmark tabs).
+void SetTabRowVisible(Browser* browser, tabs::TabInterface* tab, bool visible);
 
 // Hides a scheduled-task tab row from the main Tabs strip (task tabs are owned
 // by a background job, not user browsing).
