@@ -283,9 +283,13 @@ void AgentTabGrouper::OnTabStripModelChanged(
   // A manually-closed bookmark tab must stick: drop its id from the persisted
   // config so a later ApplyBookmarkConfig() or a new window's seeder doesn't
   // re-open it. Only treat a real delete (kDeleted) as a close — a tab moved to
-  // another window (kInsertedIntoOtherTabStrip) keeps its bookmark id. Never
-  // mutate config here (re-entrancy); stage + defer to FlushClosedBookmarkConfigs.
-  if (change.type() == TabStripModelChange::kRemoved) {
+  // another window (kInsertedIntoOtherTabStrip) keeps its bookmark id. Skip
+  // entirely while the strip is closing_all() (window close / shutdown): those
+  // removals are kDeleted too, but must NOT wipe the persisted bookmark config —
+  // those tabs are meant to re-open next launch. Never mutate config here
+  // (re-entrancy); stage + defer to FlushClosedBookmarkConfigs.
+  if (change.type() == TabStripModelChange::kRemoved &&
+      !tab_strip_model->closing_all()) {
     if (const TabStripModelChange::Remove* removed = change.GetRemove()) {
       for (const TabStripModelChange::RemovedTab& r : removed->contents) {
         if (r.remove_reason != TabRemovedReason::kDeleted || !r.contents) {
