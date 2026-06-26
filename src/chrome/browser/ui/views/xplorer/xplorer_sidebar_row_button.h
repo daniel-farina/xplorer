@@ -5,7 +5,6 @@
 #define CHROME_BROWSER_UI_VIEWS_XPLORER_XPLORER_SIDEBAR_ROW_BUTTON_H_
 
 #include "ui/base/metadata/metadata_header_macros.h"
-#include "ui/base/models/image_model.h"
 #include "ui/views/controls/button/md_text_button.h"
 
 namespace xplorer {
@@ -22,10 +21,7 @@ class XplorerSidebarRowButton : public views::MdTextButton {
   XplorerSidebarRowButton& operator=(const XplorerSidebarRowButton&) = delete;
   ~XplorerSidebarRowButton() override;
 
-  void SetRowIcon(const ui::ImageModel& icon);
   void SetRowTitle(std::u16string_view title);
-  // Folder rows show a leading expand/collapse chevron in the title.
-  void SetFolderStyle(bool is_folder, bool expanded);
   void SetSelected(bool selected);
 
   // views::View:
@@ -40,8 +36,6 @@ class XplorerSidebarRowButton : public views::MdTextButton {
   void RefreshTitle();
 
   std::u16string base_title_;
-  bool is_folder_ = false;
-  bool folder_expanded_ = false;
   bool selected_ = false;
 };
 

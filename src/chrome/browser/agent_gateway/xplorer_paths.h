@@ -8,7 +8,6 @@
 
 namespace xplorer_paths {
 
-inline constexpr char kProductName[] = "Xplorer";
 inline constexpr char kDataDir[] = ".xplorer";
 
 base::FilePath DataDir();

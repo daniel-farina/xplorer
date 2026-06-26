@@ -46,28 +46,13 @@ XplorerSidebarRowButton::XplorerSidebarRowButton(PressedCallback callback,
 
 XplorerSidebarRowButton::~XplorerSidebarRowButton() = default;
 
-void XplorerSidebarRowButton::SetRowIcon(const ui::ImageModel& icon) {
-  SetImageModel(views::Button::STATE_NORMAL, icon);
-}
-
 void XplorerSidebarRowButton::SetRowTitle(std::u16string_view title) {
   base_title_ = std::u16string(title);
   RefreshTitle();
 }
 
-void XplorerSidebarRowButton::SetFolderStyle(bool is_folder, bool expanded) {
-  is_folder_ = is_folder;
-  folder_expanded_ = expanded;
-  RefreshTitle();
-}
-
 void XplorerSidebarRowButton::RefreshTitle() {
-  std::u16string text;
-  if (is_folder_) {
-    text += folder_expanded_ ? u"\u25BE " : u"\u25B8 ";
-  }
-  text += base_title_;
-  SetText(text);
+  SetText(base_title_);
 }
 
 void XplorerSidebarRowButton::SetSelected(bool selected) {

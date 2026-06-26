@@ -13,10 +13,8 @@
 #include <utility>
 
 #include "base/base64.h"
-#include "base/base_paths.h"
 #include "base/files/file_util.h"
 #include "base/functional/bind.h"
-#include "base/path_service.h"
 #include "base/logging.h"
 #include "base/message_loop/message_pump_type.h"
 #include "base/json/json_reader.h"

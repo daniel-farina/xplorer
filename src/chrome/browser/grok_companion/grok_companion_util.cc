@@ -15,7 +15,6 @@
 #include "base/json/json_writer.h"
 #include "base/json/json_reader.h"
 #include "base/no_destructor.h"
-#include "base/path_service.h"
 #include "base/strings/escape.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
@@ -243,10 +242,6 @@ base::RepeatingClosureList& BookmarkConfigChangedCallbacks() {
 }
 
 }  // namespace
-
-base::FilePath GetXplorerDataDir() {
-  return xplorer_paths::DataDir();
-}
 
 base::FilePath ResolveDataFile(const char* filename) {
   return xplorer_paths::Resolve(filename);

@@ -21,7 +21,6 @@
 
 #include <deque>
 #include <map>
-#include <utility>
 #include <set>
 #include <utility>
 
@@ -52,7 +51,6 @@
 #include "chrome/browser/agent_gateway/app_store.h"
 #include "chrome/browser/agent_gateway/browser_api.h"
 #include "chrome/browser/agent_gateway/focus_arbiter.h"
-#include "base/environment.h"
 #include "chrome/browser/agent_gateway/scheduler.h"
 #include "chrome/browser/agent_gateway/xplorer_paths.h"
 #include "chrome/browser/grok_companion/grok_companion_util.h"
@@ -2289,42 +2287,6 @@ base::DictValue RunGrokChat(const std::string& message,
   return fallback;
 }
 
-// Blocking analogue of the streaming RunGrokAgentStream: runs an app-build with
-// --cwd <cwd> + kAppBuildRules and captures the final reply (no live HTTP
-// stream). Mirrors RunGrokChat's GetAppOutputWithExitCode + JSON-parse shape so
-// the scheduler can persist the assistant reply the same way. Blocks; call from
-// a base::ThreadPool {MayBlock} task.
-base::DictValue RunGrokAppBuild(const std::string& message,
-                                const std::string& session_id,
-                                const std::string& model,
-                                const base::FilePath& cwd) {
-  base::CommandLine cmd = BuildGrokAgentCommand(
-      message, session_id, model, /*streaming=*/false, cwd, kAppBuildRules);
-#if BUILDFLAG(IS_WIN)
-  cmd = MaybeWrapForWindowsShell(cmd);
-#endif
-  int exit_code = 0;
-  std::string output;
-  if (!base::GetAppOutputWithExitCode(cmd, &output, &exit_code) ||
-      exit_code != 0) {
-    base::DictValue err;
-    std::string err_text = output.empty() ? "grok build failed" : output;
-    if (err_text.find("auth") != std::string::npos ||
-        err_text.find("login") != std::string::npos) {
-      err_text += " — run: grok login --oauth";
-    }
-    err.Set("error", err_text);
-    return err;
-  }
-  if (auto parsed = base::JSONReader::ReadDict(output, base::JSON_PARSE_RFC))
-    return std::move(*parsed);
-  base::DictValue fallback;
-  fallback.Set("text", output);
-  if (!session_id.empty())
-    fallback.Set("sessionId", session_id);
-  return fallback;
-}
-
 // Headless dispatch for the scheduler. Mirrors the non-streaming RunAsync path
 // of POST /api/conversations/{id}/message (busy guard -> append user msg ->
 // register run -> blocking RunGrokChat -> persist reply), but with no live HTTP
@@ -2480,10 +2442,10 @@ void DispatchScheduledRun(
 
 // Headless app-build dispatch for the scheduler. Mirrors DispatchScheduledRun
 // (auto-create/locate conversation -> busy guard -> append user msg -> register
-// run -> blocking run -> persist reply), but invokes the BLOCKING app-build run
-// RunGrokAppBuild(message, session_id, model, cwd) instead of RunGrokChat. The
-// model defaults via ResolveAppBuildModel (matching POST /apps/{id}/build/stream)
-// so an unset model still builds. Fired by Scheduler::FireJob when job.cwd is set.
+// run -> blocking run -> persist reply), but builds the app-build command with
+// kAppBuildRules + --cwd instead of a plain chat run. The model defaults via
+// ResolveAppBuildModel (matching POST /apps/{id}/build/stream) so an unset model
+// still builds. Fired by Scheduler::FireJob when job.cwd is set.
 void DispatchScheduledAppBuild(
     const std::string& job_id,
     const std::string& job_label,

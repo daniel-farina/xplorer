@@ -23,7 +23,6 @@ class WebContents;
 namespace grok_companion {
 
 inline constexpr char kProductName[] = "Xplorer";
-inline constexpr char kXplorerDataDir[] = ".xplorer";
 
 inline constexpr char kCompanionHost[] = "127.0.0.1";
 // Grok UI is served natively by AgentGateway (default 9334).
@@ -31,7 +30,6 @@ inline constexpr int kCompanionPort = 9334;
 inline constexpr char kCompanionPath[] = "/";
 inline constexpr char kSearchPath[] = "/search";
 inline constexpr char kWelcomePath[] = "/welcome";
-inline constexpr char kGrokWebHomeURL[] = "https://grok.com/";
 inline constexpr char kGrokWikiHomeURL[] = "https://grokipedia.com/";
 inline constexpr char kSearchHomeBuild[] = "build";
 inline constexpr char kSearchHomeWeb[] = "web";
@@ -61,7 +59,6 @@ inline bool IsGrokToolbarOverlayHost(const GURL& url) {
   return false;
 }
 
-base::FilePath GetXplorerDataDir();
 base::FilePath ResolveDataFile(const char* filename);
 
 GURL GetCompanionURL();

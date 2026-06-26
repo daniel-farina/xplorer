@@ -58,13 +58,9 @@ class AgentSession : public content::DevToolsAgentHostClient {
   void SendCommand(const std::string& method,
                    base::DictValue params,
                    ResultCallback cb);
-  void WaitForLoad(ResultCallback cb);
 
   scoped_refptr<content::DevToolsAgentHost> host_;
   base::WeakPtr<content::WebContents> web_contents_;
-  // Held while a screenshot is in flight so the renderer keeps producing
-  // compositor frames even when the tab/window is occluded or backgrounded.
-  base::ScopedClosureRunner capture_hold_;
   int next_id_ = 1;
   std::map<int, ResultCallback> pending_;
   ResultCallback load_waiter_;
