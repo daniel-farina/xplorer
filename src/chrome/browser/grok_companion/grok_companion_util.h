@@ -102,6 +102,28 @@ base::CallbackListSubscription AddToolbarConfigChangedCallback(
 // Notifies subscribers. Must be called on the UI thread.
 void NotifyToolbarConfigChanged();
 
+// Reads grok_settings.json and returns the ordered top-level "bookmarks" array
+// as a vector of Dicts (one per bookmark: {id,label,url}). Returns an EMPTY
+// vector when the file is missing/unparseable or "bookmarks" is absent/non-list
+// — the seeder treats empty as "first run" and persists the built-in defaults.
+// The synthetic "id" string is parsed to an int64 and stamped on the open tab
+// as TabOwnership::bookmark_node_id so the native "Bookmarks" group stays stable
+// across launches and config edits.
+std::vector<base::DictValue> GetBookmarkConfigs();
+
+// Replaces the ordered top-level "bookmarks" array in grok_settings.json with
+// |bookmarks| (each a {id,label,url} dict), saves, and notifies live tab
+// groupers. Merge-safe: only the "bookmarks" key is rewritten.
+void SetBookmarkConfigs(const std::vector<base::DictValue>& bookmarks);
+
+// Live-reload seam. Fired on the UI thread whenever the bookmark list is
+// persisted in-process (the gateway's /api/settings write, or
+// SetBookmarkConfigs), so open AgentTabGroupers can re-open/close bookmark tabs.
+base::CallbackListSubscription AddBookmarkConfigChangedCallback(
+    base::RepeatingClosure callback);
+// Notifies subscribers. Must be called on the UI thread.
+void NotifyBookmarkConfigChanged();
+
 // NTP / omnibox Grok chip destination based on search_home preference.
 GURL GetDefaultSearchHomeURL();
 

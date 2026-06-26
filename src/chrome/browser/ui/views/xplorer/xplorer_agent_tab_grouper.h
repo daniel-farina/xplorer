@@ -5,12 +5,16 @@
 #define CHROME_BROWSER_UI_VIEWS_XPLORER_XPLORER_AGENT_TAB_GROUPER_H_
 
 #include <optional>
+#include <vector>
 
+#include "base/callback_list.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
+#include "base/values.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
 #include "components/tab_groups/tab_group_id.h"
 
+class Browser;
 class TabStripModel;
 
 namespace xplorer {
@@ -40,10 +44,22 @@ class AgentTabGrouper : public TabStripModelObserver {
   // outside the guarded section.
   void ScheduleReconcile();
   void Reconcile();
-  // One-shot launch seeder: opens the hardcoded xAI default bookmarks as real
-  // background tabs (stamped TabOwnership::bookmark_node_id) so Reconcile()
-  // forms the native "Bookmarks" group. Guarded by |seeded_| to run once.
+  // One-shot launch seeder: reads the user-editable settings["bookmarks"] list
+  // (materializing + persisting the built-in defaults on first run), then opens
+  // each as a real background tab (stamped TabOwnership::bookmark_node_id) so
+  // Reconcile() forms the native "Bookmarks" group. Guarded by |seeded_|.
   void SeedDefaultBookmarks();
+  // Opens a background tab for every bookmark config whose bookmark_node_id is
+  // not already present in the model (de-duped by id), stamping the id. Returns
+  // true if any tab was opened. Shared by the seeder and the live-reload path.
+  bool OpenMissingBookmarkTabs(Browser* browser,
+                               const std::vector<base::DictValue>& configs);
+  // Live-reload callback: fired when the user edits the bookmark list. Schedules
+  // a deferred ApplyBookmarkConfig() (never mutates the model synchronously).
+  void OnBookmarkConfigChanged();
+  // Re-reads the bookmark config and reconciles open bookmark tabs: closes tabs
+  // whose id was removed, opens tabs for new ids, then ScheduleReconcile().
+  void ApplyBookmarkConfig();
   // Schedules a deferred SeedDefaultBookmarks() once the strip has a tab (so a
   // Browser exists). Called from the ctor and OnTabStripModelChanged; a no-op
   // once seeded or already scheduled.
@@ -56,6 +72,8 @@ class AgentTabGrouper : public TabStripModelObserver {
   bool reconcile_scheduled_ = false;
   bool seeded_ = false;
   bool seed_scheduled_ = false;
+  bool bookmark_reload_scheduled_ = false;
+  base::CallbackListSubscription bookmark_config_subscription_;
   base::WeakPtrFactory<AgentTabGrouper> weak_factory_{this};
 };
 

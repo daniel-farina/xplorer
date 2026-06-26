@@ -241,6 +241,13 @@ base::RepeatingClosureList& ToolbarConfigChangedCallbacks() {
   return *list;
 }
 
+// Subscribers (live AgentTabGroupers) notified when the user-editable bookmark
+// list changes, so open "Bookmarks" group tabs can be reconciled in place.
+base::RepeatingClosureList& BookmarkConfigChangedCallbacks() {
+  static base::NoDestructor<base::RepeatingClosureList> list;
+  return *list;
+}
+
 }  // namespace
 
 base::FilePath GetXplorerDataDir() {
@@ -349,6 +356,39 @@ base::CallbackListSubscription AddToolbarConfigChangedCallback(
 
 void NotifyToolbarConfigChanged() {
   ToolbarConfigChangedCallbacks().Notify();
+}
+
+std::vector<base::DictValue> GetBookmarkConfigs() {
+  std::vector<base::DictValue> bookmarks;
+  base::DictValue settings = LoadGrokSettings();
+  const base::ListValue* list = settings.FindList("bookmarks");
+  if (!list)
+    return bookmarks;
+  for (const base::Value& entry : *list) {
+    if (!entry.is_dict())
+      continue;
+    bookmarks.push_back(entry.GetDict().Clone());
+  }
+  return bookmarks;
+}
+
+void SetBookmarkConfigs(const std::vector<base::DictValue>& bookmarks) {
+  base::DictValue settings = LoadGrokSettings();
+  base::ListValue list;
+  for (const base::DictValue& bookmark : bookmarks)
+    list.Append(bookmark.Clone());
+  settings.Set("bookmarks", std::move(list));
+  SaveGrokSettings(settings);
+  NotifyBookmarkConfigChanged();
+}
+
+base::CallbackListSubscription AddBookmarkConfigChangedCallback(
+    base::RepeatingClosure callback) {
+  return BookmarkConfigChangedCallbacks().Add(std::move(callback));
+}
+
+void NotifyBookmarkConfigChanged() {
+  BookmarkConfigChangedCallbacks().Notify();
 }
 
 GURL GetDefaultSearchHomeURL() {

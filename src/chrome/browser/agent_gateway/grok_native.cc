@@ -485,6 +485,16 @@ void MergeToolbarSettings(const base::DictValue& incoming) {
   SaveSettings(settings);
 }
 
+// Writes the full ordered top-level "bookmarks" list, leaving every other key
+// (toolbar/model/…) untouched. Like MergeToolbarSettings, this does NOT notify:
+// the gateway runs on the IO thread, so the live-reload notify is posted to the
+// UI thread separately (tab groupers live there).
+void SaveBookmarkSettings(base::ListValue bookmarks) {
+  base::DictValue settings = LoadSettings();
+  settings.Set("bookmarks", std::move(bookmarks));
+  SaveSettings(settings);
+}
+
 std::string GetConfiguredModel() {
   base::DictValue settings = LoadSettings();
   if (const std::string* model = settings.FindString("model");
@@ -3006,6 +3016,7 @@ bool GrokNative::TryHandleRequest(
     const std::string* search_model = body->FindString("search_model");
     const std::string* home = body->FindString("search_home");
     const base::DictValue* toolbar = body->FindDict("toolbar");
+    const base::ListValue* bookmarks = body->FindList("bookmarks");
     std::optional<bool> welcome = body->FindBool("welcome_completed");
     std::optional<int> max_turns = body->FindInt("max_turns");
     const std::string* effort = body->FindString("effort");
@@ -3082,11 +3093,46 @@ bool GrokNative::TryHandleRequest(
           base::BindOnce(&grok_companion::NotifyToolbarConfigChanged));
       updated = true;
     }
+    if (bookmarks) {
+      // Persist the full ordered bookmark list. Each entry must be
+      // {id,label,url}; entries with an empty/invalid (non-http) url are skipped
+      // so a bad row can't open an unnavigable tab on the next launch/reload.
+      // The id is the caller's stable string (parsed to int64 by the seeder for
+      // the bookmark_node_id stamp); a missing/empty id falls back to the
+      // 1-based row index so the list always has stable ids.
+      base::ListValue configs;
+      int row = 0;
+      for (const base::Value& entry : *bookmarks) {
+        ++row;
+        const base::DictValue* d = entry.GetIfDict();
+        if (!d)
+          continue;
+        const std::string* url = d->FindString("url");
+        if (!url || url->empty() || !IsHttpUrl(*url) ||
+            !GURL(*url).is_valid()) {
+          continue;
+        }
+        const std::string* id = d->FindString("id");
+        const std::string* label = d->FindString("label");
+        base::DictValue out;
+        out.Set("id", (id && !id->empty()) ? *id : base::NumberToString(row));
+        out.Set("label", label ? *label : std::string());
+        out.Set("url", *url);
+        configs.Append(std::move(out));
+      }
+      SaveBookmarkSettings(std::move(configs));
+      // Live-reload the native "Bookmarks" group (groupers live on the UI
+      // thread); the gateway POST runs on the IO thread.
+      content::GetUIThreadTaskRunner({})->PostTask(
+          FROM_HERE,
+          base::BindOnce(&grok_companion::NotifyBookmarkConfigChanged));
+      updated = true;
+    }
     if (!updated) {
       base::DictValue err;
       err.Set("error",
-              "provide model, search_model, search_home, toolbar, and/or "
-              "welcome_completed");
+              "provide model, search_model, search_home, toolbar, bookmarks, "
+              "and/or welcome_completed");
       SendJson(server, connection_id, net::HTTP_BAD_REQUEST, std::move(err));
       return true;
     }
@@ -3102,10 +3148,13 @@ bool GrokNative::TryHandleRequest(
     d.Set("grok_wiki_url", kGrokWikiHomeURL);
     d.Set("welcome_completed", grok_companion::HasCompletedWelcome());
     d.Set("product_name", grok_companion::kProductName);
-    // Reflect the stored toolbar config back so the editor can re-read it.
-    if (base::DictValue settings = LoadSettings();
-        const base::DictValue* stored = settings.FindDict("toolbar")) {
-      d.Set("toolbar", stored->Clone());
+    // Reflect the stored toolbar + bookmark config back so the editor can
+    // re-read them.
+    if (base::DictValue settings = LoadSettings(); true) {
+      if (const base::DictValue* stored = settings.FindDict("toolbar"))
+        d.Set("toolbar", stored->Clone());
+      if (const base::ListValue* stored_bm = settings.FindList("bookmarks"))
+        d.Set("bookmarks", stored_bm->Clone());
     }
     EnrichSettingsResponse(&d, gateway_port);
     SendJson(server, connection_id, net::HTTP_OK, std::move(d));

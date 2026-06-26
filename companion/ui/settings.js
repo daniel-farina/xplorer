@@ -529,4 +529,154 @@ document.getElementById('toolbar-reset')?.addEventListener('click', async () => 
 
 loadToolbarEditor();
 
+// --------------------------------------------------------------------------
+// Bookmarks editor. Config contract (stored top-level under "bookmarks") is an
+// ORDERED ARRAY: [ {id, label, url} ]. Order in the array == tab order in the
+// native "Bookmarks" group. The string "id" is parsed to an int64 by the C++
+// seeder and stamped on the tab as TabOwnership::bookmark_node_id, so it must
+// be a stable, unique, positive integer. Existing ids are preserved; a newly
+// added row gets max(existing numeric ids)+1. Empty/invalid-url rows are
+// dropped server-side. Empty list → built-in defaults re-seeded next launch.
+// --------------------------------------------------------------------------
+const bookmarksEditor = document.getElementById('bookmarks-editor');
+const bookmarksStatus = document.getElementById('bookmarks-status');
+const bookmarksAdd = document.getElementById('bookmarks-add');
+
+function setBookmarksStatus(msg, kind = '') {
+  if (!bookmarksStatus) return;
+  bookmarksStatus.textContent = msg;
+  bookmarksStatus.className = 'settings-status' + (kind ? ` ${kind}` : '');
+}
+
+/** Render one bookmark row: ▲▼ reorder + label + url + remove. */
+function makeBookmarkRow(bm = {}) {
+  const card = document.createElement('div');
+  card.className = 'tb-pill';
+  // Stash the id on the row so collect can preserve it (blank for new rows).
+  card.dataset.bmId = bm.id != null ? String(bm.id) : '';
+
+  const head = document.createElement('div');
+  head.className = 'tb-pill-head';
+
+  const order = document.createElement('div');
+  order.className = 'tb-order';
+  const up = document.createElement('button');
+  up.type = 'button';
+  up.className = 'tb-order-btn tb-up';
+  up.title = 'Move up';
+  up.textContent = '▲';
+  up.addEventListener('click', () => {
+    const prev = card.previousElementSibling;
+    if (prev) card.parentNode.insertBefore(card, prev);
+  });
+  const down = document.createElement('button');
+  down.type = 'button';
+  down.className = 'tb-order-btn tb-down';
+  down.title = 'Move down';
+  down.textContent = '▼';
+  down.addEventListener('click', () => {
+    const next = card.nextElementSibling;
+    if (next) card.parentNode.insertBefore(next, card);
+  });
+  order.append(up, down);
+
+  const fields = document.createElement('div');
+  fields.className = 'tb-fields';
+  const label = document.createElement('input');
+  label.type = 'text';
+  label.className = 'tb-label';
+  label.placeholder = 'Label';
+  label.value = bm.label || '';
+  const url = document.createElement('input');
+  url.type = 'text';
+  url.className = 'tb-href';
+  url.placeholder = 'https://…';
+  url.value = bm.url || '';
+  fields.append(label, url);
+
+  const remove = document.createElement('button');
+  remove.type = 'button';
+  remove.className = 'tb-pill-remove';
+  remove.title = 'Remove bookmark';
+  remove.textContent = '×';
+  remove.addEventListener('click', () => card.remove());
+
+  head.append(order, fields, remove);
+  card.appendChild(head);
+  return card;
+}
+
+/** Render the editor from a list of {id,label,url} objects. */
+function renderBookmarksEditor(bookmarks) {
+  if (!bookmarksEditor) return;
+  bookmarksEditor.innerHTML = '';
+  for (const bm of bookmarks) bookmarksEditor.appendChild(makeBookmarkRow(bm));
+}
+
+/** Largest numeric id currently in the editor (0 if none) — for new-row ids. */
+function maxBookmarkId() {
+  let max = 0;
+  bookmarksEditor?.querySelectorAll('.tb-pill').forEach((card) => {
+    const n = parseInt(card.dataset.bmId, 10);
+    if (Number.isFinite(n) && n > max) max = n;
+  });
+  return max;
+}
+
+/** Collect [{id,label,url}], preserving ids and assigning ids to new rows. */
+function collectBookmarks() {
+  const out = [];
+  if (!bookmarksEditor) return out;
+  let nextId = maxBookmarkId() + 1;
+  bookmarksEditor.querySelectorAll('.tb-pill').forEach((card) => {
+    const label = card.querySelector('.tb-label')?.value.trim() || '';
+    const url = card.querySelector('.tb-href')?.value.trim() || '';
+    let id = card.dataset.bmId;
+    if (!id) {
+      id = String(nextId);
+      nextId += 1;
+      card.dataset.bmId = id;
+    }
+    out.push({ id, label, url });
+  });
+  return out;
+}
+
+async function loadBookmarksEditor() {
+  let bookmarks = [];
+  try {
+    const settings = await fetchSettings();
+    const stored = settings.bookmarks;
+    if (Array.isArray(stored)) {
+      bookmarks = stored.map((b) => ({
+        id: b.id != null ? String(b.id) : '',
+        label: b.label || '',
+        url: b.url || '',
+      }));
+    }
+  } catch (e) {
+    setBookmarksStatus(e.message, 'err');
+  }
+  renderBookmarksEditor(bookmarks);
+}
+
+bookmarksAdd?.addEventListener('click', () => {
+  const card = makeBookmarkRow({ id: String(maxBookmarkId() + 1) });
+  bookmarksEditor.appendChild(card);
+  card.querySelector('.tb-label')?.focus();
+});
+
+document.getElementById('bookmarks-save')?.addEventListener('click', async () => {
+  setBookmarksStatus('Saving…');
+  try {
+    await saveSettings({ bookmarks: collectBookmarks() });
+    setBookmarksStatus('Saved — changes apply immediately in Xplorer', 'ok');
+    setTimeout(() => setBookmarksStatus(''), 3000);
+  } catch (e) {
+    setBookmarksStatus(e.message, 'err');
+  }
+});
+
+loadBookmarksEditor();
+
 init().catch((e) => setStatus(e.message, 'err'));

@@ -9,16 +9,19 @@
 #include <string>
 #include <vector>
 
+#include "base/callback_list.h"
 #include "base/check.h"
 #include "base/functional/bind.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/sequenced_task_runner.h"
+#include "base/values.h"
 #include "chrome/browser/agent_gateway/focus_arbiter.h"
 #include "chrome/browser/agent_gateway/tab_ownership.h"
 #include "chrome/browser/grok_companion/grok_companion_util.h"
 #include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/tabs/tab_enums.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/browser_window/public/global_browser_collection.h"
 #include "chrome/browser/ui/navigator/browser_navigator.h"
@@ -146,6 +149,13 @@ void ClearGroupIfEmpty(TabStripModel* model, const char16_t* prefix) {
 
 AgentTabGrouper::AgentTabGrouper(TabStripModel* model) : model_(model) {
   model_->AddObserver(this);
+  // Live-reload: re-open/close bookmark tabs when the user edits the list in
+  // Settings (the gateway persists + posts NotifyBookmarkConfigChanged to the
+  // UI thread).
+  bookmark_config_subscription_ =
+      grok_companion::AddBookmarkConfigChangedCallback(base::BindRepeating(
+          &AgentTabGrouper::OnBookmarkConfigChanged,
+          weak_factory_.GetWeakPtr()));
   Reconcile();
   MaybeScheduleSeed();
 }
@@ -327,6 +337,43 @@ void AgentTabGrouper::SeedDefaultBookmarks() {
   }
   seeded_ = true;
 
+  // The bookmark list is config-driven: read the user-editable
+  // settings["bookmarks"] list. On first run it is empty, so materialize the
+  // built-in kDefaultBookmarks[] into the config and persist it (so the user has
+  // something to edit), then open from that same config.
+  std::vector<base::DictValue> configs = grok_companion::GetBookmarkConfigs();
+  if (configs.empty()) {
+    int64_t synthetic_id = 0;
+    for (const auto& bookmark : kDefaultBookmarks) {
+      ++synthetic_id;
+      const GURL url = ResolveBookmarkHref(bookmark.href);
+      if (!url.is_valid()) {
+        continue;
+      }
+      base::DictValue entry;
+      entry.Set("id", base::NumberToString(synthetic_id));
+      entry.Set("label", bookmark.label);
+      entry.Set("url", url.spec());
+      configs.push_back(std::move(entry));
+    }
+    grok_companion::SetBookmarkConfigs(configs);
+  }
+
+  bool opened_any = OpenMissingBookmarkTabs(browser, configs);
+
+  // Let the deferred Reconcile form the native "Bookmarks" group; never group
+  // synchronously here (TabStripModel re-entrancy).
+  if (opened_any) {
+    ScheduleReconcile();
+  }
+}
+
+bool AgentTabGrouper::OpenMissingBookmarkTabs(
+    Browser* browser,
+    const std::vector<base::DictValue>& configs) {
+  if (!browser || !model_) {
+    return false;
+  }
   // Collect synthetic ids already present so we don't re-open on a second
   // grouper for the same model (and to stay idempotent across launches once
   // tabs are restored with the tag).
@@ -340,14 +387,21 @@ void AgentTabGrouper::SeedDefaultBookmarks() {
   }
 
   bool opened_any = false;
-  int64_t synthetic_id = 0;
-  for (const auto& bookmark : kDefaultBookmarks) {
-    ++synthetic_id;
-    if (std::find(present_ids.begin(), present_ids.end(), synthetic_id) !=
+  for (const base::DictValue& config : configs) {
+    const std::string* id = config.FindString("id");
+    const std::string* url_str = config.FindString("url");
+    if (!id || !url_str) {
+      continue;
+    }
+    int64_t node_id = 0;
+    if (!base::StringToInt64(*id, &node_id) || node_id == 0) {
+      continue;
+    }
+    if (std::find(present_ids.begin(), present_ids.end(), node_id) !=
         present_ids.end()) {
       continue;
     }
-    const GURL url = ResolveBookmarkHref(bookmark.href);
+    const GURL url(*url_str);
     if (!url.is_valid()) {
       continue;
     }
@@ -358,16 +412,78 @@ void AgentTabGrouper::SeedDefaultBookmarks() {
     if (params.navigated_or_inserted_contents) {
       agent_gateway::TabOwnership::GetOrCreate(
           params.navigated_or_inserted_contents)
-          ->bookmark_node_id = synthetic_id;
+          ->bookmark_node_id = node_id;
+      present_ids.push_back(node_id);
       opened_any = true;
     }
   }
+  return opened_any;
+}
 
-  // Let the deferred Reconcile form the native "Bookmarks" group; never group
-  // synchronously here (TabStripModel re-entrancy).
-  if (opened_any) {
-    ScheduleReconcile();
+void AgentTabGrouper::OnBookmarkConfigChanged() {
+  // The notify fires synchronously (often from a UI-thread PostTask off the
+  // gateway). Never mutate the TabStripModel here — defer to a coalesced task,
+  // exactly like ScheduleReconcile(), so open/close run outside any model
+  // notification/guard.
+  if (bookmark_reload_scheduled_ || !model_) {
+    return;
   }
+  bookmark_reload_scheduled_ = true;
+  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE, base::BindOnce(&AgentTabGrouper::ApplyBookmarkConfig,
+                                weak_factory_.GetWeakPtr()));
+}
+
+void AgentTabGrouper::ApplyBookmarkConfig() {
+  bookmark_reload_scheduled_ = false;
+  if (!model_) {
+    return;
+  }
+
+  Browser* browser = nullptr;
+  if (model_->count() > 0) {
+    if (BrowserWindowInterface* bwi =
+            GlobalBrowserCollection::GetInstance()->FindBrowserWithTab(
+                model_->GetWebContentsAt(0))) {
+      browser = bwi->GetBrowserForMigrationOnly();
+    }
+  }
+  if (!browser) {
+    return;
+  }
+
+  std::vector<base::DictValue> configs = grok_companion::GetBookmarkConfigs();
+
+  // Set of bookmark_node_ids the config still wants open.
+  std::vector<int64_t> wanted_ids;
+  for (const base::DictValue& config : configs) {
+    const std::string* id = config.FindString("id");
+    int64_t node_id = 0;
+    if (id && base::StringToInt64(*id, &node_id) && node_id != 0) {
+      wanted_ids.push_back(node_id);
+    }
+  }
+
+  // Close any open bookmark tab whose id is no longer in the config. Walk from
+  // the end so closing one index doesn't shift the indices we still inspect.
+  for (int i = model_->count() - 1; i >= 0; --i) {
+    content::WebContents* wc = model_->GetWebContentsAt(i);
+    agent_gateway::TabOwnership* own = agent_gateway::TabOwnership::Get(wc);
+    if (!own || own->bookmark_node_id == 0) {
+      continue;
+    }
+    if (std::find(wanted_ids.begin(), wanted_ids.end(),
+                  own->bookmark_node_id) == wanted_ids.end()) {
+      model_->CloseWebContentsAt(i, TabCloseTypes::CLOSE_USER_GESTURE);
+    }
+  }
+
+  // Open background tabs for config ids not yet present (stamps
+  // bookmark_node_id). Reuses the present-id de-dupe.
+  OpenMissingBookmarkTabs(browser, configs);
+
+  // Let the deferred Reconcile re-title / regroup the "Bookmarks" group.
+  ScheduleReconcile();
 }
 
 }  // namespace xplorer

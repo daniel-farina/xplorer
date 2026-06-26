@@ -15,6 +15,7 @@
     <nav class="settings-sidebar" aria-label="Settings sections">
       <button type="button" class="settings-nav-btn active" data-pane="general">General</button>
       <button type="button" class="settings-nav-btn" data-pane="toolbar">Toolbar</button>
+      <button type="button" class="settings-nav-btn" data-pane="bookmarks">Bookmarks</button>
     </nav>
 
     <div class="settings-main">
@@ -134,6 +135,26 @@
           <button type="button" id="toolbar-reset" class="settings-btn">Reset to default</button>
         </div>
         <p id="toolbar-status" class="settings-status" role="status" aria-live="polite"></p>
+      </section>
+
+      <section class="settings-pane" data-pane="bookmarks" hidden>
+        <header class="settings-head">
+          <h1>Bookmarks</h1>
+          <p>The always-open tabs in the native <strong>Bookmarks</strong> group. Add, edit, reorder (▲▼), and remove them; changes apply immediately in Xplorer. Stored under <code>bookmarks</code> in <code>~/.xplorer/grok_settings.json</code>.</p>
+        </header>
+
+        <section class="settings-card">
+          <h2>Bookmarks</h2>
+          <div id="bookmarks-editor" class="toolbar-editor"></div>
+          <div class="tb-add-bar">
+            <button type="button" id="bookmarks-add" class="settings-btn">+ Add bookmark</button>
+          </div>
+        </section>
+
+        <div class="settings-actions">
+          <button type="button" id="bookmarks-save" class="settings-btn settings-btn-primary">Save</button>
+        </div>
+        <p id="bookmarks-status" class="settings-status" role="status" aria-live="polite"></p>
       </section>
     </div>
   </main>
