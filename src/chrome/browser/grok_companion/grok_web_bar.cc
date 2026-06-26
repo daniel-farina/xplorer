@@ -254,10 +254,9 @@ class GrokWebBarInjector : public content::WebContentsObserver,
   }
 
   bool ShouldInject(content::WebContents* /*contents*/) const {
-    // XPLORER: native chrome toolbar replaces the injected web bar.
-    // The native Views bar (xplorer::XplorerToolbarView) is now the single
-    // toolbar surface on every tab, so the in-page injection on
-    // x.com/grok.com/grokipedia is disabled to avoid a double bar.
+    // XPLORER: the injected in-page web bar is disabled. Navigation now lives in
+    // the native "Bookmarks" tab group (seeded by AgentTabGrouper), so the
+    // in-page injection on x.com/grok.com/grokipedia is suppressed.
     return false;
   }
 

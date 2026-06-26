@@ -14,7 +14,6 @@
   <main class="settings-page settings-shell">
     <nav class="settings-sidebar" aria-label="Settings sections">
       <button type="button" class="settings-nav-btn active" data-pane="general">General</button>
-      <button type="button" class="settings-nav-btn" data-pane="toolbar">Toolbar</button>
       <button type="button" class="settings-nav-btn" data-pane="bookmarks">Bookmarks</button>
     </nav>
 
@@ -96,45 +95,6 @@
         </section>
 
         <p id="settings-status" class="settings-status" role="status" aria-live="polite"></p>
-      </section>
-
-      <section class="settings-pane" data-pane="toolbar" hidden>
-        <header class="settings-head">
-          <h1>Toolbar</h1>
-          <p>Reorder, enable, edit, and add the navigation pills shown in the Xplorer toolbar on every page. Drag order is set with the ▲▼ buttons. Stored under <code>toolbar</code> in <code>~/.xplorer/grok_settings.json</code>.</p>
-        </header>
-
-        <section class="settings-card">
-          <h2>Appearance</h2>
-          <label class="settings-field">
-            <span>Position</span>
-            <select id="toolbar-placement">
-              <option value="sidebar">Sidebar (with bookmarks)</option>
-              <option value="top">Top bar</option>
-            </select>
-          </label>
-          <label class="settings-field settings-field-check">
-            <input type="checkbox" id="toolbar-visible" checked>
-            <span>Show toolbar</span>
-          </label>
-        </section>
-
-        <section class="settings-card">
-          <h2>Pills</h2>
-          <div id="toolbar-editor" class="toolbar-editor"></div>
-          <div class="tb-add-bar">
-            <button type="button" id="toolbar-add-custom" class="settings-btn">+ Add custom pill</button>
-            <select id="toolbar-catalog" class="tb-catalog" aria-label="Add a known service">
-              <option value="">Add from catalog…</option>
-            </select>
-          </div>
-        </section>
-
-        <div class="settings-actions">
-          <button type="button" id="toolbar-save" class="settings-btn settings-btn-primary">Save</button>
-          <button type="button" id="toolbar-reset" class="settings-btn">Reset to default</button>
-        </div>
-        <p id="toolbar-status" class="settings-status" role="status" aria-live="polite"></p>
       </section>
 
       <section class="settings-pane" data-pane="bookmarks" hidden>

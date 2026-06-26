@@ -60,69 +60,6 @@ def rebrand_grd_strings(path: Path):
     print(f"  rebranded grd: {path.name}")
 
 
-def patch_native_toolbar(src: Path):
-    """SCAFFOLD: native browser-chrome Xplorer pill toolbar.
-
-    Adds an xplorer::XplorerToolbarView strip to top_container_, between the
-    bookmark bar and the contents separator. The new view source lives in
-    src/chrome/browser/ui/views/xplorer/ (copied into the checkout by apply.sh)
-    and is compiled into the existing static_library("ui") target next to
-    bookmark_bar_view.cc. This step only wires the existing-Chromium files.
-    """
-    # --- browser_view.h: forward-decl + owned member -----------------------
-    browser_view_h = src / "chrome/browser/ui/views/frame/browser_view.h"
-    edit(
-        browser_view_h,
-        "class BookmarkBarView;",
-        "class BookmarkBarView;\n"
-        "namespace xplorer {\n"
-        "class XplorerToolbarView;\n"
-        "}  // namespace xplorer  // XPLORER",
-    )
-    edit(
-        browser_view_h,
-        "  raw_ptr<BookmarkBarView> bookmark_bar_view_ = nullptr;",
-        "  raw_ptr<BookmarkBarView> bookmark_bar_view_ = nullptr;\n\n"
-        "  // XPLORER: native pill toolbar; always parented to top_container_.\n"
-        "  raw_ptr<xplorer::XplorerToolbarView> xplorer_toolbar_ = nullptr;",
-    )
-
-    # --- browser_view.cc: create + parent, register with layout, include ---
-    browser_view_cc = src / "chrome/browser/ui/views/frame/browser_view.cc"
-    edit(
-        browser_view_cc,
-        '#include "chrome/browser/ui/views/bookmarks/bookmark_bar_view.h"',
-        '#include "chrome/browser/ui/views/bookmarks/bookmark_bar_view.h"\n'
-        '#include "chrome/browser/ui/views/xplorer/xplorer_toolbar_view.h"'
-        "  // XPLORER",
-    )
-    # XPLORER: the Grok-apps pill toolbar is no longer created/parented in
-    # top_container_ (bookmarks are now a native tab group). XplorerToolbarView
-    # stays compiled as the bookmark seed source / dead code; browser_view keeps
-    # a nullptr xplorer_toolbar_ member + accessor so the sidebar/placement
-    # context-menu callers still link (they null-guard).
-
-    # --- BUILD.gn: compile the new source into the static_library("ui")
-    # target next to bookmark_bar_view.cc (avoids a new GN target and the
-    # grok_companion <-> //chrome/browser/ui dependency cycle). Symbols resolve
-    # at the final chrome/browser link, exactly like the existing grok patch
-    # into toolbar_view.cc.
-    browser_ui_gn = src / "chrome/browser/ui/BUILD.gn"
-    edit(
-        browser_ui_gn,
-        '      "views/bookmarks/bookmark_bar_view.cc",\n'
-        '      "views/bookmarks/bookmark_bar_view.h",',
-        '      "views/bookmarks/bookmark_bar_view.cc",\n'
-        '      "views/bookmarks/bookmark_bar_view.h",\n'
-        '      "views/xplorer/xplorer_toolbar_view.cc",  # XPLORER\n'
-        '      "views/xplorer/xplorer_toolbar_view.h",  # XPLORER\n'
-        '      "views/xplorer/xplorer_toolbar_pill_button.cc",  # XPLORER\n'
-        '      "views/xplorer/xplorer_toolbar_pill_button.h",  # XPLORER\n'
-        '      "views/xplorer/xplorer_toolbar_icons.cc",  # XPLORER\n'
-        '      "views/xplorer/xplorer_toolbar_icons.h",  # XPLORER',
-    )
-
-
 def patch_xplorer_settings_access(src: Path):
     """Xplorer settings in app menu, chrome://settings nav, and command handler."""
     cmd_ids = src / "chrome/app/chrome_command_ids.h"
@@ -154,7 +91,7 @@ def patch_xplorer_settings_access(src: Path):
         "  AddItemWithStringIdAndVectorIcon(\n"
         "      this, IDC_OPTIONS, IDS_SETTINGS,\n"
         "      features::IsRoundedIconsEnabled() ? kSettingsIcon : kSettingsMenuOldIcon);\n\n"
-        "  // XPLORER: companion settings (toolbar pills, placement, visibility).\n"
+        "  // XPLORER: companion settings (bookmarks, models, Grok defaults).\n"
         "  AddItemWithStringId(IDC_XPLORER_SETTINGS, IDS_XPLORER_SETTINGS);\n",
     )
 
@@ -188,7 +125,7 @@ def patch_xplorer_settings_access(src: Path):
         '        <a role="menuitem" id="xplorer-settings-link" class="cr-nav-menu-item"\n'
         '            href="http://127.0.0.1:9334/settings" target="_blank"\n'
         '            on-click="onLinkClick_"\n'
-        '            title="Toolbar, bookmarks, and Grok defaults">\n'
+        '            title="Bookmarks, models, and Grok defaults">\n'
         '          <cr-icon icon="settings:settings"></cr-icon>\n'
         '          <span>Xplorer settings</span>\n'
         '          <div class="cr-icon icon-external"></div>\n'
@@ -202,9 +139,8 @@ def patch_xplorer_settings_access(src: Path):
 def patch_vertical_sidebar(src: Path):
     """Arc-style sidebar chrome in the vertical tab strip.
 
-    Injects XplorerSidebarChromeView (bookmarks, Grok pills, Tabs label) at the
-    top of VerticalTabStripRegionView, auto-groups agent-owned tabs, and
-    supports toolbar.placement in grok_settings.json (top|sidebar).
+    Injects XplorerSidebarChromeView (the "Tabs" section label) at the top of
+    VerticalTabStripRegionView and auto-groups agent-owned tabs.
     """
     vts_h = src / "chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h"
     edit(
@@ -242,7 +178,7 @@ def patch_vertical_sidebar(src: Path):
             "  }",
             "  VerticalPinnedTabContainerView* GetPinnedTabsContainer();\n"
             "  VerticalUnpinnedTabContainerView* GetUnpinnedTabsContainer();\n\n"
-            "  // XPLORER: Arc-style bookmarks/toolbar chrome below the top menu bar.\n"
+            "  // XPLORER: Arc-style sidebar chrome below the top menu bar.\n"
             "  void InstallXplorerSidebarChrome(\n"
             "      std::unique_ptr<xplorer::XplorerSidebarChromeView> chrome);\n"
             "  xplorer::XplorerSidebarChromeView* xplorer_sidebar_chrome() {\n"
@@ -412,23 +348,18 @@ def patch_vertical_sidebar(src: Path):
     browser_view_h = src / "chrome/browser/ui/views/frame/browser_view.h"
     edit(
         browser_view_h,
-        "namespace xplorer {\n"
-        "class XplorerToolbarView;\n"
-        "}  // namespace xplorer  // XPLORER",
+        "class BookmarkBarView;",
+        "class BookmarkBarView;\n"
         "namespace xplorer {\n"
         "class AgentTabGrouper;\n"
         "class XplorerSidebarChromeView;\n"
-        "class XplorerToolbarView;\n"
         "}  // namespace xplorer  // XPLORER",
     )
     edit(
         browser_view_h,
         "  TopContainerView* top_container() { return top_container_; }",
         "  TopContainerView* top_container() { return top_container_; }\n\n"
-        "  // XPLORER: native Grok pill toolbar (top or sidebar placement).\n"
-        "  xplorer::XplorerToolbarView* xplorer_toolbar() {\n"
-        "    return xplorer_toolbar_;\n"
-        "  }\n"
+        "  // XPLORER: Arc-style vertical sidebar chrome accessors.\n"
         "  VerticalTabStripRegionView* vertical_tab_strip_region_view() {\n"
         "    return vertical_tab_strip_region_view_;\n"
         "  }\n"
@@ -438,8 +369,8 @@ def patch_vertical_sidebar(src: Path):
     )
     edit(
         browser_view_h,
-        "  raw_ptr<xplorer::XplorerToolbarView> xplorer_toolbar_ = nullptr;",
-        "  raw_ptr<xplorer::XplorerToolbarView> xplorer_toolbar_ = nullptr;\n"
+        "  raw_ptr<BookmarkBarView> bookmark_bar_view_ = nullptr;",
+        "  raw_ptr<BookmarkBarView> bookmark_bar_view_ = nullptr;\n"
         "  raw_ptr<xplorer::XplorerSidebarChromeView> xplorer_sidebar_chrome_ =\n"
         "      nullptr;  // XPLORER\n"
         "  std::unique_ptr<xplorer::AgentTabGrouper> agent_tab_grouper_;  // XPLORER",
@@ -448,11 +379,10 @@ def patch_vertical_sidebar(src: Path):
     browser_view_cc = src / "chrome/browser/ui/views/frame/browser_view.cc"
     edit(
         browser_view_cc,
-        '#include "chrome/browser/ui/views/xplorer/xplorer_toolbar_view.h"  // XPLORER',
+        '#include "chrome/browser/ui/views/bookmarks/bookmark_bar_view.h"',
+        '#include "chrome/browser/ui/views/bookmarks/bookmark_bar_view.h"\n'
         '#include "chrome/browser/ui/views/xplorer/xplorer_agent_tab_grouper.h"  // XPLORER\n'
-        '#include "chrome/browser/ui/views/xplorer/xplorer_sidebar_chrome_view.h"  // XPLORER\n'
-        '#include "chrome/browser/ui/views/xplorer/xplorer_toolbar_placement.h"  // XPLORER\n'
-        '#include "chrome/browser/ui/views/xplorer/xplorer_toolbar_view.h"  // XPLORER',
+        '#include "chrome/browser/ui/views/xplorer/xplorer_sidebar_chrome_view.h"  // XPLORER',
     )
     # Append the scheduled-view include AFTER the chrome include block's last
     # line (restated), not inside it: the chrome include edit above has no outer
@@ -461,8 +391,8 @@ def patch_vertical_sidebar(src: Path):
     if "xplorer_sidebar_scheduled_view.h" not in browser_view_cc.read_text():
         edit(
             browser_view_cc,
-            '#include "chrome/browser/ui/views/xplorer/xplorer_toolbar_view.h"  // XPLORER',
-            '#include "chrome/browser/ui/views/xplorer/xplorer_toolbar_view.h"  // XPLORER\n'
+            '#include "chrome/browser/ui/views/xplorer/xplorer_sidebar_chrome_view.h"  // XPLORER',
+            '#include "chrome/browser/ui/views/xplorer/xplorer_sidebar_chrome_view.h"  // XPLORER\n'
             '#include "chrome/browser/ui/views/xplorer/xplorer_sidebar_scheduled_view.h"  // XPLORER',
         )
     edit(
@@ -471,8 +401,8 @@ def patch_vertical_sidebar(src: Path):
         "        AddChildView(std::move(vertical_tab_strip_container));",
         "    vertical_tab_strip_region_view_ =\n"
         "        AddChildView(std::move(vertical_tab_strip_container));\n\n"
-        "    // XPLORER: Arc-style sidebar chrome (bookmarks, Grok pills, Tabs\n"
-        "    // label) + auto-group agent-owned tabs.\n"
+        "    // XPLORER: Arc-style sidebar chrome (\"Tabs\" section label)\n"
+        "    // + auto-group agent-owned tabs.\n"
         "    {\n"
         "      auto sidebar_chrome =\n"
         "          std::make_unique<xplorer::XplorerSidebarChromeView>(\n"
@@ -482,7 +412,6 @@ def patch_vertical_sidebar(src: Path):
         "          std::move(sidebar_chrome));\n"
         "      agent_tab_grouper_ = std::make_unique<xplorer::AgentTabGrouper>(\n"
         "          browser_->GetTabStripModel());\n"
-        "      xplorer::ApplyToolbarPlacement(this, xplorer_sidebar_chrome_);\n"
         "    }",
     )
     # XPLORER: native "Scheduled" section, installed AFTER the chrome view so it
@@ -496,9 +425,11 @@ def patch_vertical_sidebar(src: Path):
     if "InstallXplorerSidebarScheduled" not in browser_view_cc.read_text():
         edit(
             browser_view_cc,
-            "      xplorer::ApplyToolbarPlacement(this, xplorer_sidebar_chrome_);\n"
+            "      agent_tab_grouper_ = std::make_unique<xplorer::AgentTabGrouper>(\n"
+            "          browser_->GetTabStripModel());\n"
             "    }",
-            "      xplorer::ApplyToolbarPlacement(this, xplorer_sidebar_chrome_);\n"
+            "      agent_tab_grouper_ = std::make_unique<xplorer::AgentTabGrouper>(\n"
+            "          browser_->GetTabStripModel());\n"
             "    }\n"
             "    // XPLORER: native \"Scheduled\" section below the tab list.\n"
             "    vertical_tab_strip_region_view_->InstallXplorerSidebarScheduled(\n"
@@ -523,22 +454,18 @@ def patch_vertical_sidebar(src: Path):
     if "xplorer_sidebar_chrome_view.cc" not in browser_ui_gn.read_text():
         edit(
             browser_ui_gn,
-            '      "views/xplorer/xplorer_toolbar_icons.h",  # XPLORER',
-            '      "views/xplorer/xplorer_toolbar_icons.h",  # XPLORER\n'
+            '      "views/bookmarks/bookmark_bar_view.cc",\n'
+            '      "views/bookmarks/bookmark_bar_view.h",',
+            '      "views/bookmarks/bookmark_bar_view.cc",\n'
+            '      "views/bookmarks/bookmark_bar_view.h",\n'
             '      "views/xplorer/xplorer_sidebar_chrome_view.cc",  # XPLORER\n'
             '      "views/xplorer/xplorer_sidebar_chrome_view.h",  # XPLORER\n'
-            '      "views/xplorer/xplorer_sidebar_bookmarks_view.cc",  # XPLORER\n'
-            '      "views/xplorer/xplorer_sidebar_bookmarks_view.h",  # XPLORER\n'
             '      "views/xplorer/xplorer_sidebar_row_button.cc",  # XPLORER\n'
             '      "views/xplorer/xplorer_sidebar_row_button.h",  # XPLORER\n'
             '      "views/xplorer/xplorer_sidebar_section_label.cc",  # XPLORER\n'
             '      "views/xplorer/xplorer_sidebar_section_label.h",  # XPLORER\n'
-            '      "views/xplorer/xplorer_sidebar_prefs.cc",  # XPLORER\n'
-            '      "views/xplorer/xplorer_sidebar_prefs.h",  # XPLORER\n'
             '      "views/xplorer/xplorer_agent_tab_grouper.cc",  # XPLORER\n'
             '      "views/xplorer/xplorer_agent_tab_grouper.h",  # XPLORER\n'
-            '      "views/xplorer/xplorer_toolbar_placement.cc",  # XPLORER\n'
-            '      "views/xplorer/xplorer_toolbar_placement.h",  # XPLORER\n'
             '      "views/xplorer/xplorer_settings_nav.cc",  # XPLORER\n'
             '      "views/xplorer/xplorer_settings_nav.h",  # XPLORER\n'
             '      "views/xplorer/xplorer_sidebar_scheduled_view.cc",  # XPLORER\n'
@@ -1783,10 +1710,7 @@ def main(src: Path):
         acp.write_text(ac)
         print(f"  edited: {acp}")
 
-    # Native browser-chrome Xplorer pill toolbar (scaffold).
-    patch_native_toolbar(src)
-
-    # Arc-style vertical sidebar: bookmarks + optional toolbar + agent tab group.
+    # Arc-style vertical sidebar: "Tabs" section label + agent tab group.
     patch_vertical_sidebar(src)
 
     patch_xplorer_settings_access(src)

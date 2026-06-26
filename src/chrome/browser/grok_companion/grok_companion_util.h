@@ -81,27 +81,6 @@ void MarkWelcomeCompleted();
 std::string GetSearchHomeMode();
 void SetSearchHomeMode(const std::string& mode);
 
-// Reads grok_settings.json and returns the ordered "toolbar.pills" array as a
-// vector of Dicts (one per pill: {id,label,icon,href,enabled,isHome}). Returns
-// an EMPTY vector when the file is missing/unparseable or "toolbar.pills" is
-// absent/empty/non-list, so callers fall back to their built-in defaults. The
-// schema mirrors companion/ui/toolbar.js DEFAULT_PILLS.
-std::vector<base::DictValue> GetToolbarPillConfigs();
-
-// Replaces the ordered "toolbar.pills" array in grok_settings.json with |pills|
-// (each a {id,label,icon,href,enabled,isHome,children} dict) and notifies live
-// toolbar views. Used by drag-to-reorder / inline edit.
-void SetToolbarPillConfigs(const std::vector<base::DictValue>& pills);
-
-// Live-reload seam. Fired on the UI thread whenever toolbar config is persisted
-// in-process (the gateway's toolbar write, or SetToolbarPillConfigs), so open
-// XplorerToolbarViews can Reload(). The subscriber holds the returned
-// subscription for as long as it wants callbacks (RAII unsubscribe).
-base::CallbackListSubscription AddToolbarConfigChangedCallback(
-    base::RepeatingClosure callback);
-// Notifies subscribers. Must be called on the UI thread.
-void NotifyToolbarConfigChanged();
-
 // Reads grok_settings.json and returns the ordered top-level "bookmarks" array
 // as a vector of Dicts (one per bookmark: {id,label,url}). Returns an EMPTY
 // vector when the file is missing/unparseable or "bookmarks" is absent/non-list

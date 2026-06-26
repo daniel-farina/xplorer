@@ -235,12 +235,6 @@ std::unique_ptr<views::View> CreateGrokCompanionView(
   return web_view;
 }
 
-// Subscribers (live XplorerToolbarViews) notified when toolbar config changes.
-base::RepeatingClosureList& ToolbarConfigChangedCallbacks() {
-  static base::NoDestructor<base::RepeatingClosureList> list;
-  return *list;
-}
-
 // Subscribers (live AgentTabGroupers) notified when the user-editable bookmark
 // list changes, so open "Bookmarks" group tabs can be reconciled in place.
 base::RepeatingClosureList& BookmarkConfigChangedCallbacks() {
@@ -324,42 +318,6 @@ void SetSearchHomeMode(const std::string& mode) {
     saved = kSearchHomeWiki;
   settings.Set("search_home", saved);
   SaveGrokSettings(settings);
-}
-
-std::vector<base::DictValue> GetToolbarPillConfigs() {
-  std::vector<base::DictValue> pills;
-  base::DictValue settings = LoadGrokSettings();
-  const base::DictValue* toolbar = settings.FindDict("toolbar");
-  if (!toolbar)
-    return pills;
-  const base::ListValue* list = toolbar->FindList("pills");
-  if (!list)
-    return pills;
-  for (const base::Value& entry : *list) {
-    if (!entry.is_dict())
-      continue;
-    pills.push_back(entry.GetDict().Clone());
-  }
-  return pills;
-}
-
-void SetToolbarPillConfigs(const std::vector<base::DictValue>& pills) {
-  base::DictValue settings = LoadGrokSettings();
-  base::ListValue list;
-  for (const base::DictValue& pill : pills)
-    list.Append(pill.Clone());
-  settings.EnsureDict("toolbar")->Set("pills", std::move(list));
-  SaveGrokSettings(settings);
-  NotifyToolbarConfigChanged();
-}
-
-base::CallbackListSubscription AddToolbarConfigChangedCallback(
-    base::RepeatingClosure callback) {
-  return ToolbarConfigChangedCallbacks().Add(std::move(callback));
-}
-
-void NotifyToolbarConfigChanged() {
-  ToolbarConfigChangedCallbacks().Notify();
 }
 
 std::vector<base::DictValue> GetBookmarkConfigs() {

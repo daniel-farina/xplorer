@@ -49,11 +49,9 @@ constexpr char16_t kScheduledGroupPrefix[] = u"Scheduled task tabs";
 constexpr char16_t kBookmarksGroupPrefix[] = u"Bookmarks";
 
 // Hardcoded xAI default bookmarks, seeded as always-open tabs in the native
-// "Bookmarks" group at launch. Transcribed (label, href) IN ORDER from
-// xplorer_toolbar_view.cc kDefaultPills — keep the two in sync. Gateway-relative
-// hrefs ("/apps", "/switch-home?...") resolve against the companion base; absolute
-// https hrefs are used as-is. The synthetic id stamped on each tab is its array
-// index + 1.
+// "Bookmarks" group at launch. Gateway-relative hrefs ("/apps",
+// "/switch-home?...") resolve against the companion base; absolute https hrefs
+// are used as-is. The synthetic id stamped on each tab is its array index + 1.
 constexpr struct {
   const char* label;
   const char* href;
@@ -284,21 +282,17 @@ void AgentTabGrouper::Reconcile() {
 
   tab_groups::TabGroupSyncService* sync = SyncServiceFor(browser);
 
-  // One-time backlog purge: delete the closed-orphan saved copies of our three
-  // managed groups that accumulated before this fix shipped. A saved group with
-  // an empty local_group_id() is a locally-closed orphan; only those titled with
-  // one of our prefixes are ours to remove. Runs once per grouper, on the first
-  // Reconcile() where the sync service is available.
+  // One-time backlog purge: delete EVERY closed-orphan saved group. In Xplorer
+  // all tab groups are ephemeral/auto-managed — the three managed groups
+  // (Agent/Scheduled/Bookmarks) plus the one-shot "organize tabs" topic groups —
+  // so a saved group with no live local_group_id() is just a locally-closed
+  // orphan cluttering the strip. Purge them all (this is what clears the "dozens
+  // of closed groups", organize leftovers included). Runs once per grouper, on
+  // the first Reconcile() where the sync service is available.
   if (sync && !backlog_purged_) {
     backlog_purged_ = true;
     for (const tab_groups::SavedTabGroup& g : sync->GetAllGroups()) {
-      if (g.local_group_id().has_value()) {
-        continue;  // Still open somewhere — leave it.
-      }
-      const std::u16string& title = g.title();
-      if (base::StartsWith(title, kAgentGroupPrefix) ||
-          base::StartsWith(title, kScheduledGroupPrefix) ||
-          base::StartsWith(title, kBookmarksGroupPrefix)) {
+      if (!g.local_group_id().has_value()) {
         sync->RemoveGroup(g.saved_guid());
       }
     }

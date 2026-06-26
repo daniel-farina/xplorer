@@ -6,24 +6,17 @@
 
 #include "base/memory/raw_ptr.h"
 #include "ui/base/metadata/metadata_header_macros.h"
-#include "ui/views/context_menu_controller.h"
 #include "ui/views/view.h"
 
 class BrowserWindowInterface;
 class Profile;
 
-namespace views {
-class View;
-}  // namespace views
-
 namespace xplorer {
 
-class XplorerToolbarView;
-
-// Arc-style chrome injected at the top of the vertical tab strip: bookmarks,
-// optional Grok pill toolbar, and a "Tabs" section label.
-class XplorerSidebarChromeView : public views::View,
-                                 public views::ContextMenuController {
+// Arc-style chrome injected at the top of the vertical tab strip. Bookmarks are
+// now a native "Bookmarks" tab group, so this is just the "Tabs" section label
+// above the vertical tab list.
+class XplorerSidebarChromeView : public views::View {
   METADATA_HEADER(XplorerSidebarChromeView, views::View)
 
  public:
@@ -33,25 +26,9 @@ class XplorerSidebarChromeView : public views::View,
       delete;
   ~XplorerSidebarChromeView() override;
 
-  // Hosts the shared XplorerToolbarView (legacy sidebar placement). The
-  // Grok-apps pill toolbar is no longer attached here; kept only so
-  // UpdateChromeState() can keep the (empty) host hidden.
-  views::View* toolbar_host() { return toolbar_host_; }
-
-  // Shows/hides the bookmarks + Grok toolbar block from placement + visible.
-  void UpdateChromeState();
-
-  // views::ContextMenuController:
-  void ShowContextMenuForViewImpl(
-      views::View* source,
-      const gfx::Point& point,
-      ui::mojom::MenuSourceType source_type) override;
-
  private:
   const raw_ptr<BrowserWindowInterface> browser_;
   [[maybe_unused]] const raw_ptr<Profile> profile_;
-  raw_ptr<views::View> toolbar_host_ = nullptr;
-  raw_ptr<views::View> bookmarks_separator_ = nullptr;
 };
 
 }  // namespace xplorer

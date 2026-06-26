@@ -194,10 +194,10 @@ const GROK_TOOLBAR_FALLBACK =
   '</header>';
 
 async function mountGrokToolbar({ pageHome, onSwitch } = {}) {
-  // XPLORER: the toolbar is now a NATIVE browser-chrome bar (XplorerToolbarView)
-  // present on every tab, so suppress the in-page web bar entirely — companion
-  // pages (/search, /apps, ...) must not render a duplicate. No-op; callers and
-  // helpers stay defined. Remove this early return to restore the web bar.
+  // XPLORER: navigation now lives in the native "Bookmarks" tab group, so the
+  // in-page web bar is suppressed entirely — companion pages (/search, /apps,
+  // ...) must not render one. No-op; callers and helpers stay defined. Remove
+  // this early return to restore the web bar.
   return;
   // eslint-disable-next-line no-unreachable
   let html;
@@ -271,10 +271,9 @@ function syncCompanionToolbarPill() {
   });
 }
 
-// The native browser-chrome toolbar (xplorer::XplorerToolbarView) is now the
-// single toolbar surface and covers companion pages too, so the in-page
-// auto-mount is suppressed to avoid a double bar. mountGrokToolbar remains
-// defined for explicit callers; we just no longer auto-call it on load.
+// Navigation now lives in the native "Bookmarks" tab group, so the in-page web
+// bar auto-mount is suppressed. mountGrokToolbar remains defined for explicit
+// callers; we just no longer auto-call it on load.
 // (Previously: DOMContentLoaded → mountGrokToolbar() when
 //  document.body.dataset.grokToolbar === 'auto'.)
 
