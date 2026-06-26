@@ -138,7 +138,17 @@ tab_groups::TabGroupId EnsureGroup(TabStripModel* model,
   tab_groups::TabGroupVisualData visual(
       GroupTitle(prefix, static_cast<int>(indices.size())), color);
   if (existing.has_value()) {
-    model->ChangeTabGroupVisuals(existing.value(), visual);
+    // Only fire ChangeTabGroupVisuals when the visuals actually changed:
+    // SetVisualData has no equality check and fans out OnTabGroupChanged
+    // (kVisualsChanged) to every observer (incl. the sync listener) plus a heap
+    // alloc on every call. Reconcile() runs on every tab-strip change, so the
+    // title/color are usually identical — skip the no-op churn.
+    TabGroup* group = model->group_model()
+                          ? model->group_model()->GetTabGroup(existing.value())
+                          : nullptr;
+    if (!group || !group->visual_data() || !(*group->visual_data() == visual)) {
+      model->ChangeTabGroupVisuals(existing.value(), visual);
+    }
     return existing.value();
   }
   CHECK(!indices.empty());
@@ -153,6 +163,70 @@ tab_groups::TabGroupId EnsureGroup(TabStripModel* model,
     sync->RemoveGroup(group);
   }
   return group;
+}
+
+// Moves exactly the tabs at |indices| into |group| in a single batched pair of
+// TabStripModel mutations, instead of one AddToExistingGroup/RemoveFromGroup per
+// index. AddToExistingGroup physically MOVES each added tab adjacent to the
+// group, which renumbers the other indices — so calling it one index at a time
+// (the old code) groups the wrong tabs after the first move, and is O(n^2).
+//
+// Formulation:
+//   1. Scan |indices| ONCE, splitting into tabs not in any group (no-op moves,
+//      just need adding) and tabs in a DIFFERENT group (must be removed first).
+//      Capture the WebContents* for every tab that should end up in |group| but
+//      isn't yet — pointers are stable across the moves that follow, indices are
+//      not.
+//   2. RemoveFromGroup() the wrong-group tabs in ONE call (this also moves
+//      tabs, invalidating every captured index).
+//   3. Re-resolve the captured WebContents* back to their CURRENT indices via
+//      GetIndexOfWebContents (post-remove), sort ascending (AddToExistingGroup
+//      requires a sorted vector), and AddToExistingGroup() them in ONE call.
+// All mutation stays inside the deferred Reconcile(); no synchronous model
+// mutation is introduced in an observer callback.
+void AssignTabsToGroup(TabStripModel* model,
+                       const std::vector<int>& indices,
+                       tab_groups::TabGroupId group) {
+  std::vector<int> need_move_out;
+  // WebContents of every tab that should be in |group| but currently isn't
+  // (either ungrouped or in a different group). Pointers survive the moves
+  // below; indices do not.
+  std::vector<content::WebContents*> targets;
+  for (int index : indices) {
+    std::optional<tab_groups::TabGroupId> cur = model->GetTabGroupForTab(index);
+    if (!cur.has_value()) {
+      targets.push_back(model->GetWebContentsAt(index));
+    } else if (cur.value() != group) {
+      need_move_out.push_back(index);
+      targets.push_back(model->GetWebContentsAt(index));
+    }
+    // cur == group: already in the right group, leave it (no move, no churn).
+  }
+
+  // Step 2: pull the wrong-group tabs out in one batch. RemoveFromGroup requires
+  // a sorted vector and moves tabs, so |targets| indices are now stale.
+  if (!need_move_out.empty()) {
+    std::sort(need_move_out.begin(), need_move_out.end());
+    model->RemoveFromGroup(need_move_out);
+  }
+
+  // Step 3: re-resolve the target WebContents* to their post-remove indices,
+  // sort, and add them all in one call.
+  if (targets.empty()) {
+    return;
+  }
+  std::vector<int> add_indices;
+  add_indices.reserve(targets.size());
+  for (content::WebContents* wc : targets) {
+    int idx = model->GetIndexOfWebContents(wc);
+    if (idx != TabStripModel::kNoTab) {
+      add_indices.push_back(idx);
+    }
+  }
+  if (!add_indices.empty()) {
+    std::sort(add_indices.begin(), add_indices.end());
+    model->AddToExistingGroup(add_indices, group);
+  }
 }
 
 void ClearGroupIfEmpty(TabStripModel* model,
@@ -330,19 +404,9 @@ void AgentTabGrouper::Reconcile() {
     tab_groups::TabGroupId scheduled_group = EnsureGroup(
         model_, sync, kScheduledGroupPrefix, scheduled_indices,
         tab_groups::TabGroupColorId::kBlue);
-    for (int index : scheduled_indices) {
-      if (!model_->GetTabGroupForTab(index).has_value()) {
-        model_->AddToExistingGroup({index}, scheduled_group);
-      } else if (model_->GetTabGroupForTab(index).value() != scheduled_group) {
-        model_->RemoveFromGroup({index});
-        model_->AddToExistingGroup({index}, scheduled_group);
-      }
-    }
-    tab_groups::TabGroupVisualData scheduled_visual(
-        GroupTitle(kScheduledGroupPrefix,
-                   static_cast<int>(scheduled_indices.size())),
-        tab_groups::TabGroupColorId::kBlue);
-    model_->ChangeTabGroupVisuals(scheduled_group, scheduled_visual);
+    // Batched membership fix (see AssignTabsToGroup). EnsureGroup already set the
+    // title/color, so no second ChangeTabGroupVisuals here.
+    AssignTabsToGroup(model_, scheduled_indices, scheduled_group);
   }
 
   if (adhoc_indices.empty()) {
@@ -351,18 +415,9 @@ void AgentTabGrouper::Reconcile() {
     tab_groups::TabGroupId agent_group = EnsureGroup(
         model_, sync, kAgentGroupPrefix, adhoc_indices,
         tab_groups::TabGroupColorId::kGrey);
-    for (int index : adhoc_indices) {
-      if (!model_->GetTabGroupForTab(index).has_value()) {
-        model_->AddToExistingGroup({index}, agent_group);
-      } else if (model_->GetTabGroupForTab(index).value() != agent_group) {
-        model_->RemoveFromGroup({index});
-        model_->AddToExistingGroup({index}, agent_group);
-      }
-    }
-    tab_groups::TabGroupVisualData agent_visual(
-        GroupTitle(kAgentGroupPrefix, static_cast<int>(adhoc_indices.size())),
-        tab_groups::TabGroupColorId::kGrey);
-    model_->ChangeTabGroupVisuals(agent_group, agent_visual);
+    // Batched membership fix (see AssignTabsToGroup). EnsureGroup already set the
+    // title/color, so no second ChangeTabGroupVisuals here.
+    AssignTabsToGroup(model_, adhoc_indices, agent_group);
   }
 
   if (bookmark_indices.empty()) {
@@ -371,19 +426,9 @@ void AgentTabGrouper::Reconcile() {
     tab_groups::TabGroupId bookmark_group = EnsureGroup(
         model_, sync, kBookmarksGroupPrefix, bookmark_indices,
         tab_groups::TabGroupColorId::kYellow);
-    for (int index : bookmark_indices) {
-      if (!model_->GetTabGroupForTab(index).has_value()) {
-        model_->AddToExistingGroup({index}, bookmark_group);
-      } else if (model_->GetTabGroupForTab(index).value() != bookmark_group) {
-        model_->RemoveFromGroup({index});
-        model_->AddToExistingGroup({index}, bookmark_group);
-      }
-    }
-    tab_groups::TabGroupVisualData bookmark_visual(
-        GroupTitle(kBookmarksGroupPrefix,
-                   static_cast<int>(bookmark_indices.size())),
-        tab_groups::TabGroupColorId::kYellow);
-    model_->ChangeTabGroupVisuals(bookmark_group, bookmark_visual);
+    // Batched membership fix (see AssignTabsToGroup). EnsureGroup already set the
+    // title/color, so no second ChangeTabGroupVisuals here.
+    AssignTabsToGroup(model_, bookmark_indices, bookmark_group);
   }
 
   // XPLORER: re-hide scheduled-task / bookmark rows AFTER the regroup above. The

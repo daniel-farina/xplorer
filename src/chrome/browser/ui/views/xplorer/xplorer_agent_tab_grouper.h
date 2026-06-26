@@ -71,8 +71,6 @@ class AgentTabGrouper : public TabStripModelObserver {
   // Browser exists). Called from the ctor and OnTabStripModelChanged; a no-op
   // once seeded or already scheduled.
   void MaybeScheduleSeed();
-  std::optional<tab_groups::TabGroupId> FindAgentGroup() const;
-  tab_groups::TabGroupId EnsureAgentGroup(int count);
 
   const raw_ptr<TabStripModel> model_;
   bool reconciling_ = false;
