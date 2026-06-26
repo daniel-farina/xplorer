@@ -638,6 +638,12 @@ def patch_vertical_sidebar(src: Path):
             "      continue;\n"
             "    }\n"
             "    node->view()->SetVisible(false);\n"
+            "    // XPLORER: a regroup reparents the row into a VerticalTabGroupView\n"
+            "    // and leaves a stale opacity layer from the move-fade; undo it so\n"
+            "    // the row isn't a transparent ghost when re-shown by a later layout.\n"
+            "    if (node->view()->layer()) {\n"
+            "      node->view()->layer()->SetOpacity(1.0f);\n"
+            "    }\n"
             "    ++it;\n"
             "  }\n"
             "}\n\n"
@@ -688,6 +694,66 @@ def patch_vertical_sidebar(src: Path):
             "  }\n"
             "}\n\n"
             "BEGIN_METADATA(VerticalUnpinnedTabContainerView)",
+        )
+
+    # XPLORER: re-assert hidden rows at the GROUP-view relayout boundary too.
+    # When the grouper regroups a hidden scheduled-task / bookmark row, the row is
+    # reparented INTO a VerticalTabGroupView: DetachChildView force-shows it
+    # (SetVisible(true)) and the reparent move-fade leaves a stale opacity layer.
+    # The unpinned container's OnAnimationEnded never fires for that intra-group
+    # move, so the row would otherwise stay half-visible with transparent title
+    # text. Re-asserting from the group view's own OnAnimationEnded re-hides it.
+    # The group-view .cc already includes vertical_tab_strip_utils.h (for
+    # GetVerticalTabStripView) + vertical_tab_strip_view.h; add them only if a
+    # future upstream drops them.
+    vtg_view_h = (src / "chrome/browser/ui/views/tabs/vertical/"
+                  "vertical_tab_group_view.h")
+    if "void OnAnimationEnded() override;" not in vtg_view_h.read_text():
+        sys.exit("ANCHOR NOT FOUND: VerticalTabGroupView::OnAnimationEnded "
+                 "override decl missing — upstream moved; update apply_integration.py")
+    vtg_view_cc = (src / "chrome/browser/ui/views/tabs/vertical/"
+                   "vertical_tab_group_view.cc")
+    vtg_cc_text = vtg_view_cc.read_text()
+    if ('#include "chrome/browser/ui/views/tabs/vertical/'
+            'vertical_tab_strip_utils.h"') not in vtg_cc_text:
+        edit(
+            vtg_view_cc,
+            '#include "chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_controller.h"',
+            '#include "chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_controller.h"\n'
+            '#include "chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_utils.h"  // XPLORER',
+        )
+    if ('#include "chrome/browser/ui/views/tabs/vertical/'
+            'vertical_tab_strip_view.h"') not in vtg_cc_text:
+        edit(
+            vtg_view_cc,
+            '#include "chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_utils.h"',
+            '#include "chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_utils.h"\n'
+            '#include "chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_view.h"  // XPLORER',
+        )
+    if "strip->ReassertHiddenRows();" not in vtg_cc_text:
+        edit(
+            vtg_view_cc,
+            "void VerticalTabGroupView::OnAnimationEnded() {\n"
+            "  // For collapsed tab groups update child visibility only once animations have\n"
+            "  // completed. This allows tabs to remain visible as the group animates closed.\n"
+            "  if (tab_group_visual_data_.is_collapsed()) {\n"
+            "    UpdateChildVisibilityForCollapseState(true);\n"
+            "  }\n"
+            "}",
+            "void VerticalTabGroupView::OnAnimationEnded() {\n"
+            "  // XPLORER: a scheduled-task / bookmark row reparented INTO this group is\n"
+            "  // force-shown by DetachChildView and given an opacity layer by the reparent\n"
+            "  // move-fade; re-assert its hidden state (the unpinned container's\n"
+            "  // OnAnimationEnded never fires for an intra-group move).\n"
+            "  if (VerticalTabStripView* strip = GetVerticalTabStripView(this)) {\n"
+            "    strip->ReassertHiddenRows();\n"
+            "  }\n"
+            "  // For collapsed tab groups update child visibility only once animations have\n"
+            "  // completed. This allows tabs to remain visible as the group animates closed.\n"
+            "  if (tab_group_visual_data_.is_collapsed()) {\n"
+            "    UpdateChildVisibilityForCollapseState(true);\n"
+            "  }\n"
+            "}",
         )
 
     # XPLORER: collapse the layout slot of a hidden tab row. CalculateProposedLayout

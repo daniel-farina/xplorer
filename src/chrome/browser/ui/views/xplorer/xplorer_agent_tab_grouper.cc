@@ -20,6 +20,8 @@
 #include "chrome/browser/agent_gateway/focus_arbiter.h"
 #include "chrome/browser/agent_gateway/tab_ownership.h"
 #include "chrome/browser/grok_companion/grok_companion_util.h"
+#include "chrome/browser/tab_group_sync/tab_group_sync_service_factory.h"
+#include "chrome/browser/tab_list/tab_removed_reason.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/tabs/tab_enums.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
@@ -29,6 +31,8 @@
 #include "chrome/browser/ui/tabs/tab_group_model.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/views/xplorer/xplorer_scheduled_task_tabs.h"
+#include "components/saved_tab_groups/public/saved_tab_group.h"
+#include "components/saved_tab_groups/public/tab_group_sync_service.h"
 #include "components/tab_groups/tab_group_color.h"
 #include "components/tab_groups/tab_group_visual_data.h"
 #include "components/tabs/public/tab_group.h"
@@ -118,7 +122,17 @@ std::optional<tab_groups::TabGroupId> FindGroupWithPrefix(
   return std::nullopt;
 }
 
+// The tab-group-sync service for |browser|'s profile, or nullptr. Symbols
+// resolve at the final link (sibling files in //chrome/browser/ui already use
+// this factory) — no new GN dep, mirroring the existing grok_companion pattern.
+tab_groups::TabGroupSyncService* SyncServiceFor(Browser* browser) {
+  return browser ? tab_groups::TabGroupSyncServiceFactory::GetForProfile(
+                       browser->profile())
+                 : nullptr;
+}
+
 tab_groups::TabGroupId EnsureGroup(TabStripModel* model,
+                                   tab_groups::TabGroupSyncService* sync,
                                    const char16_t* prefix,
                                    const std::vector<int>& indices,
                                    tab_groups::TabGroupColorId color) {
@@ -132,10 +146,20 @@ tab_groups::TabGroupId EnsureGroup(TabStripModel* model,
   CHECK(!indices.empty());
   tab_groups::TabGroupId group = model->AddToNewGroup(indices);
   model->ChangeTabGroupVisuals(group, visual);
+  // tab-group-sync auto-saves every AddToNewGroup (the model listener runs
+  // synchronously). These three managed groups (Agent/Scheduled/Bookmarks) are
+  // ephemeral UI affordances, not user-saved groups — delete the saved copy so
+  // emptying the group later can't leave a closed orphan chip accumulating
+  // across launches/windows. RemoveGroup() is the REAL delete, not a close.
+  if (sync) {
+    sync->RemoveGroup(group);
+  }
   return group;
 }
 
-void ClearGroupIfEmpty(TabStripModel* model, const char16_t* prefix) {
+void ClearGroupIfEmpty(TabStripModel* model,
+                       tab_groups::TabGroupSyncService* sync,
+                       const char16_t* prefix) {
   std::optional<tab_groups::TabGroupId> group = FindGroupWithPrefix(model, prefix);
   if (!group.has_value()) {
     return;
@@ -143,6 +167,11 @@ void ClearGroupIfEmpty(TabStripModel* model, const char16_t* prefix) {
   std::vector<int> grouped = IndicesInGroup(model, group.value());
   if (!grouped.empty()) {
     model->RemoveFromGroup(grouped);
+  }
+  // Delete any saved copy so the now-empty group can't become a locally-closed
+  // orphan (RemoveFromGroup alone only marks it closed in the sync model).
+  if (sync) {
+    sync->RemoveGroup(group.value());
   }
 }
 }  // namespace
@@ -178,8 +207,45 @@ void AgentTabGrouper::OnTabStripModelChanged(
   if (selection.reason & TabStripModelObserver::CHANGE_REASON_USER_GESTURE) {
     agent_gateway::FocusArbiter::Get()->ResetToUser();
   }
+
+  // A manually-closed bookmark tab must stick: drop its id from the persisted
+  // config so a later ApplyBookmarkConfig() or a new window's seeder doesn't
+  // re-open it. Only treat a real delete (kDeleted) as a close — a tab moved to
+  // another window (kInsertedIntoOtherTabStrip) keeps its bookmark id. Never
+  // mutate config here (re-entrancy); stage + defer to FlushClosedBookmarkConfigs.
+  if (change.type() == TabStripModelChange::kRemoved) {
+    if (const TabStripModelChange::Remove* removed = change.GetRemove()) {
+      for (const TabStripModelChange::RemovedTab& r : removed->contents) {
+        if (r.remove_reason != TabRemovedReason::kDeleted || !r.contents) {
+          continue;
+        }
+        agent_gateway::TabOwnership* own =
+            agent_gateway::TabOwnership::Get(r.contents);
+        if (own && own->bookmark_node_id != 0) {
+          closed_bookmark_ids_.push_back(own->bookmark_node_id);
+        }
+      }
+      if (!closed_bookmark_ids_.empty() && !bookmark_remove_scheduled_) {
+        bookmark_remove_scheduled_ = true;
+        base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+            FROM_HERE,
+            base::BindOnce(&AgentTabGrouper::FlushClosedBookmarkConfigs,
+                           weak_factory_.GetWeakPtr()));
+      }
+    }
+  }
+
   ScheduleReconcile();
   MaybeScheduleSeed();
+}
+
+void AgentTabGrouper::FlushClosedBookmarkConfigs() {
+  bookmark_remove_scheduled_ = false;
+  std::vector<int64_t> ids;
+  ids.swap(closed_bookmark_ids_);
+  for (int64_t id : ids) {
+    grok_companion::RemoveBookmarkConfig(id);
+  }
 }
 
 void AgentTabGrouper::ScheduleReconcile() {
@@ -216,6 +282,28 @@ void AgentTabGrouper::Reconcile() {
     ReassertHiddenScheduledTaskTabRows(browser);
   }
 
+  tab_groups::TabGroupSyncService* sync = SyncServiceFor(browser);
+
+  // One-time backlog purge: delete the closed-orphan saved copies of our three
+  // managed groups that accumulated before this fix shipped. A saved group with
+  // an empty local_group_id() is a locally-closed orphan; only those titled with
+  // one of our prefixes are ours to remove. Runs once per grouper, on the first
+  // Reconcile() where the sync service is available.
+  if (sync && !backlog_purged_) {
+    backlog_purged_ = true;
+    for (const tab_groups::SavedTabGroup& g : sync->GetAllGroups()) {
+      if (g.local_group_id().has_value()) {
+        continue;  // Still open somewhere — leave it.
+      }
+      const std::u16string& title = g.title();
+      if (base::StartsWith(title, kAgentGroupPrefix) ||
+          base::StartsWith(title, kScheduledGroupPrefix) ||
+          base::StartsWith(title, kBookmarksGroupPrefix)) {
+        sync->RemoveGroup(g.saved_guid());
+      }
+    }
+  }
+
   std::vector<int> scheduled_indices;
   std::vector<int> adhoc_indices;
   std::vector<int> bookmark_indices;
@@ -243,10 +331,10 @@ void AgentTabGrouper::Reconcile() {
   }
 
   if (scheduled_indices.empty()) {
-    ClearGroupIfEmpty(model_, kScheduledGroupPrefix);
+    ClearGroupIfEmpty(model_, sync, kScheduledGroupPrefix);
   } else {
     tab_groups::TabGroupId scheduled_group = EnsureGroup(
-        model_, kScheduledGroupPrefix, scheduled_indices,
+        model_, sync, kScheduledGroupPrefix, scheduled_indices,
         tab_groups::TabGroupColorId::kBlue);
     for (int index : scheduled_indices) {
       if (!model_->GetTabGroupForTab(index).has_value()) {
@@ -264,10 +352,10 @@ void AgentTabGrouper::Reconcile() {
   }
 
   if (adhoc_indices.empty()) {
-    ClearGroupIfEmpty(model_, kAgentGroupPrefix);
+    ClearGroupIfEmpty(model_, sync, kAgentGroupPrefix);
   } else {
     tab_groups::TabGroupId agent_group = EnsureGroup(
-        model_, kAgentGroupPrefix, adhoc_indices,
+        model_, sync, kAgentGroupPrefix, adhoc_indices,
         tab_groups::TabGroupColorId::kGrey);
     for (int index : adhoc_indices) {
       if (!model_->GetTabGroupForTab(index).has_value()) {
@@ -284,10 +372,10 @@ void AgentTabGrouper::Reconcile() {
   }
 
   if (bookmark_indices.empty()) {
-    ClearGroupIfEmpty(model_, kBookmarksGroupPrefix);
+    ClearGroupIfEmpty(model_, sync, kBookmarksGroupPrefix);
   } else {
     tab_groups::TabGroupId bookmark_group = EnsureGroup(
-        model_, kBookmarksGroupPrefix, bookmark_indices,
+        model_, sync, kBookmarksGroupPrefix, bookmark_indices,
         tab_groups::TabGroupColorId::kYellow);
     for (int index : bookmark_indices) {
       if (!model_->GetTabGroupForTab(index).has_value()) {
@@ -302,6 +390,15 @@ void AgentTabGrouper::Reconcile() {
                    static_cast<int>(bookmark_indices.size())),
         tab_groups::TabGroupColorId::kYellow);
     model_->ChangeTabGroupVisuals(bookmark_group, bookmark_visual);
+  }
+
+  // XPLORER: re-hide scheduled-task / bookmark rows AFTER the regroup above. The
+  // earlier call (pre-regroup relayout) runs before AddToExistingGroup reparents
+  // a hidden row into a group view, which force-shows it; re-assert here so a
+  // 0-duration animation (where OnAnimationEnded never fires) still leaves the
+  // row hidden.
+  if (browser) {
+    ReassertHiddenScheduledTaskTabRows(browser);
   }
 
   reconciling_ = false;
@@ -477,6 +574,11 @@ void AgentTabGrouper::ApplyBookmarkConfig() {
       model_->CloseWebContentsAt(i, TabCloseTypes::CLOSE_USER_GESTURE);
     }
   }
+
+  // If the close loop emptied the Bookmarks group, delete its saved copy too so
+  // it can't linger as a closed orphan chip (RemoveFromGroup alone only marks it
+  // locally-closed in the sync model).
+  ClearGroupIfEmpty(model_, SyncServiceFor(browser), kBookmarksGroupPrefix);
 
   // Open background tabs for config ids not yet present (stamps
   // bookmark_node_id). Reuses the present-id de-dupe.

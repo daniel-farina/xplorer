@@ -284,7 +284,11 @@ void MarkWelcomeCompleted() {
 GURL GetStartupHomeURL() {
   if (!HasCompletedWelcome())
     return GetWelcomeURL();
-  return GetDefaultSearchHomeURL();
+  // XPLORER: new tabs / startup / tab-restore always land on /search, regardless
+  // of the Web/Wiki/Build toggle. GetDefaultSearchHomeURL() stays untouched
+  // (shared with OpenGrokSearchPage + the omnibox/NTP chip, which honor the
+  // toggle).
+  return GetSearchURL();
 }
 
 bool IsGrokHomeURL(const GURL& url) {
@@ -380,6 +384,24 @@ void SetBookmarkConfigs(const std::vector<base::DictValue>& bookmarks) {
   settings.Set("bookmarks", std::move(list));
   SaveGrokSettings(settings);
   NotifyBookmarkConfigChanged();
+}
+
+void RemoveBookmarkConfig(int64_t node_id) {
+  std::vector<base::DictValue> bookmarks = GetBookmarkConfigs();
+  bool removed = false;
+  for (auto it = bookmarks.begin(); it != bookmarks.end();) {
+    int64_t id = 0;
+    const std::string* id_str = it->FindString("id");
+    if (id_str && base::StringToInt64(*id_str, &id) && id == node_id) {
+      it = bookmarks.erase(it);
+      removed = true;
+    } else {
+      ++it;
+    }
+  }
+  if (!removed)
+    return;
+  SetBookmarkConfigs(bookmarks);
 }
 
 base::CallbackListSubscription AddBookmarkConfigChangedCallback(

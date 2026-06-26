@@ -4,6 +4,7 @@
 #ifndef CHROME_BROWSER_UI_VIEWS_XPLORER_XPLORER_AGENT_TAB_GROUPER_H_
 #define CHROME_BROWSER_UI_VIEWS_XPLORER_XPLORER_AGENT_TAB_GROUPER_H_
 
+#include <cstdint>
 #include <optional>
 #include <vector>
 
@@ -60,6 +61,12 @@ class AgentTabGrouper : public TabStripModelObserver {
   // Re-reads the bookmark config and reconciles open bookmark tabs: closes tabs
   // whose id was removed, opens tabs for new ids, then ScheduleReconcile().
   void ApplyBookmarkConfig();
+  // Deferred drain of |closed_bookmark_ids_|: calls RemoveBookmarkConfig() for
+  // each id a user manually closed, so the close sticks (the id is dropped from
+  // the persisted config and won't be re-opened by a later ApplyBookmarkConfig
+  // or a new window's seeder). Never mutates config inside the model
+  // notification — staged + PostTask'd, mirroring the bookmark-reload path.
+  void FlushClosedBookmarkConfigs();
   // Schedules a deferred SeedDefaultBookmarks() once the strip has a tab (so a
   // Browser exists). Called from the ctor and OnTabStripModelChanged; a no-op
   // once seeded or already scheduled.
@@ -73,6 +80,14 @@ class AgentTabGrouper : public TabStripModelObserver {
   bool seeded_ = false;
   bool seed_scheduled_ = false;
   bool bookmark_reload_scheduled_ = false;
+  // One-shot latch: purge pre-existing closed-orphan saved copies of our managed
+  // groups on the first Reconcile() where the sync service is available.
+  bool backlog_purged_ = false;
+  // Bookmark ids the user manually closed, staged in OnTabStripModelChanged and
+  // drained by FlushClosedBookmarkConfigs() (deferred — never mutate config in
+  // the notification).
+  std::vector<int64_t> closed_bookmark_ids_;
+  bool bookmark_remove_scheduled_ = false;
   base::CallbackListSubscription bookmark_config_subscription_;
   base::WeakPtrFactory<AgentTabGrouper> weak_factory_{this};
 };

@@ -116,6 +116,13 @@ std::vector<base::DictValue> GetBookmarkConfigs();
 // groupers. Merge-safe: only the "bookmarks" key is rewritten.
 void SetBookmarkConfigs(const std::vector<base::DictValue>& bookmarks);
 
+// Removes the bookmark whose synthetic "id" parses to |node_id| from the
+// persisted "bookmarks" array (a no-op if absent), then re-persists via
+// SetBookmarkConfigs (which fires the live-reload notify). Used when the user
+// manually closes a bookmark tab so the close sticks and a later
+// ApplyBookmarkConfig / new window doesn't re-open it.
+void RemoveBookmarkConfig(int64_t node_id);
+
 // Live-reload seam. Fired on the UI thread whenever the bookmark list is
 // persisted in-process (the gateway's /api/settings write, or
 // SetBookmarkConfigs), so open AgentTabGroupers can re-open/close bookmark tabs.
