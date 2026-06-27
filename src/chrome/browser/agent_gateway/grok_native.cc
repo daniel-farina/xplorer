@@ -1616,6 +1616,18 @@ void PumpGrokStream(net::HttpServer* server,
   }
   base::Process process;
 
+  // Give each chat conversation a distinct agent identity, so the tabs it opens
+  // get a per-conversation owner ("chat:<conv_id>") and the grouper puts each
+  // chat's tabs in its OWN "Agent:" group instead of every chat collapsing into
+  // one shared group. Server-side (not a system-prompt instruction) so it can't
+  // be ignored by the model. Only for the interactive chat stream — scheduled
+  // tasks set their own schedule:<job_id> identity, and search/app-build have
+  // their own flows. Empty for non-chat kinds (a no-op merge).
+  std::map<std::string, std::string> child_env;
+  if (kind == GrokStreamKind::kChat && !conv_id.empty()) {
+    child_env["XPLORER_AGENT_ID"] = "chat:" + conv_id;
+  }
+
 #if BUILDFLAG(IS_WIN)
   // Anonymous pipe: child writes stdout to |stdout_write| (inheritable), we
   // read |read_handle| (kept non-inheritable). Mirrors the POSIX path below.
@@ -1641,6 +1653,7 @@ void PumpGrokStream(net::HttpServer* server,
   base::win::ScopedHandle read_handle(stdout_read);
 
   base::LaunchOptions options;
+  options.environment = child_env;  // per-conversation XPLORER_AGENT_ID (see above)
   options.start_hidden = true;  // no console window for the grok child
   // With handles_to_inherit set, base uses PROC_THREAD_ATTRIBUTE_HANDLE_LIST,
   // so ONLY listed handles are inherited — list every std handle we hand over.
@@ -1690,6 +1703,7 @@ void PumpGrokStream(net::HttpServer* server,
     return;
   }
   base::LaunchOptions options;
+  options.environment = child_env;  // per-conversation XPLORER_AGENT_ID (see above)
   options.fds_to_remap.emplace_back(pipe_fds[1], STDOUT_FILENO);
   if (stderr_file.IsValid()) {
     options.fds_to_remap.emplace_back(stderr_file.GetPlatformFile(),
