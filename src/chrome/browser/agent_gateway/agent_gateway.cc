@@ -96,6 +96,48 @@ AgentGateway::~AgentGateway() {
   g_instance = nullptr;
 }
 
+void AgentGateway::Shutdown() {
+  // The gateway is a leaked raw global; its destructor effectively never runs,
+  // so without this explicit teardown the server thread keeps running, the
+  // net::HttpServer (and its listening socket) is never destroyed, and the
+  // Scheduler poll timer stays armed — CompleteShutdown then hangs and a zombie
+  // keeps port 9334 bound. Tear everything down deterministically here.
+  //
+  // Idempotent: once the thread is stopped/null, there is nothing left to do.
+  if (!server_thread_) {
+    g_instance = nullptr;
+    return;
+  }
+
+  // Post the IO-thread teardown BEFORE Stop(). base::Thread::Stop() posts a
+  // Quit and joins, flushing already-queued tasks first, so this task is
+  // guaranteed to run on the IO thread before the join completes. It must run
+  // there because:
+  //   - the Scheduler's base::RepeatingTimer was armed on this thread and is
+  //     sequence-affine, so it can only be cancelled here;
+  //   - net::HttpServer and its TCPServerSocket were created on this thread and
+  //     Chromium threading requires them to be destroyed on it too.
+  server_thread_->task_runner()->PostTask(
+      FROM_HERE, base::BindOnce([](AgentGateway* self) {
+        // Cancel the poll timer (armed on this same IO thread in Start()).
+        Scheduler::Get()->Stop();
+        // Destroy the HttpServer + listening socket on their owning thread,
+        // releasing port 9334.
+        self->server_.reset();
+      }, base::Unretained(this)));
+
+  // Stop() posts the Quit and joins the thread. net::HttpServer uses async
+  // (non-blocking) accept on the IO message loop, so the loop is not parked in a
+  // blocking accept(): the Quit wakes it and the join returns cleanly once the
+  // posted reset task above has drained.
+  server_thread_->Stop();
+  server_thread_.reset();
+
+  // After this point GetInstance() returns null, so no late caller can touch the
+  // now-destroyed server.
+  g_instance = nullptr;
+}
+
 void AgentGateway::StartServerOnIOThread(int port) {
   auto socket = std::make_unique<net::TCPServerSocket>(nullptr,
                                                        net::NetLogSource());

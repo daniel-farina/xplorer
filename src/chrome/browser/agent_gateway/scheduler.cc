@@ -202,6 +202,17 @@ void Scheduler::Start() {
   Poll();
 }
 
+void Scheduler::Stop() {
+  // Cancel the poll timer on the sequence that armed it (the gateway IO
+  // thread). base::RepeatingTimer::Stop() is a no-op if the timer is not
+  // running, so this is safe whether or not Start() ran. We deliberately leave
+  // started_ untrue-or-true as-is and do not clear task_runner_/jobs_: this runs
+  // at process shutdown and any in-flight ThreadPool run completion that hops
+  // back here is harmless (the message loop is draining), while clearing state
+  // would only add a window for a use-after-free.
+  timer_.Stop();
+}
+
 void Scheduler::ReconcileStuckRunningJobs() {
   const int64_t now_us = ToEpochUs(base::Time::Now());
   bool changed = false;

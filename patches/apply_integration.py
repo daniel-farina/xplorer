@@ -720,6 +720,20 @@ def main(src: Path):
         f'\n#include "chrome/browser/agent_gateway/agent_gateway.h"'
         f"  {MARKER}\n",
     )
+    # 1b. Cleanly shut the gateway down in PostMainMessageLoopRun (after the main
+    # loop quits, before thread teardown). The gateway is a leaked raw global
+    # whose dtor never runs, so without this the AgentGateway server thread / its
+    # net::HttpServer + listening socket / the Scheduler poll timer are never
+    # torn down -> CompleteShutdown hangs and a zombie keeps port 9334 bound.
+    # Anchor on the first Shutdown() in this method (UpgradeDetector), splicing
+    # ours right after it — still well before browser_process_->StartTearDown().
+    edit(
+        main_cc,
+        "  UpgradeDetector::GetInstance()->Shutdown();",
+        f"\n\n  {MARKER}: deterministically stop the agent gateway server thread.\n"
+        "  if (auto* g = agent_gateway::AgentGateway::GetInstance())\n"
+        "    g->Shutdown();\n",
+    )
 
     # 2. Link the component into chrome/browser.
     browser_gn = src / "chrome/browser/BUILD.gn"

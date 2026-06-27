@@ -48,6 +48,15 @@ class AgentGateway : public net::HttpServer::Delegate {
   static AgentGateway* Start(int port);
   static AgentGateway* GetInstance();
 
+  // Deterministic, explicit shutdown. The instance is a leaked raw global whose
+  // destructor effectively never runs, so the server thread / HttpServer / the
+  // Scheduler poll timer must be torn down here. Called from
+  // ChromeBrowserMainParts::PostMainMessageLoopRun(), after the main loop quits
+  // but before thread teardown. Idempotent and safe to call when the server
+  // thread was never started or has already been stopped. After it returns,
+  // GetInstance() yields null.
+  void Shutdown();
+
   AgentGateway(const AgentGateway&) = delete;
   AgentGateway& operator=(const AgentGateway&) = delete;
   ~AgentGateway() override;

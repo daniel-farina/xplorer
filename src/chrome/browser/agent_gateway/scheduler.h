@@ -104,6 +104,13 @@ class Scheduler {
   // Idempotent: a second call reloads jobs without double-arming.
   void Start();
 
+  // Cancels the poll timer so the gateway IO thread can be joined cleanly on
+  // shutdown. MUST be called on the thread that owns the timer (the gateway IO
+  // thread, the same one that called Start()), because base::RepeatingTimer is
+  // sequence-affine. Idempotent and safe to call when the timer was never armed.
+  // Does not touch jobs_ or persistence — scheduling state is unchanged.
+  void Stop();
+
   // --- CRUD (called from the GET/POST/DELETE /api/schedules handlers). The
   // scheduler keeps the canonical in-memory list; these mutate it + persist. ---
 
