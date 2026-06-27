@@ -16,6 +16,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/cancelable_task_tracker.h"
+#include "chrome/browser/agent_gateway/tab_ownership.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/history/history_service_factory.h"
 #include "chrome/browser/profiles/profile_manager.h"
@@ -323,6 +324,15 @@ void BrowserApi::OrganizeTabs(DictCallback callback) {
       content::WebContents* wc = model->GetWebContentsAt(i);
       if (!wc)
         continue;
+      // Skip managed tabs (bookmarks / agent-owned / scheduled-task). They belong
+      // to AgentTabGrouper's persistent Bookmarks/Agent/Scheduled groups; letting
+      // organize bucket them by category scatters them out of those groups and the
+      // grouper does not reclaim a tab already in a non-managed group.
+      TabOwnership* own = TabOwnership::Get(wc);
+      if (own && (own->bookmark_node_id != 0 || !own->owner.empty() ||
+                  !own->task_id.empty())) {
+        continue;
+      }
       ++total_tabs;
       const std::string category = TabCategory(
           wc->GetLastCommittedURL(),
