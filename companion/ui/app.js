@@ -341,6 +341,23 @@ async function refresh() {
   }
 }
 
+// Targeted title-sync: pull fresh conversation metadata and copy over any
+// changed titles in place (e.g. the server's async LLM-generated topic title).
+// Deliberately does NOT replace the `conversations` array — that would disturb
+// live message streams — it only patches the `title` field of existing entries.
+async function syncConvTitles() {
+  try {
+    const data = await api('/api/conversations');
+    const byId = new Map((data.conversations || []).map((c) => [c.id, c]));
+    let changed = false;
+    for (const c of conversations) {
+      const f = byId.get(c.id);
+      if (f && f.title && f.title !== c.title) { c.title = f.title; changed = true; }
+    }
+    if (changed) renderConvList();
+  } catch {}
+}
+
 let remotePollTimer = null;
 
 function anyRemoteRun() {
@@ -610,6 +627,14 @@ async function sendMessage(text, { retry = false, convId = activeId } = {}) {
     updateActiveBadge();
     renderConvList();
     if (convId === activeId) { renderMessages(currentConv()); setComposerRunning(); input.focus(); }
+    // For a brand-new chat, the server upgrades the title asynchronously (an
+    // LLM-generated topic). Poll a few times to pick it up without disturbing
+    // the live `conversations` array / streams.
+    if ((conv.title || '') === 'New chat' || (conv.messages?.length || 0) <= 2) {
+      syncConvTitles();
+      setTimeout(syncConvTitles, 4000);
+      setTimeout(syncConvTitles, 12000);
+    }
     drainQueue(convId);
   }
 }

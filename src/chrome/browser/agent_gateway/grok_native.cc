@@ -2354,6 +2354,87 @@ base::DictValue RunGrokChat(const std::string& message,
   return fallback;
 }
 
+// Async LLM-generated topic title for a conversation. Runs a SESSIONLESS,
+// tool-less Composer call (passing an empty session_id + kComposerModel +
+// kChatRules) so it never touches the conversation's locked grok agent session.
+// Persists ONLY if the title is still |placeholder|, so a manual rename (or a
+// concurrent better title) is never clobbered. Note: this is an extra writer to
+// companion_sessions.json — it flips one field guarded on the placeholder value,
+// so last-write-wins is acceptable here.
+void MaybeGenerateConversationTitle(const std::string& conv_id,
+                                    const std::string& first_message,
+                                    const std::string& placeholder) {
+  base::ThreadPool::CreateSequencedTaskRunner(
+      {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
+       base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN})
+      ->PostTask(
+          FROM_HERE,
+          base::BindOnce(
+              [](std::string conv_id, std::string message,
+                 std::string placeholder) {
+                const std::string prompt =
+                    "Generate a SHORT title (2-5 words, Title Case, no quotes, "
+                    "no trailing punctuation) for the TOPIC of this browser "
+                    "chat request. Reply with ONLY the title.\n\nRequest: " +
+                    message.substr(0, std::min<size_t>(500, message.size()));
+                base::DictValue r = RunGrokChat(
+                    prompt, /*session_id=*/std::string(), kComposerModel,
+                    kChatRules);
+                const std::string* text = r.FindString("text");
+                if (!text)
+                  return;
+                std::string title = *text;
+                // first line only, trim whitespace, strip wrapping quotes,
+                // clamp to 48 chars
+                auto nl = title.find('\n');
+                if (nl != std::string::npos)
+                  title = title.substr(0, nl);
+                base::TrimWhitespaceASCII(title, base::TRIM_ALL, &title);
+                if (title.size() >= 2 && title.front() == '"' &&
+                    title.back() == '"')
+                  title = title.substr(1, title.size() - 2);
+                base::TrimWhitespaceASCII(title, base::TRIM_ALL, &title);
+                if (title.size() > 48)
+                  title = title.substr(0, 48);
+                if (title.empty())
+                  return;
+                base::DictValue data = LoadSessions();
+                base::ListValue* convs = data.FindList("conversations");
+                if (!convs)
+                  return;
+                for (base::Value& v : *convs) {
+                  if (!v.is_dict())
+                    continue;
+                  const std::string* id = v.GetDict().FindString("id");
+                  if (!id || *id != conv_id)
+                    continue;
+                  const std::string* cur = v.GetDict().FindString("title");
+                  if (cur && *cur == placeholder)
+                    v.GetDict().Set("title", title);
+                  break;
+                }
+                SaveSessions(data);
+              },
+              conv_id, first_message, placeholder));
+}
+
+// Shared first-message titler. If the conversation still has the "New chat"
+// placeholder, set an instant fallback title (first 48 chars of the message)
+// and kick off the async LLM topic upgrade. The caller is responsible for
+// persisting |conv| (the fallback is set in-place here; the async upgrade
+// loads/saves on its own).
+void TitleConversationFromFirstMessage(base::DictValue* conv,
+                                       const std::string& conv_id,
+                                       const std::string& message) {
+  const std::string* title = conv->FindString("title");
+  if (!title || *title != "New chat")
+    return;
+  std::string fallback = message.substr(0, std::min<size_t>(48, message.size()));
+  conv->Set("title", fallback);  // instant, always-present
+  MaybeGenerateConversationTitle(conv_id, message,
+                                 fallback);  // async topic upgrade
+}
+
 // Headless dispatch for the scheduler. Mirrors the non-streaming RunAsync path
 // of POST /api/conversations/{id}/message (busy guard -> append user msg ->
 // register run -> blocking RunGrokChat -> persist reply), but with no live HTTP
@@ -2457,12 +2538,7 @@ void DispatchScheduledRun(
                 user_msg.Set("role", "user");
                 user_msg.Set("content", message);
                 msgs->Append(std::move(user_msg));
-                if (const std::string* title = conv->FindString("title");
-                    title && *title == "New chat") {
-                  conv->Set("title",
-                            message.substr(0, std::min<size_t>(48,
-                                                               message.size())));
-                }
+                TitleConversationFromFirstMessage(conv, conv_id, message);
                 std::string session_id;
                 if (const std::string* sid = conv->FindString("session_id"))
                   session_id = *sid;
@@ -2595,12 +2671,7 @@ void DispatchScheduledAppBuild(
                 user_msg.Set("role", "user");
                 user_msg.Set("content", message);
                 msgs->Append(std::move(user_msg));
-                if (const std::string* title = conv->FindString("title");
-                    title && *title == "New chat") {
-                  conv->Set("title",
-                            message.substr(0, std::min<size_t>(48,
-                                                               message.size())));
-                }
+                TitleConversationFromFirstMessage(conv, conv_id, message);
                 std::string session_id;
                 if (const std::string* sid = conv->FindString("session_id"))
                   session_id = *sid;
@@ -3789,10 +3860,7 @@ bool GrokNative::TryHandleRequest(
     user_msg.Set("role", "user");
     user_msg.Set("content", *message);
     msgs->Append(user_msg.Clone());
-    if (const std::string* title = conv->FindString("title");
-        title && *title == "New chat") {
-      conv->Set("title", message->substr(0, std::min<size_t>(48, message->size())));
-    }
+    TitleConversationFromFirstMessage(conv, conv_id, *message);
     std::string session_id;
     if (const std::string* sid = conv->FindString("session_id"))
       session_id = *sid;
