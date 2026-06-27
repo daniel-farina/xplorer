@@ -130,7 +130,7 @@ tab_groups::TabGroupSyncService* SyncServiceFor(Browser* browser) {
 }
 
 tab_groups::TabGroupId EnsureGroup(TabStripModel* model,
-                                   tab_groups::TabGroupSyncService* sync,
+                                   [[maybe_unused]] tab_groups::TabGroupSyncService* sync,
                                    const char16_t* prefix,
                                    const std::vector<int>& indices,
                                    tab_groups::TabGroupColorId color) {
@@ -154,14 +154,15 @@ tab_groups::TabGroupId EnsureGroup(TabStripModel* model,
   CHECK(!indices.empty());
   tab_groups::TabGroupId group = model->AddToNewGroup(indices);
   model->ChangeTabGroupVisuals(group, visual);
-  // tab-group-sync auto-saves every AddToNewGroup (the model listener runs
-  // synchronously). These three managed groups (Agent/Scheduled/Bookmarks) are
-  // ephemeral UI affordances, not user-saved groups — delete the saved copy so
-  // emptying the group later can't leave a closed orphan chip accumulating
-  // across launches/windows. RemoveGroup() is the REAL delete, not a close.
-  if (sync) {
-    sync->RemoveGroup(group);
-  }
+  // Do NOT sync->RemoveGroup(group) here. tab-group-sync auto-saves every
+  // AddToNewGroup, but removing the saved copy immediately leaves the upstream
+  // LocalTabGroupListener with a dangling saved_guid_: a later AddToExistingGroup
+  // (AssignTabsToGroup adding a tab to this managed group during organize / agent
+  // churn) then hits a FATAL CHECK(service_->GetGroup(saved_guid_).has_value()) in
+  // LocalTabGroupListener::AddTabFromLocal and ABORTS the browser (the recurring
+  // "dies under load" crash). Orphan prevention is handled WITHOUT this: the saved
+  // copy is deleted when the group EMPTIES (ClearGroupIfEmpty), and any
+  // shutdown-time leftovers are swept by the one-time startup backlog purge.
   return group;
 }
 
