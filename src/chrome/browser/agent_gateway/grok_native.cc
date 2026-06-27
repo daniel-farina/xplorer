@@ -41,6 +41,7 @@
 #include "base/rand_util.h"
 #include "base/strings/escape.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/environment.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
@@ -1453,6 +1454,24 @@ struct GrokStdoutProcess {
 #endif
 };
 
+// base::LaunchOptions::environment is base::EnvironmentMap, whose key/value type
+// is std::wstring on Windows and std::string on POSIX. We build child env as a
+// plain std::map<std::string,std::string> everywhere for readability, then convert
+// to the platform-correct EnvironmentMap right before assigning to options. (A
+// direct `options.environment = <string map>` does NOT compile on Windows.)
+base::EnvironmentMap ToEnvironmentMap(
+    const std::map<std::string, std::string>& m) {
+  base::EnvironmentMap env;
+  for (const auto& [k, v] : m) {
+#if BUILDFLAG(IS_WIN)
+    env[base::UTF8ToWide(k)] = base::UTF8ToWide(v);
+#else
+    env[k] = v;
+#endif
+  }
+  return env;
+}
+
 std::optional<GrokStdoutProcess> LaunchGrokStdoutProcess(
     const base::CommandLine& cmd,
     const std::map<std::string, std::string>& extra_env = {}) {
@@ -1470,7 +1489,7 @@ std::optional<GrokStdoutProcess> LaunchGrokStdoutProcess(
 
   base::LaunchOptions options;
   options.start_hidden = true;
-  options.environment = extra_env;
+  options.environment = ToEnvironmentMap(extra_env);
   base::win::ScopedHandle nul_in(
       ::CreateFileW(L"NUL", GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE,
                     &sa, OPEN_EXISTING, 0, nullptr));
@@ -1495,7 +1514,7 @@ std::optional<GrokStdoutProcess> LaunchGrokStdoutProcess(
     return std::nullopt;
   const int devnull = open("/dev/null", O_RDWR);
   base::LaunchOptions options;
-  options.environment = extra_env;
+  options.environment = ToEnvironmentMap(extra_env);
   options.fds_to_remap.emplace_back(pipe_fds[1], STDOUT_FILENO);
   if (devnull >= 0) {
     options.fds_to_remap.emplace_back(devnull, STDIN_FILENO);
@@ -1653,7 +1672,7 @@ void PumpGrokStream(net::HttpServer* server,
   base::win::ScopedHandle read_handle(stdout_read);
 
   base::LaunchOptions options;
-  options.environment = child_env;  // per-conversation XPLORER_AGENT_ID (see above)
+  options.environment = ToEnvironmentMap(child_env);  // per-conversation env (see above)
   options.start_hidden = true;  // no console window for the grok child
   // With handles_to_inherit set, base uses PROC_THREAD_ATTRIBUTE_HANDLE_LIST,
   // so ONLY listed handles are inherited — list every std handle we hand over.
@@ -1703,7 +1722,7 @@ void PumpGrokStream(net::HttpServer* server,
     return;
   }
   base::LaunchOptions options;
-  options.environment = child_env;  // per-conversation XPLORER_AGENT_ID (see above)
+  options.environment = ToEnvironmentMap(child_env);  // per-conversation env (see above)
   options.fds_to_remap.emplace_back(pipe_fds[1], STDOUT_FILENO);
   if (stderr_file.IsValid()) {
     options.fds_to_remap.emplace_back(stderr_file.GetPlatformFile(),
