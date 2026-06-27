@@ -12,6 +12,7 @@
 #include "base/callback_list.h"
 #include "base/check.h"
 #include "base/functional/bind.h"
+#include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -355,21 +356,33 @@ void AgentTabGrouper::Reconcile() {
       browser = bwi->GetBrowserForMigrationOnly();
     }
   }
-  if (browser) {
-    ReassertHiddenScheduledTaskTabRows(browser);
-  }
 
   tab_groups::TabGroupSyncService* sync = SyncServiceFor(browser);
 
-  // One-time backlog purge: delete EVERY closed-orphan saved group. In Xplorer
-  // all tab groups are ephemeral/auto-managed — the three managed groups
-  // (Agent/Scheduled/Bookmarks) plus the one-shot "organize tabs" topic groups —
-  // so a saved group with no live local_group_id() is just a locally-closed
-  // orphan cluttering the strip. Purge them all (this is what clears the "dozens
-  // of closed groups", organize leftovers included). Runs once per grouper, on
-  // the first Reconcile() where the sync service is available.
-  if (sync && !backlog_purged_) {
-    backlog_purged_ = true;
+  // Continuous closed-orphan purge: delete EVERY saved group with no live
+  // local_group_id(). In Xplorer all tab groups are ephemeral/auto-managed — the
+  // three managed groups (Agent/Scheduled/Bookmarks) plus the one-shot "organize
+  // tabs" topic groups — so a saved group with no live local_group_id() is just a
+  // locally-closed orphan. They accumulate mid-session (each launch recreates the
+  // managed groups since TabOwnership is runtime-only; each organize adds more),
+  // cluttering the "Create New Tab Group" dropdown with dozens of stale entries.
+  // Runs every Reconcile (not once) so orphans are cleaned promptly. Crash-safe:
+  // a group with nullopt local_group_id has NO active LocalTabGroupListener (the
+  // listener is created with the local id and torn down atomically when it goes
+  // nullopt), so this can't dangle a saved_guid_ — that was the e7b0252 abort,
+  // which required removing a still-LIVE group. GetAllGroups() is a by-value
+  // snapshot, so removing while iterating is safe.
+  //
+  // BUT skip while a nested run loop is active (a context menu / tab drag): the
+  // "Add to group" submenu lists closed orphans and captures their saved_guid at
+  // build time; removing one mid-display would FATAL when the user clicks the
+  // now-stale item (upstream CHECK in ExistingTabGroupSubMenuModel). The next
+  // non-nested Reconcile cleans them.
+  // NOTE: this purges ALL nullopt-local saved groups. Safe here because the fork
+  // wires no account sign-in/sync — every closed group is a local orphan. If
+  // account-based tab-group sync is ever enabled, gate this so it doesn't delete
+  // remotely-saved closed groups across devices.
+  if (sync && !base::RunLoop::IsNestedOnCurrentThread()) {
     for (const tab_groups::SavedTabGroup& g : sync->GetAllGroups()) {
       if (!g.local_group_id().has_value()) {
         sync->RemoveGroup(g.saved_guid());
@@ -434,15 +447,6 @@ void AgentTabGrouper::Reconcile() {
     // Batched membership fix (see AssignTabsToGroup). EnsureGroup already set the
     // title/color, so no second ChangeTabGroupVisuals here.
     AssignTabsToGroup(model_, bookmark_indices, bookmark_group);
-  }
-
-  // XPLORER: re-hide scheduled-task / bookmark rows AFTER the regroup above. The
-  // earlier call (pre-regroup relayout) runs before AddToExistingGroup reparents
-  // a hidden row into a group view, which force-shows it; re-assert here so a
-  // 0-duration animation (where OnAnimationEnded never fires) still leaves the
-  // row hidden.
-  if (browser) {
-    ReassertHiddenScheduledTaskTabRows(browser);
   }
 
   reconciling_ = false;

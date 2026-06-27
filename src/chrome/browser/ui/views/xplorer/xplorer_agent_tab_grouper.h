@@ -78,9 +78,6 @@ class AgentTabGrouper : public TabStripModelObserver {
   bool seeded_ = false;
   bool seed_scheduled_ = false;
   bool bookmark_reload_scheduled_ = false;
-  // One-shot latch: purge pre-existing closed-orphan saved copies of our managed
-  // groups on the first Reconcile() where the sync service is available.
-  bool backlog_purged_ = false;
   // Bookmark ids the user manually closed, staged in OnTabStripModelChanged and
   // drained by FlushClosedBookmarkConfigs() (deferred — never mutate config in
   // the notification).
