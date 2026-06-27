@@ -1011,6 +1011,12 @@ def main(src: Path):
         b = b.replace("COMPANY_FULLNAME=The Chromium Authors",
                       "COMPANY_FULLNAME=Xplorer")
         b = b.replace("COMPANY_SHORTNAME=Chromium", "COMPANY_SHORTNAME=Xplorer")
+        # Installer .exe file properties (setup.exe / mini_installer.exe
+        # ProductName + FileDescription) — read "Chromium Installer" otherwise.
+        b = b.replace("PRODUCT_INSTALLER_FULLNAME=Chromium Installer",
+                      "PRODUCT_INSTALLER_FULLNAME=Xplorer Installer")
+        b = b.replace("PRODUCT_INSTALLER_SHORTNAME=Chromium Installer",
+                      "PRODUCT_INSTALLER_SHORTNAME=Xplorer Installer")
         branding.write_text(b)
         print(f"  edited: {branding}")
 
@@ -1630,6 +1636,65 @@ def main(src: Path):
         if _n:
             ss.write_text(sst)
             print(f"  edited (about version -> Xplorer {XPLORER_VERSION}): {ss}")
+
+    # --- chrome/VERSION: monotonic PATCH so the Windows installer treats each
+    # release as an UPGRADE. Upstream PATCH never changes (every build is
+    # 151.0.7897.0), so setup.exe no-op'd a reinstall ("Higher version already
+    # installed" / same-version repair) -> the installer appeared to do nothing.
+    # Map XPLORER_VERSION "MAJ.MIN.PAT" -> PATCH = MIN*100 + PAT (0.8.6 -> 806),
+    # well under the 16-bit VERSIONINFO / mac patch_hi-lo ceiling (65535).
+    # chrome/VERSION is upstream (reverted by `git checkout -- .` each apply), so
+    # the rewrite must live here, re-derived every apply.
+    _xv = XPLORER_VERSION.split(".")
+    _xpatch = int(_xv[1]) * 100 + int(_xv[2])
+    version_file = src / "chrome/VERSION"
+    vf = version_file.read_text()
+    vf2 = re.sub(r"(?m)^PATCH=\d+$", f"PATCH={_xpatch}", vf)
+    if vf2 != vf:
+        version_file.write_text(vf2)
+        print(f"  edited (chrome/VERSION PATCH -> {_xpatch}): {version_file}")
+
+    # --- Windows install identity: "Chromium" -> "Xplorer" -------------------
+    # Source of truth (chrome/install_static) for the install dir
+    # (%LOCALAPPDATA%\<name>\Application), user-data dir, Software\<name> registry
+    # root, Uninstall key, AppUserModelId, Default-Programs name, file-assoc
+    # ProgIDs, and the elevation/tracing service NAMES. Without this, Xplorer
+    # installed AS "Chromium" -> collided with real Chromium + shared its updater
+    # identity (so reinstalls/updates targeted the same "Chromium"). install_static
+    # is Windows-only (is_win in BUILD.gn) -> NEVER compiled on mac/linux, so a
+    # malformed edit here is caught only by the Windows build, not the Mac pre-build.
+    imh = src / "chrome/install_static/chromium_install_modes.h"
+    t = imh.read_text()
+    if 'kProductPathName[] = L"Xplorer"' not in t:
+        t = t.replace('kProductPathName[] = L"Chromium";',
+                      'kProductPathName[] = L"Xplorer";')
+        t = t.replace('.base_app_name = L"Chromium",',
+                      '.base_app_name = L"Xplorer",')
+        t = t.replace('.base_app_id = L"Chromium",',
+                      '.base_app_id = L"Xplorer",')
+        t = t.replace('.browser_prog_id_prefix = L"ChromiumHTM",',
+                      '.browser_prog_id_prefix = L"XplorerHTM",')
+        t = t.replace('L"Chromium HTML Document",',
+                      'L"Xplorer HTML Document",')
+        t = t.replace('.pdf_prog_id_prefix = L"ChromiumPDF",',
+                      '.pdf_prog_id_prefix = L"XplorerPDF",')
+        t = t.replace('L"Chromium PDF Document",',
+                      'L"Xplorer PDF Document",')
+        # Active Setup GUID (system-level installs) -> fresh unique GUID.
+        t = t.replace('L"{7D2B3E1D-D096-4594-9D8F-A6667F12E0AC}"',
+                      'L"{63C1B345-8998-4A62-A654-70144D87282D}"')
+        # Toast Activator CLSID -> fresh GUID 36DB671E-DF25-4F65-8C9B-963108D01396
+        # (registered for USER installs too, so it MUST be unique vs Chromium's).
+        t = re.sub(
+            r"\.toast_activator_clsid = \{0x635EFA6F,.*?0x59\}\},",
+            (".toast_activator_clsid = {0x36DB671E,\n"
+             "                                  0xDF25,\n"
+             "                                  0x4F65,\n"
+             "                                  {0x8C, 0x9B, 0x96, 0x31, 0x08, 0xD0, 0x13,\n"
+             "                                   0x96}},"),
+            t, flags=re.DOTALL)
+        imh.write_text(t)
+        print(f"  edited (Windows install identity -> Xplorer): {imh}")
 
     # --- "Get help" links -> Xplorer GitHub (not Google support) -------------
     uc = src / "chrome/common/url_constants.h"
