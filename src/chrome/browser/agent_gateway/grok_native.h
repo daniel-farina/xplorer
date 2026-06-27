@@ -51,6 +51,11 @@ void SaveCompanionSessions(const base::DictValue& data);
 // in the gateway's ActiveRuns map). Used by the scheduler's manual run-now path
 // to apply the same 409 "conversation is busy" guard the message handler uses.
 bool IsConversationRunActive(const std::string& conv_id);
+
+// Terminate every in-flight grok subprocess. Called from AgentGateway::Shutdown
+// so the now-CONTINUE_ON_SHUTDOWN grok read loops hit EOF and finish promptly
+// instead of leaving orphaned children + a parked worker thread at shutdown.
+void StopAllActiveRuns();
 std::string ResolveConfiguredModel(const std::string* model_override);
 std::string ResolveAppBuildModel(const std::string* model_override);
 

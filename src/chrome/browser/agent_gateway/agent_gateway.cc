@@ -103,6 +103,15 @@ void AgentGateway::Shutdown() {
   // Scheduler poll timer stays armed — CompleteShutdown then hangs and a zombie
   // keeps port 9334 bound. Tear everything down deterministically here.
   //
+  // Kill any in-flight grok subprocesses first. Their stream/run tasks are
+  // CONTINUE_ON_SHUTDOWN (so TaskTracker::CompleteShutdown does not wait on them),
+  // but a grok child can hang with no output, leaving the worker parked in a
+  // blocking pipe read() forever. Terminating the children makes that read return
+  // EOF immediately, so the tasks finish promptly and we don't leak zombies.
+  // Touches only NoDestructor statics (ActiveRuns + its lock), so it is safe to
+  // run here on the main thread regardless of the IO thread's state.
+  StopAllActiveRuns();
+
   // Idempotent: once the thread is stopped/null, there is nothing left to do.
   if (!server_thread_) {
     g_instance = nullptr;

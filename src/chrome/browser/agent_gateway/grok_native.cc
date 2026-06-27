@@ -23,6 +23,7 @@
 #include <map>
 #include <set>
 #include <utility>
+#include <vector>
 
 #include "base/base_paths.h"
 #include "base/command_line.h"
@@ -1440,6 +1441,7 @@ bool StopActiveRun(const std::string& conv_id) {
   return true;
 }
 
+
 // Launches |cmd| with stdout captured to a pipe. Returns the child process and
 // a read handle for stdout (invalid on failure).
 struct GrokStdoutProcess {
@@ -1865,7 +1867,8 @@ void RunGrokSearchStream(
     std::string model,
     SearchImageInput image) {
   base::ThreadPool::CreateSequencedTaskRunner(
-      {base::MayBlock(), base::TaskPriority::USER_VISIBLE})
+      {base::MayBlock(), base::TaskPriority::USER_VISIBLE,
+       base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN})
       ->PostTask(FROM_HERE,
                  base::BindOnce(
                      &PumpGrokStream, server, io_task_runner, connection_id,
@@ -1960,6 +1963,33 @@ void CaptureScreenshot(
 }
 
 }  // namespace
+
+// Terminate every in-flight grok subprocess. Called from AgentGateway::Shutdown
+// (at PostMainMessageLoopRun, before TaskTracker::CompleteShutdown). The grok
+// stream/run task runners are CONTINUE_ON_SHUTDOWN, so they are not waited for at
+// shutdown; killing their children makes the blocking pipe read() return EOF
+// immediately so those tasks finish promptly instead of lingering as orphaned
+// children with a parked worker thread. Safe to touch ActiveRuns here: the map
+// and its lock are NoDestructor statics (never torn down). We snapshot the PIDs
+// under the lock and Terminate() outside it (Terminate does not touch ActiveRuns,
+// avoiding any lock nesting); the running read loops UnregisterActiveRun
+// themselves on EOF, so we leave the entries in place rather than racing them.
+void StopAllActiveRuns() {
+  std::vector<base::ProcessId> pids;
+  {
+    base::AutoLock l(ActiveRunsLock());
+    pids.reserve(ActiveRuns().size());
+    for (const auto& [conv_id, pid] : ActiveRuns())
+      pids.push_back(pid);
+  }
+  for (base::ProcessId pid : pids) {
+    if (pid == base::kNullProcessId)
+      continue;
+    base::Process p = base::Process::Open(pid);
+    if (p.IsValid())
+      p.Terminate(/*exit_code=*/0, /*wait=*/false);
+  }
+}
 
 // Public wrapper around the internal UiDir() resolver so grok_companion's native
 // toolbar overlay (grok_web_bar.cc) shares the exact same resolution and we keep
@@ -2172,7 +2202,8 @@ void RunGrokAgentStream(
     const std::string& model,
     const base::FilePath& cwd) {
   base::ThreadPool::CreateSequencedTaskRunner(
-      {base::MayBlock(), base::TaskPriority::USER_VISIBLE})
+      {base::MayBlock(), base::TaskPriority::USER_VISIBLE,
+       base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN})
       ->PostTask(
           FROM_HERE,
           base::BindOnce(
@@ -2213,7 +2244,8 @@ void RunGrokChatStream(
       "\" directly and concisely — do not read files or session metadata to find "
       "out, and never describe yourself as being inside Cursor or an IDE.";
   base::ThreadPool::CreateSequencedTaskRunner(
-      {base::MayBlock(), base::TaskPriority::USER_VISIBLE})
+      {base::MayBlock(), base::TaskPriority::USER_VISIBLE,
+       base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN})
       ->PostTask(FROM_HERE,
                  base::BindOnce(&PumpGrokStream, server, io_task_runner,
                                 connection_id,
@@ -2303,7 +2335,8 @@ void DispatchScheduledRun(
     base::OnceCallback<void(const std::string& status,
                             const std::string& conv_id)> on_done) {
   base::ThreadPool::CreateSequencedTaskRunner(
-      {base::MayBlock(), base::TaskPriority::USER_VISIBLE})
+      {base::MayBlock(), base::TaskPriority::USER_VISIBLE,
+       base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN})
       ->PostTask(
           FROM_HERE,
           base::BindOnce(
@@ -2456,7 +2489,8 @@ void DispatchScheduledAppBuild(
     base::OnceCallback<void(const std::string& status,
                             const std::string& conv_id)> on_done) {
   base::ThreadPool::CreateSequencedTaskRunner(
-      {base::MayBlock(), base::TaskPriority::USER_VISIBLE})
+      {base::MayBlock(), base::TaskPriority::USER_VISIBLE,
+       base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN})
       ->PostTask(
           FROM_HERE,
           base::BindOnce(
@@ -2622,7 +2656,8 @@ void RunAsync(net::HttpServer* server,
               int connection_id,
               base::OnceCallback<base::DictValue()> work) {
   base::ThreadPool::CreateSequencedTaskRunner(
-      {base::MayBlock(), base::TaskPriority::USER_VISIBLE})
+      {base::MayBlock(), base::TaskPriority::USER_VISIBLE,
+       base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN})
       ->PostTaskAndReplyWithResult(
           FROM_HERE, std::move(work),
           base::BindOnce(
@@ -3239,7 +3274,8 @@ bool GrokNative::TryHandleRequest(
     // The blocking grok run hops onto a ThreadPool task; its reply lands back on
     // this IO sequence, where we merge + Upsert + optionally fire and respond.
     base::ThreadPool::CreateSequencedTaskRunner(
-        {base::MayBlock(), base::TaskPriority::USER_VISIBLE})
+        {base::MayBlock(), base::TaskPriority::USER_VISIBLE,
+         base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN})
         ->PostTaskAndReplyWithResult(
             FROM_HERE,
             base::BindOnce(
@@ -3423,7 +3459,8 @@ bool GrokNative::TryHandleRequest(
     const std::string page_url = url ? *url : "";
     const std::string page_title = title ? *title : "Web page";
     base::ThreadPool::CreateSequencedTaskRunner(
-        {base::MayBlock(), base::TaskPriority::USER_VISIBLE})
+        {base::MayBlock(), base::TaskPriority::USER_VISIBLE,
+         base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN})
         ->PostTask(
             FROM_HERE,
             base::BindOnce(
