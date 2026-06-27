@@ -6,12 +6,16 @@
 #include <algorithm>
 #include <cstdint>
 #include <iterator>
+#include <map>
+#include <set>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "base/callback_list.h"
 #include "base/check.h"
 #include "base/functional/bind.h"
+#include "base/hash/hash.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
@@ -45,9 +49,26 @@
 namespace xplorer {
 
 namespace {
-constexpr char16_t kAgentGroupPrefix[] = u"Agent tabs";
+// Per-agent groups are titled "Agent: <owner> (N)". The legacy single
+// catch-all "Agent tabs (N)" group is gone (each agent now owns its own group).
+constexpr char16_t kAgentGroupTitlePrefix[] = u"Agent: ";
 constexpr char16_t kScheduledGroupPrefix[] = u"Scheduled task tabs";
 constexpr char16_t kBookmarksGroupPrefix[] = u"Bookmarks";
+
+// Stable color palette for per-agent tab groups. Excludes kBlue (reserved for
+// the Scheduled task tabs group) and kYellow (Bookmarks) so an agent group can
+// never be visually confused with the two other managed groups. Each agent's
+// color is picked by a stable hash of its owner string, so it keeps the same
+// color as other agents come and go (the hash doesn't depend on group order).
+constexpr tab_groups::TabGroupColorId kAgentColorCycle[] = {
+    tab_groups::TabGroupColorId::kGrey,
+    tab_groups::TabGroupColorId::kRed,
+    tab_groups::TabGroupColorId::kGreen,
+    tab_groups::TabGroupColorId::kPink,
+    tab_groups::TabGroupColorId::kPurple,
+    tab_groups::TabGroupColorId::kCyan,
+    tab_groups::TabGroupColorId::kOrange,
+};
 
 // Hardcoded xAI default bookmarks, seeded as always-open tabs in the native
 // "Bookmarks" group at launch. Gateway-relative hrefs ("/apps",
@@ -86,7 +107,7 @@ bool IsAdHocAgentTab(content::WebContents* wc) {
          !agent_gateway::IsScheduledTaskTab(own);
 }
 
-std::u16string GroupTitle(const char16_t* prefix, int count) {
+std::u16string GroupTitle(std::u16string_view prefix, int count) {
   return std::u16string(prefix) + u" (" + base::NumberToString16(count) +
          u")";
 }
@@ -106,15 +127,21 @@ std::vector<int> IndicesInGroup(TabStripModel* model,
 
 std::optional<tab_groups::TabGroupId> FindGroupWithPrefix(
     TabStripModel* model,
-    const char16_t* prefix) {
+    std::u16string_view prefix) {
   if (!model->group_model()) {
     return std::nullopt;
   }
+  // A managed group's title is exactly "<prefix> (N)". Match on the prefix
+  // FOLLOWED BY the " (" count suffix so e.g. prefix "Agent: foo" does not also
+  // match a sibling group "Agent: foobar (5)". (Reserved prefixes still match:
+  // "Bookmarks (7)" starts with "Bookmarks (", "Scheduled task tabs (1)" with
+  // "Scheduled task tabs (".)
+  const std::u16string needle = std::u16string(prefix) + u" (";
   for (const tab_groups::TabGroupId& id :
        model->group_model()->ListTabGroups()) {
     TabGroup* group = model->group_model()->GetTabGroup(id);
     if (group && group->visual_data() &&
-        base::StartsWith(group->visual_data()->title(), prefix)) {
+        base::StartsWith(group->visual_data()->title(), needle)) {
       return id;
     }
   }
@@ -132,7 +159,7 @@ tab_groups::TabGroupSyncService* SyncServiceFor(Browser* browser) {
 
 tab_groups::TabGroupId EnsureGroup(TabStripModel* model,
                                    [[maybe_unused]] tab_groups::TabGroupSyncService* sync,
-                                   const char16_t* prefix,
+                                   std::u16string_view prefix,
                                    const std::vector<int>& indices,
                                    tab_groups::TabGroupColorId color) {
   std::optional<tab_groups::TabGroupId> existing = FindGroupWithPrefix(model, prefix);
@@ -233,7 +260,7 @@ void AssignTabsToGroup(TabStripModel* model,
 
 void ClearGroupIfEmpty(TabStripModel* model,
                        tab_groups::TabGroupSyncService* sync,
-                       const char16_t* prefix) {
+                       std::u16string_view prefix) {
   std::optional<tab_groups::TabGroupId> group = FindGroupWithPrefix(model, prefix);
   if (!group.has_value()) {
     return;
@@ -246,6 +273,55 @@ void ClearGroupIfEmpty(TabStripModel* model,
   // orphan (RemoveFromGroup alone only marks it closed in the sync model).
   if (sync) {
     sync->RemoveGroup(group.value());
+  }
+}
+
+// Removes every "Agent: *" native group that no longer has a live owner — i.e.
+// whose title isn't claimed by any prefix in |live_prefixes|. Used to retire an
+// agent's group once its last tab is gone (or all of them when no agent tabs
+// remain). Snapshots the group list into |groups| FIRST because RemoveFromGroup
+// (auto-deletes the now-empty group) and RemoveGroup both mutate the live list
+// mid-iteration. Removal is crash-safe: an emptied group has a nullopt
+// local_group_id (no live LocalTabGroupListener), so deleting its saved copy
+// can't dangle a saved_guid_ — that was the e7b0252 abort, which required
+// removing a still-LIVE group.
+void ClearStaleAgentGroups(TabStripModel* model,
+                           tab_groups::TabGroupSyncService* sync,
+                           const std::set<std::u16string>& live_prefixes) {
+  if (!model->group_model()) {
+    return;
+  }
+  const std::vector<tab_groups::TabGroupId> groups =
+      model->group_model()->ListTabGroups();
+  for (const tab_groups::TabGroupId& id : groups) {
+    TabGroup* group = model->group_model()->GetTabGroup(id);
+    if (!group || !group->visual_data()) {
+      continue;
+    }
+    const std::u16string& title = group->visual_data()->title();
+    if (!base::StartsWith(title, std::u16string_view(kAgentGroupTitlePrefix))) {
+      continue;
+    }
+    bool live = false;
+    for (const std::u16string& p : live_prefixes) {
+      if (base::StartsWith(title, p + u" (")) {
+        live = true;
+        break;
+      }
+    }
+    if (live) {
+      continue;
+    }
+    std::vector<int> indices = IndicesInGroup(model, id);
+    if (!indices.empty()) {
+      model->RemoveFromGroup(indices);
+    }
+    // Delete the saved copy so the retired group can't linger as a closed
+    // orphan chip (RemoveFromGroup alone only marks it closed in the sync
+    // model). Safe per the function comment (nullopt local_group_id).
+    if (sync) {
+      sync->RemoveGroup(id);
+    }
   }
 }
 }  // namespace
@@ -391,7 +467,9 @@ void AgentTabGrouper::Reconcile() {
   }
 
   std::vector<int> scheduled_indices;
-  std::vector<int> adhoc_indices;
+  // Ad-hoc agent tabs bucketed by their owning agent: each distinct owner gets
+  // its own native "Agent: <owner> (N)" group (agents own the tabs they open).
+  std::map<std::string, std::vector<int>> adhoc_by_owner;
   std::vector<int> bookmark_indices;
   for (int i = 0; i < model_->count(); ++i) {
     content::WebContents* wc = model_->GetWebContentsAt(i);
@@ -410,7 +488,8 @@ void AgentTabGrouper::Reconcile() {
     if (IsScheduledTaskWebContents(wc)) {
       scheduled_indices.push_back(i);
     } else if (IsAdHocAgentTab(wc)) {
-      adhoc_indices.push_back(i);
+      // IsAdHocAgentTab guarantees |own| is non-null with a non-empty owner.
+      adhoc_by_owner[own->owner].push_back(i);
     } else if (own && own->bookmark_node_id != 0) {
       bookmark_indices.push_back(i);
     }
@@ -427,16 +506,27 @@ void AgentTabGrouper::Reconcile() {
     AssignTabsToGroup(model_, scheduled_indices, scheduled_group);
   }
 
-  if (adhoc_indices.empty()) {
-    ClearGroupIfEmpty(model_, sync, kAgentGroupPrefix);
-  } else {
-    tab_groups::TabGroupId agent_group = EnsureGroup(
-        model_, sync, kAgentGroupPrefix, adhoc_indices,
-        tab_groups::TabGroupColorId::kGrey);
+  // One native "Agent: <owner> (N)" group per distinct agent owner. Each agent
+  // owns the tabs it opens, so they no longer collapse into a single shared
+  // group. Collect the live prefixes so ClearStaleAgentGroups can retire the
+  // groups of agents that no longer have any open tabs (incl. all of them when
+  // adhoc_by_owner is empty).
+  std::set<std::u16string> live_agent_prefixes;
+  for (const auto& [owner, indices] : adhoc_by_owner) {
+    std::u16string prefix = kAgentGroupTitlePrefix + base::UTF8ToUTF16(owner);
+    live_agent_prefixes.insert(prefix);
+    // Stable per-owner color: hash the owner string so an agent keeps its color
+    // regardless of how many other agents exist or what order they're in.
+    tab_groups::TabGroupColorId color =
+        kAgentColorCycle[base::PersistentHash(owner) %
+                         std::size(kAgentColorCycle)];
+    tab_groups::TabGroupId agent_group =
+        EnsureGroup(model_, sync, prefix, indices, color);
     // Batched membership fix (see AssignTabsToGroup). EnsureGroup already set the
     // title/color, so no second ChangeTabGroupVisuals here.
-    AssignTabsToGroup(model_, adhoc_indices, agent_group);
+    AssignTabsToGroup(model_, indices, agent_group);
   }
+  ClearStaleAgentGroups(model_, sync, live_agent_prefixes);
 
   if (bookmark_indices.empty()) {
     ClearGroupIfEmpty(model_, sync, kBookmarksGroupPrefix);
