@@ -71,6 +71,30 @@ std::string PathOnly(const std::string& path) {
                            base::SPLIT_WANT_NONEMPTY)[0];
 }
 
+// True if the request carries an Origin header from a NON-loopback site — i.e. a
+// real website the user visited fetching this gateway cross-origin. The app
+// endpoints run BEFORE CheckAuth (the /run preview is loaded by browser
+// navigation/iframe, which can't attach a bearer token) and serve files +
+// Access-Control-Allow-Origin: *, so without this guard a visited page could
+// POST /api/apps/import an arbitrary path and read it back via /run/{id}/...
+// cross-origin (local file disclosure). Same-origin UI requests, /run preview
+// navigations/subresource GETs (which don't send Origin), and local non-browser
+// agents (curl, no Origin) are NOT foreign, so this closes the cross-site vector
+// without breaking previews or local tooling.
+bool IsForeignOrigin(const net::HttpServerRequestInfo& info) {
+  auto it = info.headers.find("origin");
+  if (it == info.headers.end() || it->second.empty()) {
+    return false;
+  }
+  GURL origin(it->second);
+  if (!origin.is_valid()) {
+    return true;
+  }
+  const std::string_view host = origin.host();
+  return host != "127.0.0.1" && host != "localhost" && host != "::1" &&
+         host != "[::1]";
+}
+
 void SendBytes(net::HttpServer* server,
                int connection_id,
                net::HttpStatusCode code,
@@ -712,6 +736,12 @@ bool TryHandleAppRunRequest(
   const std::string prefix = "/run/";
   if (!base::StartsWith(path, prefix))
     return false;
+  if (IsForeignOrigin(info)) {
+    base::DictValue err;
+    err.Set("error", "cross-origin requests are not allowed");
+    SendJson(server, connection_id, net::HTTP_FORBIDDEN, std::move(err));
+    return true;
+  }
 
   std::string rest = path.substr(prefix.size());
   if (rest.empty()) {
@@ -830,6 +860,17 @@ bool TryHandleAppsRequest(
     scoped_refptr<base::SingleThreadTaskRunner> io_task_runner) {
   const std::string path = PathOnly(info.path);
   const std::string prefix = "/api/apps/";
+
+  // Block cross-origin (foreign-Origin) browser requests to the app endpoints —
+  // these are unauthenticated and import/serve files, so a visited website must
+  // not be able to drive them. Only gate actual app paths so non-app requests
+  // still fall through to other handlers.
+  if (base::StartsWith(path, "/api/apps") && IsForeignOrigin(info)) {
+    base::DictValue err;
+    err.Set("error", "cross-origin requests are not allowed");
+    SendJson(server, connection_id, net::HTTP_FORBIDDEN, std::move(err));
+    return true;
+  }
 
   if (info.method == "POST" && path == "/api/apps/restart-batch") {
     auto body = base::JSONReader::ReadDict(info.data, base::JSON_PARSE_RFC);
