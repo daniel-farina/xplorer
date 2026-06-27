@@ -268,9 +268,35 @@ namespace {
 constexpr int kMaxRequestBodyBytes = 1024 * 1024;
 
 constexpr char kScheduledAgentPrefix[] = "schedule:";
+// Ad-hoc chat agent tabs are owned by "chat:<conv_id>". The per-agent tab group
+// is titled by the conversation's topic (its persisted title) rather than the
+// raw owner string, so the grouper can show a human-readable, rename-stable name.
+constexpr char kChatAgentPrefix[] = "chat:";
 
 bool IsScheduledAgentId(const std::string& agent_id) {
   return base::StartsWith(agent_id, kScheduledAgentPrefix);
+}
+
+// Returns the persisted conversation title (topic) for |conv_id|, or "" if none
+// is set yet (or it's still the placeholder "New chat"). Read from the same
+// sessions store the companion UI writes (LoadCompanionSessions()).
+std::string LookupConversationTitle(const std::string& conv_id) {
+  base::DictValue data = LoadCompanionSessions();
+  const base::ListValue* convs = data.FindList("conversations");
+  if (!convs)
+    return std::string();
+  for (const base::Value& v : *convs) {
+    if (!v.is_dict())
+      continue;
+    const std::string* id = v.GetDict().FindString("id");
+    if (!id || *id != conv_id)
+      continue;
+    const std::string* title = v.GetDict().FindString("title");
+    if (title && !title->empty() && *title != "New chat")
+      return *title;
+    break;
+  }
+  return std::string();
 }
 
 // task_id is only stamped for scheduled agents (schedule:<job_id>). Ad-hoc chat
@@ -675,8 +701,15 @@ void AgentGateway::RouteRequest(int connection_id,
         effective_owner = agent_id.empty() ? "mcp" : agent_id;
       }
       own->owner = effective_owner;
-      if (label)
+      // Prefer an explicit body label; otherwise, for chat-owned tabs, derive
+      // the label from the conversation's topic so the per-agent tab group is
+      // titled by what the chat is about (own->owner is "chat:<conv_id>").
+      if (label && !label->empty()) {
         own->label = *label;
+      } else if (base::StartsWith(own->owner, kChatAgentPrefix)) {
+        own->label = LookupConversationTitle(
+            own->owner.substr(sizeof(kChatAgentPrefix) - 1));
+      }
       if (!effective_task_id.empty()) {
         own->task_id = effective_task_id;
       } else {

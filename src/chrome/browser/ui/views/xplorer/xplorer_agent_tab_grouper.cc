@@ -194,6 +194,45 @@ tab_groups::TabGroupId EnsureGroup(TabStripModel* model,
   return group;
 }
 
+// Returns the stable native group for |owner|, identified by the |agent_groups|
+// map (NOT by title — so an agent/user rename of the group title sticks). The
+// title/color (|initial_title|, |color|) are set ONLY when the group is first
+// created; an already-mapped, still-live group is returned untouched (no
+// ChangeTabGroupVisuals), so its current title is never overwritten. Never calls
+// sync->RemoveGroup — removal is PruneAgentGroups's job (e7b0252-safe: removing a
+// still-LIVE group's saved copy dangles its saved_guid_ and FATALs). Returns
+// nullopt only when the owner has no live group and no tabs to seed one.
+std::optional<tab_groups::TabGroupId> EnsureStableGroup(
+    TabStripModel* model,
+    std::map<std::string, tab_groups::TabGroupId>& agent_groups,
+    const std::string& owner,
+    std::u16string_view initial_title,
+    const std::vector<int>& indices,
+    tab_groups::TabGroupColorId color) {
+  auto it = agent_groups.find(owner);
+  if (it != agent_groups.end()) {
+    if (model->group_model() &&
+        model->group_model()->ContainsTabGroup(it->second)) {
+      return it->second;
+    }
+    // The mapped group is gone (user closed it / it emptied): drop the stale
+    // entry and fall through to re-create a fresh one below.
+    agent_groups.erase(it);
+  }
+  if (indices.empty()) {
+    return std::nullopt;
+  }
+  tab_groups::TabGroupId group = model->AddToNewGroup(indices);
+  // Set visuals ONCE, at creation only. Never re-stamp an existing group.
+  model->ChangeTabGroupVisuals(
+      group, tab_groups::TabGroupVisualData(std::u16string(initial_title),
+                                            color));
+  // insert_or_assign (not operator[]): tab_groups::TabGroupId has no default
+  // constructor, so operator[] would fail to compile.
+  agent_groups.insert_or_assign(owner, group);
+  return group;
+}
+
 // Moves exactly the tabs at |indices| into |group| in a single batched pair of
 // TabStripModel mutations, instead of one AddToExistingGroup/RemoveFromGroup per
 // index. AddToExistingGroup physically MOVES each added tab adjacent to the
@@ -276,52 +315,38 @@ void ClearGroupIfEmpty(TabStripModel* model,
   }
 }
 
-// Removes every "Agent: *" native group that no longer has a live owner — i.e.
-// whose title isn't claimed by any prefix in |live_prefixes|. Used to retire an
-// agent's group once its last tab is gone (or all of them when no agent tabs
-// remain). Snapshots the group list into |groups| FIRST because RemoveFromGroup
-// (auto-deletes the now-empty group) and RemoveGroup both mutate the live list
-// mid-iteration. Removal is crash-safe: an emptied group has a nullopt
+// Retires the native group of every owner in |agent_groups| that no longer has
+// a live tab (i.e. is not in |live_owners|), driven by the owner->group MAP (not
+// by title-matching, so a renamed group is still correctly retired by identity).
+// For each dead owner: empty the group via RemoveFromGroup FIRST, THEN delete its
+// saved copy. That ordering is the e7b0252-safety: an emptied group has a nullopt
 // local_group_id (no live LocalTabGroupListener), so deleting its saved copy
-// can't dangle a saved_guid_ — that was the e7b0252 abort, which required
-// removing a still-LIVE group.
-void ClearStaleAgentGroups(TabStripModel* model,
-                           tab_groups::TabGroupSyncService* sync,
-                           const std::set<std::u16string>& live_prefixes) {
-  if (!model->group_model()) {
-    return;
-  }
-  const std::vector<tab_groups::TabGroupId> groups =
-      model->group_model()->ListTabGroups();
-  for (const tab_groups::TabGroupId& id : groups) {
-    TabGroup* group = model->group_model()->GetTabGroup(id);
-    if (!group || !group->visual_data()) {
+// can't dangle a saved_guid_ — removing a still-LIVE group's saved copy is the
+// abort. Erases the dead entries from |agent_groups| as it goes.
+void PruneAgentGroups(
+    TabStripModel* model,
+    tab_groups::TabGroupSyncService* sync,
+    std::map<std::string, tab_groups::TabGroupId>& agent_groups,
+    const std::set<std::string>& live_owners) {
+  for (auto it = agent_groups.begin(); it != agent_groups.end();) {
+    if (live_owners.count(it->first)) {
+      ++it;
       continue;
     }
-    const std::u16string& title = group->visual_data()->title();
-    if (!base::StartsWith(title, std::u16string_view(kAgentGroupTitlePrefix))) {
-      continue;
-    }
-    bool live = false;
-    for (const std::u16string& p : live_prefixes) {
-      if (base::StartsWith(title, p + u" (")) {
-        live = true;
-        break;
+    const tab_groups::TabGroupId id = it->second;
+    if (model->group_model() && model->group_model()->ContainsTabGroup(id)) {
+      std::vector<int> indices = IndicesInGroup(model, id);
+      if (!indices.empty()) {
+        model->RemoveFromGroup(indices);
+      }
+      // Delete the now-empty group's saved copy so it can't linger as a closed
+      // orphan chip (RemoveFromGroup alone only marks it closed in the sync
+      // model). Safe: emptied first, so its local_group_id is nullopt.
+      if (sync) {
+        sync->RemoveGroup(id);
       }
     }
-    if (live) {
-      continue;
-    }
-    std::vector<int> indices = IndicesInGroup(model, id);
-    if (!indices.empty()) {
-      model->RemoveFromGroup(indices);
-    }
-    // Delete the saved copy so the retired group can't linger as a closed
-    // orphan chip (RemoveFromGroup alone only marks it closed in the sync
-    // model). Safe per the function comment (nullopt local_group_id).
-    if (sync) {
-      sync->RemoveGroup(id);
-    }
+    it = agent_groups.erase(it);
   }
 }
 }  // namespace
@@ -468,8 +493,12 @@ void AgentTabGrouper::Reconcile() {
 
   std::vector<int> scheduled_indices;
   // Ad-hoc agent tabs bucketed by their owning agent: each distinct owner gets
-  // its own native "Agent: <owner> (N)" group (agents own the tabs they open).
+  // its own native group, titled by the conversation TOPIC (TabOwnership::label).
   std::map<std::string, std::vector<int>> adhoc_by_owner;
+  // owner -> the first non-empty TabOwnership::label seen for that owner; used as
+  // the group's initial title (the conversation topic). Falls back to the owner
+  // string when no tab carries a label.
+  std::map<std::string, std::string> owner_labels;
   std::vector<int> bookmark_indices;
   for (int i = 0; i < model_->count(); ++i) {
     content::WebContents* wc = model_->GetWebContentsAt(i);
@@ -490,6 +519,10 @@ void AgentTabGrouper::Reconcile() {
     } else if (IsAdHocAgentTab(wc)) {
       // IsAdHocAgentTab guarantees |own| is non-null with a non-empty owner.
       adhoc_by_owner[own->owner].push_back(i);
+      // Capture the first non-empty label (conversation topic) for this owner.
+      if (!own->label.empty() && !owner_labels.count(own->owner)) {
+        owner_labels[own->owner] = own->label;
+      }
     } else if (own && own->bookmark_node_id != 0) {
       bookmark_indices.push_back(i);
     }
@@ -506,27 +539,37 @@ void AgentTabGrouper::Reconcile() {
     AssignTabsToGroup(model_, scheduled_indices, scheduled_group);
   }
 
-  // One native "Agent: <owner> (N)" group per distinct agent owner. Each agent
-  // owns the tabs it opens, so they no longer collapse into a single shared
-  // group. Collect the live prefixes so ClearStaleAgentGroups can retire the
-  // groups of agents that no longer have any open tabs (incl. all of them when
-  // adhoc_by_owner is empty).
-  std::set<std::u16string> live_agent_prefixes;
+  // One native group per distinct agent owner. The group is identified by the
+  // stable agent_groups_ map (owner -> TabGroupId), so its IDENTITY — and any
+  // agent/user rename of its title — survives every Reconcile() pass: visuals are
+  // set ONCE at creation (EnsureStableGroup) and never re-stamped. The initial
+  // title is the conversation TOPIC (TabOwnership::label); if no tab carries a
+  // label yet, fall back to "Agent: <owner>" (no "(N)" count — the count would
+  // change on every tab open/close and force a churny rename).
+  std::set<std::string> live_owners;
   for (const auto& [owner, indices] : adhoc_by_owner) {
-    std::u16string prefix = kAgentGroupTitlePrefix + base::UTF8ToUTF16(owner);
-    live_agent_prefixes.insert(prefix);
+    live_owners.insert(owner);
+    auto label_it = owner_labels.find(owner);
+    std::u16string title =
+        (label_it != owner_labels.end() && !label_it->second.empty())
+            ? base::UTF8ToUTF16(label_it->second)
+            : (kAgentGroupTitlePrefix + base::UTF8ToUTF16(owner));
     // Stable per-owner color: hash the owner string so an agent keeps its color
     // regardless of how many other agents exist or what order they're in.
     tab_groups::TabGroupColorId color =
         kAgentColorCycle[base::PersistentHash(owner) %
                          std::size(kAgentColorCycle)];
-    tab_groups::TabGroupId agent_group =
-        EnsureGroup(model_, sync, prefix, indices, color);
-    // Batched membership fix (see AssignTabsToGroup). EnsureGroup already set the
-    // title/color, so no second ChangeTabGroupVisuals here.
-    AssignTabsToGroup(model_, indices, agent_group);
+    std::optional<tab_groups::TabGroupId> agent_group = EnsureStableGroup(
+        model_, agent_groups_, owner, title, indices, color);
+    // Batched membership fix (see AssignTabsToGroup). EnsureStableGroup set the
+    // title/color at creation, so no second ChangeTabGroupVisuals here.
+    if (agent_group.has_value()) {
+      AssignTabsToGroup(model_, indices, agent_group.value());
+    }
   }
-  ClearStaleAgentGroups(model_, sync, live_agent_prefixes);
+  // Retire the groups of owners that no longer have any open tabs (incl. all of
+  // them when adhoc_by_owner is empty), by map identity.
+  PruneAgentGroups(model_, sync, agent_groups_, live_owners);
 
   if (bookmark_indices.empty()) {
     ClearGroupIfEmpty(model_, sync, kBookmarksGroupPrefix);

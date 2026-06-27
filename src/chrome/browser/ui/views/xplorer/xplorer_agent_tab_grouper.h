@@ -5,7 +5,9 @@
 #define CHROME_BROWSER_UI_VIEWS_XPLORER_XPLORER_AGENT_TAB_GROUPER_H_
 
 #include <cstdint>
+#include <map>
 #include <optional>
+#include <string>
 #include <vector>
 
 #include "base/callback_list.h"
@@ -74,6 +76,10 @@ class AgentTabGrouper : public TabStripModelObserver {
   void MaybeScheduleSeed();
 
   const raw_ptr<TabStripModel> model_;
+  // owner -> its native group. The group IDENTITY survives renames: once an
+  // owner's group is created we never re-derive or re-stamp its visuals, so an
+  // agent/user rename of the group title sticks across Reconcile() passes.
+  std::map<std::string, tab_groups::TabGroupId> agent_groups_;
   bool reconciling_ = false;
   bool reconcile_scheduled_ = false;
   bool seeded_ = false;
