@@ -112,6 +112,13 @@ void AgentGateway::Shutdown() {
   // run here on the main thread regardless of the IO thread's state.
   StopAllActiveRuns();
 
+  // Stop receiving power events BEFORE tearing down the thread. Otherwise a
+  // sleep/wake racing with shutdown could post RebindServer() onto a thread
+  // we're about to stop (or fire OnResume into a half-destroyed gateway).
+  // RemovePowerSuspendObserver is safe even if we never added (e.g. the server
+  // thread never started), so it's fine to call unconditionally / idempotently.
+  base::PowerMonitor::GetInstance()->RemovePowerSuspendObserver(this);
+
   // Idempotent: once the thread is stopped/null, there is nothing left to do.
   if (!server_thread_) {
     g_instance = nullptr;
@@ -147,12 +154,27 @@ void AgentGateway::Shutdown() {
   g_instance = nullptr;
 }
 
-void AgentGateway::StartServerOnIOThread(int port) {
+void AgentGateway::RebindServer() {
+  // Must run on server_thread_: net::HttpServer + its TCPServerSocket are
+  // IO-thread affine, and this is also where the PowerSuspendObserver fires.
+  DCHECK(server_thread_->task_runner()->RunsTasksInCurrentSequence());
+
+  // Destroy the old HttpServer + listening socket FIRST so the stale fd is
+  // released before we try to bind again. On the sleep/wake path the kernel
+  // has already invalidated the socket, but the net::HttpServer still owns it;
+  // resetting here lets us re-listen on the SAME port instead of being pushed
+  // to an ephemeral one because the old fd is lingering.
+  server_.reset();
+
   auto socket = std::make_unique<net::TCPServerSocket>(nullptr,
                                                        net::NetLogSource());
-  if (socket->ListenWithAddressAndPort("127.0.0.1", port, kBacklog) !=
+  // Try the CURRENT port first to keep the gateway URL stable across rebinds.
+  // port_ is the default on first start and the live port on a re-bind.
+  if (socket->ListenWithAddressAndPort("127.0.0.1", port_, kBacklog) !=
       net::OK) {
-    // Port taken (another Xplorer instance): fall back to ephemeral.
+    // Port taken (another Xplorer instance, or the old fd not yet released):
+    // fall back to ephemeral. gateway.json is rewritten below so agents pick
+    // up the new port.
     socket->ListenWithAddressAndPort("127.0.0.1", 0, kBacklog);
   }
   net::IPEndPoint addr;
@@ -164,7 +186,8 @@ void AgentGateway::StartServerOnIOThread(int port) {
   // Write a FIXED discovery file so any agent finds the gateway without
   // knowing the profile path or branding. This is the canonical way to
   // connect: read ~/.xplorer/gateway.json -> {port, token}. Solves the
-  // "where is the token?" problem that trips agents up.
+  // "where is the token?" problem that trips agents up. Rewritten on every
+  // rebind so a port change after sleep/wake is reflected for agents.
   base::FilePath dir = xplorer_paths::DataDir();
   if (!dir.empty()) {
     base::DictValue d;
@@ -179,13 +202,50 @@ void AgentGateway::StartServerOnIOThread(int port) {
     base::WriteFile(dir.AppendASCII("gateway.json"), json);
   }
   WriteCompanionDiscovery(port_);
+}
+
+void AgentGateway::StartServerOnIOThread(int port) {
+  port_ = port ? port : kDefaultPort;
+
+  // Create the socket + server + discovery files. Factored into RebindServer()
+  // so the sleep/wake OnResume() path can re-run exactly this after the
+  // listening socket is invalidated.
+  RebindServer();
+
+  // Subscribe to power events so we recover from sleep/wake. The browser-
+  // process PowerMonitor global is initialized long before the gateway starts,
+  // so GetInstance() is valid here. Observer callbacks are delivered on the
+  // sequence that registered — server_thread_ — but OnResume() still re-posts
+  // RebindServer() (see there) to be robust to that contract.
+  base::PowerMonitor::GetInstance()->AddPowerSuspendObserver(this);
 
   // The background-task scheduler is owned by the gateway (process-lifetime
   // singleton). Arm it here, on server_thread_, so its base::RepeatingTimer
   // runs on the gateway IO thread (the run machinery hops to the UI thread as
   // needed). Loads schedules.json and re-arms persisted jobs across restarts.
+  // ONE-TIME only — NOT part of RebindServer(), so a sleep/wake rebind does
+  // not re-arm the scheduler or re-clear env.
   ClearLeakedScheduledRunEnv();
   Scheduler::Get()->Start();
+}
+
+void AgentGateway::OnSuspend() {
+  // No teardown on suspend: the socket is already going away under us and we
+  // recover on resume. Logging only so the recovery is traceable.
+  VLOG(1) << "AgentGateway: system suspend";
+}
+
+void AgentGateway::OnResume() {
+  // PowerSuspendObserver callbacks may be delivered on a sequence other than
+  // server_thread_ (and on some platforms on the main/UI thread). RebindServer
+  // touches server_ + the listening socket, which are IO-thread affine, so we
+  // ALWAYS hop to server_thread_ rather than rebinding inline.
+  VLOG(1) << "AgentGateway: system resume — rebinding listening socket";
+  if (server_thread_) {
+    server_thread_->task_runner()->PostTask(
+        FROM_HERE, base::BindOnce(&AgentGateway::RebindServer,
+                                  base::Unretained(this)));
+  }
 }
 
 bool AgentGateway::CheckAuth(const net::HttpServerRequestInfo& info) {
@@ -364,6 +424,31 @@ void AgentGateway::RouteRequest(int connection_id,
   // GET /stats — live metrics (also rendered in the in-tab HUD).
   if (parts.size() == 1 && parts[0] == "stats") {
     std::move(reply).Run(metrics_.ToDict());
+    return;
+  }
+
+  // POST /api/debug/rebind — force a listening-socket rebind (auth-required;
+  // we only reach RouteRequest after CheckAuth passed in OnHttpRequest). This
+  // exercises the same code path as sleep/wake recovery without a real sleep,
+  // so we can verify the gateway re-listens. Hops to server_thread_ because
+  // RebindServer touches the IO-thread-affine socket/server_. Replies with the
+  // CURRENT port_ (the rebind runs async, but it keeps the same port unless
+  // it's still held, in which case the client should re-read gateway.json).
+  if (parts.size() == 3 && parts[0] == "api" && parts[1] == "debug" &&
+      parts[2] == "rebind" && info.method == "POST") {
+    // Delay the rebind so THIS response flushes and its connection closes first.
+    // server_.reset() inside RebindServer() tears down all live connections; if
+    // it ran before the pending response send (queued on this same IO sequence)
+    // it would drop the reply and operate on a stale connection id. A real
+    // OnResume() has no in-flight response, so the delay makes the test match it.
+    server_thread_->task_runner()->PostDelayedTask(
+        FROM_HERE,
+        base::BindOnce(&AgentGateway::RebindServer, base::Unretained(this)),
+        base::Seconds(1));
+    base::DictValue d;
+    d.Set("ok", true);
+    d.Set("port", port_);
+    std::move(reply).Run(std::move(d));
     return;
   }
 
