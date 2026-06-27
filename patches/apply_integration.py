@@ -702,6 +702,191 @@ def patch_vertical_sidebar(src: Path):
             "    // The leading inset should not be applied for tab groups when the tab strip",
         )
 
+    # XPLORER: "open chat" button on chat-owned tab-group headers. Each tab
+    # group whose tabs are owned by a "chat:<conv_id>" agent gets a small button
+    # on its header that opens the Grok side panel to that conversation. Mirrors
+    # editor_bubble_button_'s pattern (a header button with a bound callback).
+    # Patches PRISTINE upstream files; NO BUILD.gn dep is added (a grok_companion
+    # dep here would create a GN cycle) — we rely on final-link symbol resolution,
+    # the established fork pattern (cf. grok_native.cc including
+    # grok_companion_util.h with no GN dep).
+    vtgh_h = (src / "chrome/browser/ui/views/tabs/vertical/"
+              "vertical_tab_group_header_view.h")
+    # Forward-declare views::ImageButton alongside the other views fwd decls.
+    edit(
+        vtgh_h,
+        "namespace views {\n"
+        "class LabelButton;\n"
+        "class ImageView;",
+        "namespace views {\n"
+        "class LabelButton;\n"
+        "class ImageButton;  // XPLORER\n"
+        "class ImageView;",
+    )
+    # New member: the open-chat button, next to editor_bubble_button_.
+    edit(
+        vtgh_h,
+        "  const raw_ptr<views::LabelButton> editor_bubble_button_ = nullptr;",
+        "  const raw_ptr<views::LabelButton> editor_bubble_button_ = nullptr;\n\n"
+        "  // XPLORER: opens the Grok side panel to this group's chat\n"
+        "  // conversation. Only shown for groups whose tabs are owned by a\n"
+        '  // "chat:<conv_id>" agent (visibility toggled in OnDataChanged).\n'
+        "  const raw_ptr<views::ImageButton> open_chat_button_ = nullptr;",
+    )
+    # New private method declaration.
+    edit(
+        vtgh_h,
+        " private:\n"
+        "  void UpdateEditorBubbleButtonVisibility();",
+        " private:\n"
+        "  // XPLORER: open the Grok side panel to this group's owning chat.\n"
+        "  void OnOpenChatPressed();\n"
+        "  void UpdateEditorBubbleButtonVisibility();",
+    )
+
+    vtgh_cc = (src / "chrome/browser/ui/views/tabs/vertical/"
+               "vertical_tab_group_header_view.cc")
+    # Includes (no BUILD.gn dep — final-link resolution, like grok_native.cc).
+    edit(
+        vtgh_cc,
+        '#include "chrome/browser/ui/views/tabs/vertical/'
+        'vertical_tab_group_header_view.h"',
+        '#include "chrome/browser/ui/views/tabs/vertical/'
+        'vertical_tab_group_header_view.h"\n'
+        "\n"
+        "// XPLORER: open-chat button — opens the Grok side panel to a\n"
+        "// chat-owned tab group's conversation. These includes carry no GN dep\n"
+        "// (final-link symbol resolution, the established fork pattern).\n"
+        '#include "base/strings/string_util.h"  // XPLORER\n'
+        '#include "chrome/browser/agent_gateway/tab_ownership.h"  // XPLORER\n'
+        '#include "chrome/browser/grok_companion/grok_companion_util.h"  // XPLORER\n'
+        '#include "chrome/browser/ui/views/frame/browser_view.h"  // XPLORER\n'
+        '#include "components/tabs/public/tab_group.h"  // XPLORER\n'
+        '#include "components/tabs/public/tab_interface.h"  // XPLORER\n'
+        '#include "content/public/browser/web_contents.h"  // XPLORER\n'
+        '#include "ui/views/controls/button/image_button.h"  // XPLORER',
+    )
+    # File-local helper: the owning chat conv_id (or "") for a group, read from
+    # the first tab's TabOwnership. The group title is the chat TOPIC now, so we
+    # must NOT parse the title — read ownership from the tab instead.
+    edit(
+        vtgh_cc,
+        "class VerticalTabGroupHeaderLabel : public views::Label {",
+        "// XPLORER: returns the conv_id of the chat agent that owns |group|'s\n"
+        '// tabs, or "" if the group is not chat-owned (Bookmarks / Scheduled /\n'
+        "// organize / non-chat agent groups). The group title is the human topic\n"
+        "// now, so read ownership from the first tab's TabOwnership rather than\n"
+        "// parsing the title.\n"
+        "std::string GetOwningChatConvId(const TabGroup& group) {\n"
+        "  if (tabs::TabInterface* first = group.GetFirstTab()) {\n"
+        "    if (content::WebContents* wc = first->GetContents()) {\n"
+        "      if (agent_gateway::TabOwnership* own =\n"
+        "              agent_gateway::TabOwnership::Get(wc)) {\n"
+        '        if (base::StartsWith(own->owner, "chat:")) {\n'
+        '          return own->owner.substr(5);  // strip "chat:"\n'
+        "        }\n"
+        "      }\n"
+        "    }\n"
+        "  }\n"
+        "  return std::string();\n"
+        "}\n"
+        "\n"
+        "class VerticalTabGroupHeaderLabel : public views::Label {",
+    )
+    # Constructor init-list: AddChildView the open-chat ImageButton next to the
+    # editor button (mirrors editor_bubble_button_'s bound-callback init).
+    edit(
+        vtgh_cc,
+        "      editor_bubble_button_(AddChildView(std::make_unique<views::LabelButton>(\n"
+        "          base::BindRepeating(&VerticalTabGroupHeaderView::ShowEditorBubble,\n"
+        "                              base::Unretained(this))))),\n"
+        "      collapse_icon_(AddChildView(std::make_unique<views::ImageView>())),",
+        "      editor_bubble_button_(AddChildView(std::make_unique<views::LabelButton>(\n"
+        "          base::BindRepeating(&VerticalTabGroupHeaderView::ShowEditorBubble,\n"
+        "                              base::Unretained(this))))),\n"
+        "      open_chat_button_(AddChildView(std::make_unique<views::ImageButton>(\n"
+        "          base::BindRepeating(&VerticalTabGroupHeaderView::OnOpenChatPressed,\n"
+        "                              base::Unretained(this))))),  // XPLORER\n"
+        "      collapse_icon_(AddChildView(std::make_unique<views::ImageView>())),",
+    )
+    # Constructor body: configure the open-chat button (hidden until OnDataChanged
+    # finds a chat owner). Spliced right after ConfigureEditorBubbleButton().
+    edit(
+        vtgh_cc,
+        "  ConfigureEditorBubbleButton(editor_bubble_button_);",
+        "  ConfigureEditorBubbleButton(editor_bubble_button_);\n"
+        "  // XPLORER: open-chat button — hidden unless this is a chat-owned group.\n"
+        '  open_chat_button_->SetTooltipText(u"Open chat");\n'
+        '  open_chat_button_->GetViewAccessibility().SetName(u"Open chat");\n'
+        "  open_chat_button_->SetImageHorizontalAlignment(\n"
+        "      views::ImageButton::ALIGN_CENTER);\n"
+        "  open_chat_button_->SetImageVerticalAlignment(\n"
+        "      views::ImageButton::ALIGN_MIDDLE);\n"
+        "  open_chat_button_->SetVisible(false);\n"
+        "  open_chat_button_->SetProperty(\n"
+        "      views::kFlexBehaviorKey,\n"
+        "      views::FlexSpecification(views::MinimumFlexSizeRule::kPreferred,\n"
+        "                               views::MaximumFlexSizeRule::kPreferred));",
+    )
+    # OnDataChanged: toggle visibility (chat-owned only) right after SetText.
+    edit(
+        vtgh_cc,
+        "  group_header_label_->SetText(tab_group_visual_data_.title());",
+        "  group_header_label_->SetText(tab_group_visual_data_.title());\n"
+        "\n"
+        "  // XPLORER: show the open-chat button only for chat-owned tab groups.\n"
+        "  if (open_chat_button_) {\n"
+        "    open_chat_button_->SetVisible(\n"
+        "        !GetOwningChatConvId(delegate_->GetTabGroup()).empty());\n"
+        "  }",
+    )
+    # OnDataChanged: tint the Grok icon like the header (inside the color block).
+    edit(
+        vtgh_cc,
+        "    // Update editor bubble button.\n"
+        "    UpdateEditorButtonColors(editor_bubble_button_, foreground_color);",
+        "    // Update editor bubble button.\n"
+        "    UpdateEditorButtonColors(editor_bubble_button_, foreground_color);\n"
+        "\n"
+        "    // XPLORER: tint the open-chat button's Grok icon to match the header.\n"
+        "    open_chat_button_->SetImageModel(\n"
+        "        views::Button::STATE_NORMAL,\n"
+        "        ui::ImageModel::FromVectorIcon(kGrokIcon, foreground_color,\n"
+        "                                       kIconSize));",
+    )
+    # OnOpenChatPressed: open the Grok side panel to the owning conversation.
+    edit(
+        vtgh_cc,
+        "  editor_bubble_tracker_.Opened(delegate_->ShowGroupEditorBubble(\n"
+        "      /*stop_context_menu_propagation=*/false));\n"
+        "}\n"
+        "\n"
+        "BEGIN_METADATA(VerticalTabGroupHeaderView)",
+        "  editor_bubble_tracker_.Opened(delegate_->ShowGroupEditorBubble(\n"
+        "      /*stop_context_menu_propagation=*/false));\n"
+        "}\n"
+        "\n"
+        "void VerticalTabGroupHeaderView::OnOpenChatPressed() {\n"
+        "  // XPLORER: open the Grok side panel to this group's chat conversation.\n"
+        "  const std::string conv = GetOwningChatConvId(delegate_->GetTabGroup());\n"
+        "  if (conv.empty()) {\n"
+        "    return;\n"
+        "  }\n"
+        "  views::Widget* widget = GetWidget();\n"
+        "  if (!widget) {\n"
+        "    return;\n"
+        "  }\n"
+        "  BrowserView* browser_view =\n"
+        "      BrowserView::GetBrowserViewForNativeWindow(widget->GetNativeWindow());\n"
+        "  if (browser_view && browser_view->browser()) {\n"
+        "    grok_companion::OpenGrokSidePanelAt(browser_view->browser(),\n"
+        '                                        "/?conv=" + conv);\n'
+        "  }\n"
+        "}\n"
+        "\n"
+        "BEGIN_METADATA(VerticalTabGroupHeaderView)",
+    )
+
 
 def main(src: Path):
     # 1. Start the AgentGateway once the browser UI is up.
