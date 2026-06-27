@@ -679,13 +679,11 @@ void AgentGateway::RouteRequest(int connection_id,
       d.Set("owner", own->owner);
       if (IsScheduledTaskTab(own)) {
         d.Set("task_id", own->task_id);
-        if (BrowserWindowInterface* bwi =
-                GlobalBrowserCollection::GetInstance()->FindBrowserWithTab(
-                    params.navigated_or_inserted_contents)) {
-          Browser* browser = bwi->GetBrowserForMigrationOnly();
-          xplorer::HideScheduledTaskTabRow(
-              browser, params.navigated_or_inserted_contents);
-        }
+        // Scheduled-task tabs are VISIBLE in the strip (under the "Scheduled task
+        // tabs" group) like agent tabs — they still open in the background (no
+        // focus steal: NEW_BACKGROUND_TAB + own->background above), but the user
+        // can see and click them to inspect what a job did. (Previously the row
+        // was force-hidden, which made the group show a count with no visible tab.)
       }
     }
     std::move(reply).Run(std::move(d));
