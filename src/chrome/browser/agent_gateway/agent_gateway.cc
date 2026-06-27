@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license.
 
 #include "chrome/browser/agent_gateway/agent_gateway.h"
+#include "chrome/browser/agent_gateway/app_store.h"
 
 #include "chrome/browser/agent_gateway/browser_api.h"
 #include "chrome/browser/agent_gateway/focus_arbiter.h"
@@ -111,6 +112,12 @@ void AgentGateway::Shutdown() {
   // Touches only NoDestructor statics (ActiveRuns + its lock), so it is safe to
   // run here on the main thread regardless of the IO thread's state.
   StopAllActiveRuns();
+
+  // Likewise terminate the per-app python http.server runtime children. They are
+  // separate from the grok runs above and would otherwise be orphaned across a
+  // restart, holding their 127.0.0.1 ports. Also touches only NoDestructor
+  // statics, so it is safe to run here on the main thread.
+  StopAllAppRuntimeServers();
 
   // Stop receiving power events BEFORE tearing down the thread. Otherwise a
   // sleep/wake racing with shutdown could post RebindServer() onto a thread

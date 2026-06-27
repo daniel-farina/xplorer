@@ -1625,6 +1625,13 @@ void PumpGrokStream(net::HttpServer* server,
   HANDLE stdout_read = nullptr;
   HANDLE stdout_write = nullptr;
   if (!::CreatePipe(&stdout_read, &stdout_write, &sa, 0)) {
+    // Clear the "building" marker MarkAppBuilding set before this run, otherwise
+    // the app is stuck "building" until restart. Same cleanup as the terminal
+    // error path below; exit_code=-1, no session/output captured yet.
+    if (!app_id.empty()) {
+      OnAppBuildStreamFinished(app_id, conv_id, /*exit_code=*/-1, std::string(),
+                               std::string(), "failed to create pipe");
+    }
     io_task_runner->PostTask(
         FROM_HERE, base::BindOnce(&SendStreamError, server, connection_id,
                                   "failed to create pipe"));
@@ -1670,6 +1677,13 @@ void PumpGrokStream(net::HttpServer* server,
 #else
   int pipe_fds[2];
   if (pipe(pipe_fds) != 0) {
+    // Clear the "building" marker MarkAppBuilding set before this run, otherwise
+    // the app is stuck "building" until restart. Same cleanup as the terminal
+    // error path below; exit_code=-1, no session/output captured yet.
+    if (!app_id.empty()) {
+      OnAppBuildStreamFinished(app_id, conv_id, /*exit_code=*/-1, std::string(),
+                               std::string(), "failed to create pipe");
+    }
     io_task_runner->PostTask(
         FROM_HERE, base::BindOnce(&SendStreamError, server, connection_id,
                                   "failed to create pipe"));
@@ -1694,6 +1708,13 @@ void PumpGrokStream(net::HttpServer* server,
         "failed to launch grok at " + cmd.GetProgram().MaybeAsASCII();
     RecordGatewayLog("error", log_source, app_id, "launch_fail", launch_msg, -1,
                      "");
+    // Clear the "building" marker MarkAppBuilding set before this run, otherwise
+    // the app is stuck "building" until restart. Same cleanup as the terminal
+    // error path below; exit_code=-1, no session/output captured yet.
+    if (!app_id.empty()) {
+      OnAppBuildStreamFinished(app_id, conv_id, /*exit_code=*/-1, std::string(),
+                               std::string(), launch_msg);
+    }
     io_task_runner->PostTask(
         FROM_HERE,
         base::BindOnce(
