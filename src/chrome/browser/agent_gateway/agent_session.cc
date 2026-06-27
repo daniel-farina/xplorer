@@ -16,7 +16,10 @@
 #include "base/no_destructor.h"
 #include "base/json/json_writer.h"
 #include "base/json/string_escape.h"
+#include "base/location.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/task/sequenced_task_runner.h"
+#include "base/time/time.h"
 #include "content/public/browser/devtools_agent_host.h"
 #include "content/public/browser/web_contents.h"
 #include "ui/gfx/geometry/size.h"
@@ -76,10 +79,23 @@ constexpr char kHLEnsure[] = R"js(
 }  // namespace
 
 AgentSession::AgentSession(content::WebContents* web_contents)
-    : host_(content::DevToolsAgentHost::GetOrCreateFor(web_contents)),
+    : content::WebContentsObserver(web_contents),
+      host_(content::DevToolsAgentHost::GetOrCreateFor(web_contents)),
       web_contents_(web_contents->GetWeakPtr()) {
   host_->AttachClient(this);
   SendCommand("Page.enable", base::DictValue(), base::DoNothing());
+}
+
+void AgentSession::DidStopLoading() {
+  // Primary navigation-complete signal: fires from the browser process when the
+  // tab finishes loading, surviving the renderer process swaps that drop CDP
+  // Page.loadEventFired. Only acts while a navigation is pending (load_waiter_).
+  if (load_waiter_) {
+    nav_timeout_.Stop();
+    base::DictValue ok;
+    ok.Set("loaded", true);
+    ResolveNavPosted(std::move(ok));
+  }
 }
 
 AgentSession::~AgentSession() {
@@ -116,23 +132,57 @@ void AgentSession::DispatchProtocolMessage(content::DevToolsAgentHost* host,
     if (it != pending_.end()) {
       ResultCallback cb = std::move(it->second);
       pending_.erase(it);
-      base::DictValue* result = parsed->FindDict("result");
-      std::move(cb).Run(result ? std::move(*result) : base::DictValue());
+      // Surface CDP command errors instead of silently returning an empty dict:
+      // a swallowed error makes a failed eval/click look like an empty success
+      // (e.g. Click then reports "selector not found" when Runtime.evaluate
+      // actually timed out / the context was gone).
+      if (base::DictValue* error = parsed->FindDict("error")) {
+        const std::string* msg = error->FindString("message");
+        base::DictValue err;
+        err.Set("error", msg && !msg->empty() ? *msg : "cdp command failed");
+        std::move(cb).Run(std::move(err));
+      } else if (base::DictValue* result = parsed->FindDict("result")) {
+        std::move(cb).Run(std::move(*result));
+      } else {
+        std::move(cb).Run(base::DictValue());
+      }
     }
     return;
   }
 
-  // Events: resolve navigation waiters on load.
+  // Events: resolve navigation waiters on load. (Backstop to DidStopLoading;
+  // whichever moves load_waiter_ first wins.)
   const std::string* method = parsed->FindString("method");
   if (method && *method == "Page.loadEventFired" && load_waiter_) {
+    nav_timeout_.Stop();
     base::DictValue ok;
     ok.Set("loaded", true);
-    std::move(load_waiter_).Run(std::move(ok));
+    ResolveNavPosted(std::move(ok));
   }
 }
 
 void AgentSession::AgentHostClosed(content::DevToolsAgentHost* host) {
   host_ = nullptr;
+  nav_timeout_.Stop();
+  // The tab/host went away mid-operation. Fail every in-flight callback so the
+  // gateway HTTP reply fires (and this AgentSession, which the reply owns, is
+  // freed) instead of hanging forever + leaking the session. POST each run: a
+  // reply owns this->unique_ptr, so running it deletes `this` — never do that
+  // synchronously from inside this host callback.
+  std::map<int, ResultCallback> pending = std::move(pending_);
+  ResultCallback load_waiter = std::move(load_waiter_);
+  auto runner = base::SequencedTaskRunner::GetCurrentDefault();
+  for (auto& [id, cb] : pending) {
+    base::DictValue err;
+    err.Set("error", "tab detached");
+    runner->PostTask(FROM_HERE, base::BindOnce(std::move(cb), std::move(err)));
+  }
+  if (load_waiter) {
+    base::DictValue err;
+    err.Set("error", "tab detached");
+    runner->PostTask(FROM_HERE,
+                     base::BindOnce(std::move(load_waiter), std::move(err)));
+  }
 }
 
 void AgentSession::Navigate(const std::string& url, ResultCallback cb) {
@@ -140,16 +190,63 @@ void AgentSession::Navigate(const std::string& url, ResultCallback cb) {
   // asynchronously, and issuing Page.navigate before that ack lands means the
   // resulting Page.loadEventFired is never delivered and the caller hangs.
   load_waiter_ = std::move(cb);
+  // Backstop: Page.loadEventFired can be lost (e.g. a cross-process navigation
+  // re-homes the renderer and the new one never received our Page.enable), which
+  // would hang the caller forever. Resolve after a timeout regardless. Posted, so
+  // the timer fire never deletes `this` (and thus the timer) synchronously.
+  nav_timeout_.Start(FROM_HERE, base::Seconds(30),
+                     base::BindOnce(&AgentSession::OnNavTimeout,
+                                    weak_factory_.GetWeakPtr()));
   SendCommand(
       "Page.enable", base::DictValue(),
       base::BindOnce(
           [](AgentSession* self, std::string url, base::DictValue) {
             base::DictValue params;
             params.Set("url", url);
-            self->SendCommand("Page.navigate", std::move(params),
-                              base::DoNothing());
+            self->SendCommand(
+                "Page.navigate", std::move(params),
+                base::BindOnce(&AgentSession::OnNavigateAck,
+                               self->weak_factory_.GetWeakPtr()));
           },
           this, url));
+}
+
+void AgentSession::OnNavigateAck(base::DictValue result) {
+  // Page.navigate failed at the protocol level (bad/empty URL — surfaced as
+  // {"error":...} by DispatchProtocolMessage) or returned a per-frame errorText:
+  // no Page.loadEventFired will arrive, so resolve now instead of waiting out the
+  // 30s timeout.
+  if (!load_waiter_) {
+    return;
+  }
+  const std::string* err = result.FindString("error");
+  const std::string* err_text = result.FindString("errorText");
+  if (err || err_text) {
+    nav_timeout_.Stop();
+    base::DictValue out;
+    out.Set("error", err ? *err : *err_text);
+    ResolveNavPosted(std::move(out));
+  }
+}
+
+void AgentSession::OnNavTimeout() {
+  if (!load_waiter_) {
+    return;
+  }
+  base::DictValue out;
+  out.Set("loaded", false);
+  out.Set("note", "navigation issued; load event not observed within timeout");
+  ResolveNavPosted(std::move(out));
+}
+
+void AgentSession::ResolveNavPosted(base::DictValue result) {
+  if (!load_waiter_) {
+    return;
+  }
+  // Running load_waiter_ frees this AgentSession, so post it as a fresh task
+  // rather than running it from inside a timer fire / command ack.
+  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE, base::BindOnce(std::move(load_waiter_), std::move(result)));
 }
 
 void AgentSession::Eval(const std::string& expression, ResultCallback cb) {
