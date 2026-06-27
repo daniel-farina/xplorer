@@ -3857,14 +3857,26 @@ bool GrokNative::TryHandleRequest(
     std::string id = path.substr(std::string("/api/conversations/").size());
     base::DictValue data = LoadSessions();
     base::ListValue filtered;
+    bool found = false;
     if (const base::ListValue* convs = data.FindList("conversations")) {
       for (const auto& v : *convs) {
         if (!v.is_dict())
           continue;
         const std::string* cid = v.GetDict().FindString("id");
-        if (cid && *cid != id)
-          filtered.Append(v.Clone());
+        if (cid && *cid == id) {
+          found = true;
+          continue;
+        }
+        filtered.Append(v.Clone());
       }
+    }
+    // 404 on a non-existent id instead of a misleading 200 {"ok":true}: don't
+    // rewrite sessions when nothing was removed.
+    if (!found) {
+      base::DictValue err;
+      err.Set("error", "not found");
+      SendJson(server, connection_id, net::HTTP_NOT_FOUND, std::move(err));
+      return true;
     }
     data.Set("conversations", std::move(filtered));
     SaveSessions(data);
