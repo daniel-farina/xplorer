@@ -9,6 +9,18 @@ SRC="${1:-$XPLORER/../chromium/src}"
 echo "Copying new source files..."
 cp -R "$XPLORER/src/chrome" "$SRC/"
 
+# Deletion-sync: cp -R is additive — a source file DELETED from the overlay would
+# linger in the chromium tree forever and break a clean rebuild (a stale .cc keeps
+# compiling, a deleted .h stays #included). The three xplorer source dirs are
+# PURE-overlay (they don't exist upstream), so mirror them with rsync --delete so
+# the chromium copy exactly matches the overlay. (Keep the cp -R above for the
+# non-pure overlay files — branding, theme images — where delete-sync is unsafe.)
+for d in browser/agent_gateway browser/ui/views/xplorer browser/grok_companion; do
+  if [ -d "$XPLORER/src/chrome/$d" ]; then
+    rsync -a --delete "$XPLORER/src/chrome/$d/" "$SRC/chrome/$d/"
+  fi
+done
+
 # macOS-only icon work (sips, xcrun actool, .icns, chrome/app/theme/chromium/mac
 # paths) — skipped on Linux/Windows, which don't have these tools/paths.
 if [ "$(uname)" = "Darwin" ]; then

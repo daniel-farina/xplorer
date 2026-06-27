@@ -42,6 +42,19 @@ Write-Host "Copying new source files..."
 robocopy (Join-Path $Xplorer "src\chrome") (Join-Path $Src "chrome") /E /NFL /NDL /NJH /NJS /NP | Out-Null
 if ($LASTEXITCODE -ge 8) { throw "robocopy failed copying src\chrome (exit $LASTEXITCODE)" }
 
+# Deletion-sync: /E is additive — a source file DELETED from the overlay would
+# linger in the chromium tree and break a clean rebuild (a stale .cc keeps
+# compiling, a deleted .h stays #included). The three xplorer source dirs are
+# PURE-overlay (they don't exist upstream), so mirror them with /MIR so the
+# chromium copy exactly matches the overlay and removed files are purged.
+foreach ($d in @("browser\agent_gateway","browser\ui\views\xplorer","browser\grok_companion")) {
+  $od = Join-Path $Xplorer ("src\chrome\" + $d)
+  if (Test-Path $od) {
+    robocopy $od (Join-Path $Src ("chrome\" + $d)) /MIR /NFL /NDL /NJH /NJS /NP | Out-Null
+    if ($LASTEXITCODE -ge 8) { throw "robocopy /MIR failed for $d (exit $LASTEXITCODE)" }
+  }
+}
+
 Write-Host "Installing Xplorer app icon (Windows .ico)..."
 # The non-branded (is_chrome_branded=false) build uses theme\chromium\win\*.ico,
 # referenced from chrome_exe.rc / chrome_dll.rc as IDR_MAINFRAME. Overwrite the
