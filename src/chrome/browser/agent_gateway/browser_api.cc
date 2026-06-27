@@ -242,6 +242,21 @@ void BrowserApi::CloseTab(const std::string& tab_id, DictCallback callback) {
     std::move(callback).Run(std::move(result));
     return;
   }
+  // A persistent bookmark tab (the xAI "Bookmarks" group) must NOT be closeable
+  // via the API: an agent or scheduled task could otherwise close it, which drops
+  // it from the bookmark config -- the recurring bookmark-config drift was a
+  // scheduled-task agent DELETE'ing bookmark tabs over idle gaps. The user can
+  // still close one via the native tab X (a different, non-API path), which is the
+  // intended closeable behavior; agents manage bookmarks via /api/settings.
+  content::WebContents* wc = model->GetWebContentsAt(index);
+  TabOwnership* own = wc ? TabOwnership::Get(wc) : nullptr;
+  if (own && own->bookmark_node_id != 0) {
+    result.Set("error",
+               "cannot close a bookmark tab via the API; manage bookmarks via "
+               "/api/settings");
+    std::move(callback).Run(std::move(result));
+    return;
+  }
   model->CloseWebContentsAt(index, TabCloseTypes::CLOSE_USER_GESTURE);
   result.Set("ok", true);
   std::move(callback).Run(std::move(result));
