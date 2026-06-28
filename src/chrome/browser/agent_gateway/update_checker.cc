@@ -280,7 +280,9 @@ void UpdateChecker::OnBody(std::optional<std::string> body) {
       matches = name->find("-macos-") != std::string::npos &&
                 base::EndsWith(*name, ".dmg");
 #elif BUILDFLAG(IS_WIN)
-      matches = name->find("-windows-x64-installer-") != std::string::npos &&
+      // Match both the stable name (Xplorer-windows-x64-installer.exe) and the
+      // versioned one (…-installer-v0.8.6.exe) — no trailing dash.
+      matches = name->find("-windows-x64-installer") != std::string::npos &&
                 base::EndsWith(*name, ".exe");
 #elif BUILDFLAG(IS_LINUX)
       matches = base::EndsWith(*name, ".tar.gz");
