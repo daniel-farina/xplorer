@@ -1,14 +1,15 @@
 <p align="center">
-  <img src="branding/xplorer-mark-512.png" alt="Xplorer" width="88" height="88">
+  <img src="branding/xplorer-mark-512.png" alt="Xplor" width="88" height="88">
 </p>
 
-<h1 align="center">Xplorer</h1>
+<h1 align="center">Xplor</h1>
 
-<p align="center"><b>The browser with Grok in every tab.</b></p>
+<p align="center"><b>The agentic browser with Grok in every tab.</b></p>
 
 <p align="center">
-  Search, chat, build apps, and drive the web — with Grok built into every page.<br>
-  No extensions, no copy‑paste. Just ask.
+  Search, chat, build apps, and drive the web — with Grok woven into every page.<br>
+  Tabs organize themselves, agents run on a schedule or in the background, and an<br>
+  agentic Grok side panel rides along. No extensions, no copy‑paste. Just ask.
 </p>
 
 <p align="center">
@@ -23,16 +24,17 @@
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="site/assets/screenshot-hero-dark.png">
-    <img src="site/assets/screenshot-hero-light.png" alt="Xplorer showing Grok Search on a new tab" width="860">
+    <img src="site/assets/screenshot-hero-light.png" alt="Xplor showing Grok Search on a new tab" width="860">
   </picture>
 </p>
 
-Xplorer is a **full web browser** — a fork of Chromium (the real thing: Blink, V8, the
+Xplor is a **full web browser** — a fork of Chromium (the real thing: Blink, V8, the
 multiprocess sandbox, the whole content layer) modified at the C++ source level to be
 **AI‑native**. Every site works, every extension runs, with the sandboxing you expect.
-Grok is woven in at the core, not bolted on as a sidebar. And the same engine that puts
-Grok in your tabs exposes a clean local API, so **any agent can drive the browser** — no
-launch flags, no setup dance.
+Grok is woven in at the core, not bolted on: an agentic side panel, auto‑organized tabs,
+and agents that run on a schedule or quietly in the background. The same engine exposes a
+clean local API and a built‑in MCP gateway, so **any agent can drive the browser** — no
+launch flags, no setup dance — and the app keeps itself current with in‑app auto‑update.
 
 > **Platform:** macOS — Apple Silicon (arm64) and Intel (x86_64) — **Windows x64**, and **Linux x64**. [Download the latest release](https://github.com/daniel-farina/xplorer/releases) or [build from source](#develop-locally).
 
@@ -70,7 +72,7 @@ Real, shipping features — not a chat box in a sidebar.
   the backdrop yours per light/dark mode: a solid color, a gradient, an animated star
   field, the built‑in landscape, or your own image by drag‑and‑drop.
 - **One bar for all of Grok** — a unified toolbar across Grok Build, Grok Web, Imagine,
-  Groki, and X — on Xplorer's own pages and as an overlay on grok.com, x.com, and
+  Groki, and X — on Xplor's own pages and as an overlay on grok.com, x.com, and
   Grokipedia.
 - **Agent‑ready & MCP** — an always‑on local gateway and a bundled MCP server, so agents
   like Grok, Claude, and Cursor can drive the browser natively: tabs, navigation, clicks,
@@ -86,14 +88,14 @@ Stock Chrome only exposes the Chrome DevTools Protocol (CDP) when launched with
 `--remote-debugging-port`, and treats automation as a second‑class debug mode — a
 `navigator.webdriver` flag, an "automation" banner, and a brittle session dance before you
 can do anything. Agents deserve better, and people deserve Grok woven into browsing rather
-than stapled on. Xplorer is both at once, achieved with a small set of source‑level
+than stapled on. Xplor is both at once, achieved with a small set of source‑level
 additions to Chromium:
 
 1. **AgentGateway** (`src/chrome/browser/agent_gateway/`) — a component compiled into the
    browser process that starts automatically at profile load. It serves the full CDP on
    `ws://127.0.0.1:9333` and a higher‑level HTTP **Agent API** on `http://127.0.0.1:9334`.
 2. **First‑class, not intruder** — no automation banner and no `navigator.webdriver`
-   poisoning for gateway sessions. Agents drive tabs while Xplorer is in the background;
+   poisoning for gateway sessions. Agents drive tabs while Xplor is in the background;
    hidden tabs stay live and screenshottable.
 3. **Local & private** — the gateway binds to `127.0.0.1` and is token‑gated. Discovery is
    a single file: `~/.xplorer/gateway.json`.
@@ -109,7 +111,7 @@ additions to Chromium:
 
 ## Architecture
 
-Xplorer is an **overlay** on Chromium: Chromium is too large to vendor, so the repo is a
+Xplor is an **overlay** on Chromium: Chromium is too large to vendor, so the repo is a
 thin layer (`src/` new files + `patches/` source edits + `companion/` UI) applied on top of
 an upstream checkout. Keeping the footprint small is deliberate — it's what makes a fork
 rebaseable against a codebase that ships every ~4 weeks.
@@ -251,7 +253,7 @@ All releases + checksums on the
 
 ## Develop locally
 
-Xplorer builds on top of a normal Chromium checkout that lives *next to* this repo:
+Xplor builds on top of a normal Chromium checkout that lives *next to* this repo:
 
 ```
 chromium/src        # upstream Chromium (fetched separately)
@@ -360,14 +362,14 @@ Open an issue to discuss larger changes first, and keep PRs focused.
 
 ## Star history
 
-If Xplorer is useful to you, please **[give it a ⭐ on GitHub](https://github.com/daniel-farina/xplorer)** — it's the simplest way to support the project and helps more people discover it.
+If Xplor is useful to you, please **[give it a ⭐ on GitHub](https://github.com/daniel-farina/xplorer)** — it's the simplest way to support the project and helps more people discover it.
 
 <p align="center">
   <a href="https://star-history.com/#daniel-farina/xplorer&Date">
     <picture>
       <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=daniel-farina/xplorer&type=Date&theme=dark">
       <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=daniel-farina/xplorer&type=Date">
-      <img alt="Xplorer star history" src="https://api.star-history.com/svg?repos=daniel-farina/xplorer&type=Date" width="640">
+      <img alt="Xplor star history" src="https://api.star-history.com/svg?repos=daniel-farina/xplorer&type=Date" width="640">
     </picture>
   </a>
 </p>
@@ -376,7 +378,7 @@ If Xplorer is useful to you, please **[give it a ⭐ on GitHub](https://github.c
 
 ## License
 
-Xplorer is a derivative of [Chromium](https://www.chromium.org/), which is distributed
+Xplor is a derivative of [Chromium](https://www.chromium.org/), which is distributed
 under a BSD‑3‑Clause license; Chromium's own license and third‑party notices continue to
-apply to the browser. Licensing for the Xplorer overlay in this repository is set by the
+apply to the browser. Licensing for the Xplor overlay in this repository is set by the
 project owner — see the repository for terms.

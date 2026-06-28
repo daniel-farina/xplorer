@@ -6,13 +6,15 @@
   <meta name="color-scheme" content="light dark" />
   <!-- set theme before paint to avoid a flash (defaults to light) -->
   <script>(function(){try{var t=localStorage.getItem('xplorer-theme')||'light';document.documentElement.setAttribute('data-theme',t);}catch(e){document.documentElement.setAttribute('data-theme','light');}})();</script>
-  <title>Xplorer — The Grok-Native Browser</title>
-  <meta name="description" content="Xplorer is an open-source, Grok-native browser. Summarize and fact-check any page, build apps from a prompt, and chat with Grok — built into every tab." />
+  <title>Xplor — The Grok-Native Browser</title>
+  <meta name="description" content="Xplor is an open-source, Grok-native Chromium browser. Grok is built into every tab — it summarizes, builds, and drives the browser, auto-organizing tabs and running scheduled & background tasks from a built-in side panel." />
 
   <!-- Open Graph -->
-  <meta property="og:title" content="Xplorer — The Grok-Native Browser" />
-  <meta property="og:description" content="Search, chat, build apps, and control tabs — with Grok built into every page. Open source." />
+  <meta property="og:title" content="Xplor — The Grok-Native Browser" />
+  <meta property="og:description" content="Grok built into every tab — it summarizes, builds, and drives your browser, auto-organizing tabs and running scheduled & background tasks. Open source, built on Chromium." />
   <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://xplor.sh/" />
+  <link rel="canonical" href="https://xplor.sh/" />
 
   <link rel="icon" type="image/svg+xml" href="assets/logo.svg" />
   <link rel="icon" type="image/png" sizes="32x32" href="assets/icon-32.png" media="(prefers-color-scheme: light)" />
@@ -34,12 +36,13 @@
   <!-- Nav -->
   <header class="nav">
     <div class="nav__inner">
-    <a class="nav__brand" href="#top" aria-label="Xplorer home">
+    <a class="nav__brand" href="#top" aria-label="Xplor home">
       <svg class="nav__x" viewBox="0 0 32 32" aria-hidden="true"><path d="M9.5 9.5 L22.5 22.5 M22.5 9.5 L9.5 22.5" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round"/></svg>
-      <span class="nav__word">plorer</span>
+      <span class="nav__word">plor</span>
     </a>
     <nav class="nav__links" id="nav-links">
       <a href="#features">Features</a>
+      <a href="#agentic">Agentic</a>
       <a href="#showcase">Showcase</a>
       <a href="#customize">Customize</a>
       <a href="#agents">For Agents</a>
@@ -64,18 +67,29 @@
   <!-- Hero -->
   <section class="hero">
     <div class="hero__inner">
-      <div class="hero__wordmark" aria-label="Xplorer">
+      <div class="hero__wordmark" aria-label="Xplor">
         <svg class="hero__x" viewBox="0 0 32 32" aria-hidden="true"><path d="M9.5 9.5 L22.5 22.5 M22.5 9.5 L9.5 22.5" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round"/></svg>
-        <span>plorer</span>
+        <span>plor</span>
       </div>
       <h1 class="hero__title">
         The browser with<br />
         <span class="grad">Grok in every tab.</span>
       </h1>
       <p class="hero__sub">
-        Search, chat, build apps, and control tabs — with Grok built into every page.
-        No extensions, no copy-paste. Just ask.
+        Grok summarizes, builds, and drives your browser — auto-organizing tabs and running
+        scheduled &amp; background tasks, all from a built-in side panel.
+        No extensions, no copy-paste.
       </p>
+      <div class="hero__trust">
+        <span class="trust-chip">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 3v18M3 12h18" fill="none" stroke="currentColor" stroke-width="1.4" opacity=".55"/></svg>
+          Built on Chromium
+        </span>
+        <span class="trust-chip">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 4 6.5v5c0 4.6 3.2 7.9 8 9.5 4.8-1.6 8-4.9 8-9.5v-5L12 3Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="m8.7 12 2.3 2.3 4.3-4.6" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Free &amp; open source
+        </span>
+      </div>
       <div class="hero__cta">
         <a class="btn btn--primary" id="hero-download" data-os-default="mac" href="https://github.com/daniel-farina/xplorer/releases/latest/download/Xplorer-macos-arm64.dmg" target="_blank" rel="noopener">
           <svg class="os-apple" viewBox="0 0 24 24" aria-hidden="true"><path d="M17.05 12.04c-.03-2.42 1.98-3.58 2.07-3.64-1.13-1.65-2.89-1.88-3.51-1.9-1.49-.15-2.91.88-3.67.88-.76 0-1.93-.86-3.18-.84-1.63.02-3.14.95-3.98 2.41-1.7 2.95-.43 7.31 1.21 9.71.8 1.17 1.76 2.49 3.01 2.44 1.21-.05 1.67-.78 3.13-.78 1.46 0 1.87.78 3.15.76 1.3-.02 2.13-1.19 2.93-2.37.92-1.36 1.3-2.67 1.32-2.74-.03-.01-2.53-.97-2.56-3.85zM14.62 5.34c.67-.81 1.12-1.94.99-3.06-.96.04-2.12.64-2.81 1.45-.62.72-1.16 1.87-1.02 2.97 1.07.08 2.17-.55 2.84-1.36z"/></svg>
@@ -108,55 +122,164 @@
 
     <!-- Hero screenshot (already includes its own window chrome; light/dark variants) -->
     <div class="hero__shot">
-      <img class="hero__shot-img hero__shot-img--light" src="assets/screenshot-hero-light.png" alt="Xplorer browser showing Grok Web search" />
+      <img class="hero__shot-img hero__shot-img--light" src="assets/screenshot-hero-light.png" alt="Xplor browser showing Grok Web search" />
       <img class="hero__shot-img hero__shot-img--dark" src="assets/screenshot-hero-dark.png" alt="" aria-hidden="true" />
     </div>
   </section>
 
   <!-- Trust strip -->
   <section class="strip">
-    <p>A real, full-featured browser — every site works, every extension runs, with the sandboxing you expect. Grok is added at the core, not bolted on as a tab.</p>
+    <p class="strip__lead">A real, full-featured browser — Grok is added at the core, not bolted on as a tab.</p>
+    <div class="strip__points">
+      <div class="strip__point">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M12 3v18M3 12h18" fill="none" stroke="currentColor" stroke-width="1.3" opacity=".55"/></svg>
+        <div><strong>Built on Chromium</strong><span>Every site works, exactly as you expect.</span></div>
+      </div>
+      <div class="strip__point">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="6.5" width="17" height="13" rx="2" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M8 6.5V5a4 4 0 0 1 8 0v1.5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+        <div><strong>Every extension runs</strong><span>Your Chrome Web Store add-ons, unchanged.</span></div>
+      </div>
+      <div class="strip__point">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 4 6.5v5c0 4.6 3.2 7.9 8 9.5 4.8-1.6 8-4.9 8-9.5v-5L12 3Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="m8.7 12 2.3 2.3 4.3-4.6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <div><strong>Sandboxed &amp; private</strong><span>The same site isolation and sandboxing.</span></div>
+      </div>
+      <div class="strip__point">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"></path></svg>
+        <div><strong>Free &amp; open source</strong><span><a href="https://github.com/daniel-farina/xplorer" target="_blank" rel="noopener">github.com/daniel-farina/xplorer</a></span></div>
+      </div>
+    </div>
   </section>
 
   <!-- Features -->
   <section id="features" class="section">
     <div class="section__head">
       <span class="eyebrow">Features</span>
-      <h2>Everything Grok, right where you browse.</h2>
-      <p>Real, shipping features — not a chat box in a sidebar.</p>
+      <h2>A browser that does the work.</h2>
+      <p>Grok doesn't just chat in a sidebar — it drives the browser, organizes your tabs, and runs tasks while you keep going.</p>
     </div>
 
     <div class="grid">
       <article class="card">
-        <div class="card__icon">✦</div>
+        <div class="card__icon">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M15 4v16" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M17.6 9.2 18 10.6l1.4.4-1.4.4-.4 1.4-.4-1.4-1.4-.4 1.4-.4.4-1.4Z" fill="currentColor"/></svg>
+        </div>
+        <h3>Agentic Grok side panel</h3>
+        <p>A built-in Grok that doesn't just chat — it <strong>drives your browser</strong>: opens and organizes tabs, browses for you, with its thinking shown live as it works.</p>
+      </article>
+      <article class="card">
+        <div class="card__icon">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="7.5" height="7.5" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.7"/><rect x="13.5" y="4" width="7.5" height="7.5" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.7"/><rect x="3" y="14.5" width="7.5" height="5.5" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.7"/><rect x="13.5" y="14.5" width="7.5" height="5.5" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.7"/></svg>
+        </div>
+        <h3>Auto-organized tab groups</h3>
+        <p>Your tabs sort themselves into tidy, topic-named groups the moment an agent opens them. Or just say <strong>“organize my tabs”</strong> and Grok groups them by what they are.</p>
+      </article>
+      <article class="card">
+        <div class="card__icon">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="13" r="8" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M12 9v4l2.5 2" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M9 2h6" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+        </div>
+        <h3>Scheduled &amp; background tasks</h3>
+        <p>Schedule Grok to run a task on a repeat or at a set time, and watch it from the sidebar. Background agents work in hidden tabs and <strong>never steal your focus</strong>.</p>
+      </article>
+      <article class="card">
+        <div class="card__icon">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><circle cx="12" cy="12" r="3.4" fill="none" stroke="currentColor" stroke-width="1.7"/></svg>
+        </div>
         <h3>The “Grok it” button</h3>
-        <p>A floating Grok button on every page. <strong>Summarize</strong> the long read, <strong>fact-check</strong> the claims (“Is this true?”), <strong>explain</strong> it, or analyze it — your page is handed to Grok with one click.</p>
+        <p>A floating Grok button on every page. <strong>Summarize</strong> the long read, <strong>fact-check</strong> the claims (“Is this true?”), <strong>explain</strong> it, or turn it into an app — one click.</p>
       </article>
       <article class="card">
-        <div class="card__icon">⚒</div>
+        <div class="card__icon">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 8-4 4 4 4M17 8l4 4-4 4M14 5l-4 14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
         <h3>Grok Build</h3>
-        <p>Describe an app in plain words and Grok writes it, then runs it live in a tab. Watch it build, then keep iterating just by chatting — “make the header sticky,” and it does.</p>
+        <p>Describe an app in plain words and Grok writes it, then runs it live in a tab. Keep iterating just by chatting — every build keeps its own folder and conversation.</p>
       </article>
       <article class="card">
-        <div class="card__icon">▦</div>
-        <h3>Apps &amp; conversations</h3>
-        <p>Every build gets its own folder and a dedicated conversation. Browse the gallery, filter by status, rename, duplicate, export to a zip, or relaunch — your apps and chats stay organized.</p>
-      </article>
-      <article class="card">
-        <div class="card__icon">⌕</div>
+        <div class="card__icon">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="m16.5 16.5 4 4" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+        </div>
         <h3>Grok Search home</h3>
         <p>New tabs open Grok Search. Type a query and it runs on grok.com with full context — Web and Imagine modes built in.</p>
       </article>
       <article class="card">
-        <div class="card__icon">⊞</div>
-        <h3>One bar for all of Grok</h3>
-        <p>A unified toolbar across <strong>Grok Build</strong>, <strong>Grok Web</strong>, <strong>Imagine</strong>, <strong>Groki</strong>, and <strong>X</strong> — on Xplorer's own pages and as an overlay on grok.com, x.com, and Grokipedia.</p>
+        <div class="card__icon">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 1-7 3.3" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M4 3v4h4" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="m9 12 2.2 2.2L15.5 10" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+        <h3>In-app auto-update</h3>
+        <p>Xplor keeps itself current and <strong>verifies every byte before it installs</strong> — Sparkle on macOS, a verified in-app updater on Windows and Linux.</p>
       </article>
       <article class="card">
-        <div class="card__icon">⚡</div>
-        <h3>Agent-ready &amp; MCP</h3>
-        <p>Xplorer ships as an <strong>MCP server</strong> with an always-on local gateway, so agents like Grok, Claude, and Cursor can drive the browser natively — tabs, navigation, clicks, screenshots.</p>
+        <div class="card__icon">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="10" width="18" height="6" rx="2" fill="none" stroke="currentColor" stroke-width="1.7"/><circle cx="7" cy="13" r="1.1" fill="currentColor"/><path d="M7 10V7a5 5 0 0 1 10 0v3" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M17 19v2M14 20h6" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+        </div>
+        <h3>MCP &amp; agent-ready</h3>
+        <p>Xplor ships as an <strong>MCP server</strong> with an always-on local gateway, so agents like Grok, Claude, and Cursor can drive the browser natively — tabs, navigation, clicks, screenshots.</p>
       </article>
+    </div>
+  </section>
+
+  <!-- Agentic core -->
+  <section id="agentic" class="section">
+    <div class="section__head">
+      <span class="eyebrow">Agentic by default</span>
+      <h2>Grok drives the browser, not just the chat.</h2>
+      <p>The side panel opens tabs, organizes them, browses, and runs tasks in the background — while your active tab stays exactly where you left it.</p>
+    </div>
+
+    <div class="showcase">
+      <div class="showcase__row">
+        <div class="showcase__text">
+          <h3>
+            An agentic Grok side panel
+            <span class="pill">Live</span>
+          </h3>
+          <p>
+            A built-in Grok that doesn't just answer — it <strong>drives your browser</strong>. Ask it to open
+            and organize tabs or go research something, and watch its thinking stream live as it works. No
+            extension, no copy-paste, no second window.
+          </p>
+        </div>
+        <div class="showcase__shot placeholder" data-label="assets/screenshot-sidepanel.png">
+          <img src="assets/screenshot-sidepanel.png" alt="The agentic Grok side panel driving the browser" onerror="this.parentElement.classList.add('is-empty');this.remove();" />
+        </div>
+      </div>
+
+      <div class="showcase__row showcase__row--reverse">
+        <div class="showcase__text">
+          <h3>Tabs that organize themselves</h3>
+          <p>
+            The moment an agent opens tabs, they sort into tidy, <strong>topic-named groups</strong> — named by
+            the conversation behind them — alongside native <strong>Bookmarks</strong> and
+            <strong>Scheduled</strong> groups. Already drowning in tabs? Just say
+            <em>“organize my tabs,”</em> and Grok looks at what's open and groups it by what it is.
+          </p>
+          <ul class="actions">
+            <li><span class="actions__ic">▦</span> <strong>Auto-named groups</strong> — by conversation topic, the instant tabs open</li>
+            <li><span class="actions__ic">★</span> <strong>Native Bookmarks group</strong> — always open, with a gear to the manager</li>
+            <li><span class="actions__ic">↻</span> <strong>“Organize my tabs”</strong> — Grok regroups everything on demand</li>
+          </ul>
+        </div>
+        <div class="showcase__shot placeholder" data-label="assets/screenshot-tabs.png">
+          <img src="assets/screenshot-tabs.png" alt="Auto-organized, topic-named tab groups" onerror="this.parentElement.classList.add('is-empty');this.remove();" />
+        </div>
+      </div>
+
+      <div class="showcase__row">
+        <div class="showcase__text">
+          <h3>
+            Scheduled &amp; background tasks
+            <span class="pill">Live</span>
+          </h3>
+          <p>
+            Schedule Grok to run a task on a repeating interval or at a set time, and watch it from the
+            <strong>Scheduled</strong> section of the sidebar. Background agents do their work in hidden tabs —
+            a default-deny <strong>FocusArbiter</strong> guarantees your active tab never gets yanked away.
+          </p>
+        </div>
+        <div class="showcase__shot placeholder" data-label="assets/screenshot-scheduled.png">
+          <img src="assets/screenshot-scheduled.png" alt="Scheduled and background tasks in the sidebar" onerror="this.parentElement.classList.add('is-empty');this.remove();" />
+        </div>
+      </div>
     </div>
   </section>
 
@@ -165,7 +288,7 @@
     <div class="section__head">
       <span class="eyebrow">Showcase</span>
       <h2>See it in motion.</h2>
-      <p>A few looks at Xplorer doing its thing. (Swap these placeholders for real screenshots.)</p>
+      <p>A few looks at Xplor doing its thing.</p>
     </div>
 
     <div class="showcase">
@@ -226,7 +349,7 @@
       <p>
         Every new tab opens Grok Search on a beautiful landscape by default — or make it yours. Set your own
         background image for <strong>light</strong> and <strong>dark</strong> mode by drag‑and‑drop or browse,
-        and Xplorer remembers it. It switches automatically with your theme.
+        and Xplor remembers it. It switches automatically with your theme.
       </p>
     </div>
     <div class="shots">
@@ -272,7 +395,7 @@
         handing off to another tool.
       </p>
       <p class="soon__note">
-        The page-driving engine already lives inside Xplorer — today it powers external agents through the gateway.
+        The page-driving engine already lives inside Xplor — today it powers external agents through the gateway.
         We're bringing that same power to a single ask: <em>“Grok, finish this for me.”</em>
       </p>
     </div>
@@ -283,7 +406,7 @@
     <div class="section__head">
       <span class="eyebrow">Built for agents, too</span>
       <h2>An API the agent layer deserves.</h2>
-      <p>Xplorer runs an always-on local gateway and ships as an MCP server — so any agent can drive it, with no launch flags and no setup dance.</p>
+      <p>Xplor runs an always-on local gateway and ships as an MCP server — so any agent can drive it, with no launch flags and no setup dance.</p>
     </div>
 
     <div class="codeblock" id="agent-codeblock">
@@ -302,7 +425,7 @@ Agent API  <span class="c-str">http://127.0.0.1:9334</span>   <span class="c-com
 <span class="c-com"># …or register the bundled MCP server, and your agent</span>
 <span class="c-com"># (Grok, Claude, Cursor) gets native browser tools.</span>
 </code></pre>
-      <pre class="codeblock__panel" data-panel="docs"><code># Drive Xplorer with your agent — no flags, no setup.
+      <pre class="codeblock__panel" data-panel="docs"><code># Drive Xplor with your agent — no flags, no setup.
 
 # 1. Discover the gateway: read ~/.xplorer/gateway.json
 #    { "url": "http://127.0.0.1:9334", "cdp_url": "ws://127.0.0.1:9333", "token": "…" }
@@ -328,7 +451,7 @@ POST /tabs/{id}/eval     {expression} -&gt; run JS, awaits promises
 #    xplorer_click, xplorer_type, xplorer_press, xplorer_screenshot, xplorer_eval.
 #    It auto-discovers the running browser via ~/.xplorer/gateway.json.
 
-# Agents drive tabs while Xplorer is in the background; hidden tabs stay live.
+# Agents drive tabs while Xplor is in the background; hidden tabs stay live.
 
 # Quick check (shell):
 TOKEN=$(python3 -c "import json,os;print(json.load(open(os.path.expanduser('~/.xplorer/gateway.json')))['token'])")
@@ -347,7 +470,7 @@ curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:9334/tabs
   <section id="download" class="cta">
     <div class="cta__inner">
       <h2>Bring Grok to the browser.</h2>
-      <p>Download Xplorer and explore the web with Grok at its core. Free, open source, and getting better every week.</p>
+      <p>Download Xplor and explore the web with Grok at its core. Free, open source, and getting better every week.</p>
       <div class="download-grid">
         <article class="download-card">
           <div class="os-badge os-badge--apple"><svg class="os-apple" viewBox="0 0 24 24" aria-hidden="true"><path d="M17.05 12.04c-.03-2.42 1.98-3.58 2.07-3.64-1.13-1.65-2.89-1.88-3.51-1.9-1.49-.15-2.91.88-3.67.88-.76 0-1.93-.86-3.18-.84-1.63.02-3.14.95-3.98 2.41-1.7 2.95-.43 7.31 1.21 9.71.8 1.17 1.76 2.49 3.01 2.44 1.21-.05 1.67-.78 3.13-.78 1.46 0 1.87.78 3.15.76 1.3-.02 2.13-1.19 2.93-2.37.92-1.36 1.3-2.67 1.32-2.74-.03-.01-2.53-.97-2.56-3.85zM14.62 5.34c.67-.81 1.12-1.94.99-3.06-.96.04-2.12.64-2.81 1.45-.62.72-1.16 1.87-1.02 2.97 1.07.08 2.17-.55 2.84-1.36z"/></svg></div>
@@ -444,7 +567,7 @@ cat ~/.xplorer/gateway.json</code></pre>
   <footer class="footer">
     <div class="footer__brand">
       <svg class="footer__x" viewBox="0 0 32 32" aria-hidden="true"><path d="M9.5 9.5 L22.5 22.5 M22.5 9.5 L9.5 22.5" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round"/></svg>
-      <span>Xplorer</span>
+      <span>Xplor</span>
     </div>
     <p class="footer__copy">The open-source, Grok-native browser. © 2026.</p>
     <div class="footer__links">
@@ -571,6 +694,7 @@ cat ~/.xplorer/gateway.json</code></pre>
       (function () {
         var GROUPS = [
           { sel: '.section__head' },
+          { sel: '.strip__point', stagger: true },
           { sel: '#features .card', stagger: true },
           { sel: '.showcase__row', stagger: true },
           { sel: '#customize .shot-card', stagger: true },

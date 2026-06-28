@@ -348,9 +348,37 @@ html.theme-animating * {
 .shot-card figcaption { margin-top: 12px; text-align: center; color: var(--muted); font-size: 15px; }
 .shot-card figcaption b { color: var(--text); font-weight: 600; }
 
-/* ---------- Strip ---------- */
-.strip { max-width: 760px; margin: 56px auto 0; padding: 0 24px; text-align: center; }
-.strip p { color: var(--muted); font-size: 17px; letter-spacing: 0.005em; }
+/* ---------- Hero trust chips ---------- */
+.hero__trust {
+  display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-top: 18px;
+}
+.trust-chip {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 6px 13px; border-radius: 980px; border: 1px solid var(--line);
+  font: 600 12.5px "Inter", system-ui, sans-serif; color: var(--muted); background: var(--fill);
+  backdrop-filter: blur(6px);
+}
+.trust-chip svg { width: 15px; height: 15px; display: block; color: var(--text); flex: none; }
+
+/* ---------- Trust strip ---------- */
+.strip { max-width: var(--maxw); margin: 64px auto 0; padding: 0 24px; text-align: center; }
+.strip__lead { color: var(--text); font-size: 19px; font-weight: 500; letter-spacing: 0.005em; margin: 0 auto; max-width: 640px; }
+.strip__points {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px;
+  max-width: 920px; margin: 32px auto 0; text-align: left;
+}
+.strip__point {
+  display: flex; gap: 12px; align-items: flex-start;
+  padding: 18px 18px; border-radius: 16px; border: 1px solid var(--line);
+  background: var(--panel); box-shadow: var(--shadow-card);
+}
+.strip__point svg { width: 22px; height: 22px; flex: none; color: var(--text); margin-top: 1px; }
+.strip__point strong { display: block; font-size: 15px; font-weight: 600; color: var(--text); letter-spacing: -0.01em; }
+.strip__point span { display: block; margin-top: 3px; color: var(--muted); font-size: 13.5px; line-height: 1.45; }
+.strip__point a { color: var(--accent); text-decoration: none; word-break: break-word; }
+.strip__point a:hover { text-decoration: underline; }
+@media (max-width: 920px) { .strip__points { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 520px) { .strip__points { grid-template-columns: 1fr; } }
 
 /* ---------- Sections ---------- */
 .section { max-width: var(--maxw); margin: 0 auto; padding: 110px 24px; }
@@ -382,6 +410,7 @@ html.theme-animating * {
   font-size: 22px; margin-bottom: 18px; color: var(--text);
   background: var(--fill); border: 1px solid var(--line);
 }
+.card__icon svg { width: 24px; height: 24px; display: block; }
 .card h3 { font-size: 20px; font-weight: 600; margin-bottom: 10px; letter-spacing: -0.01em; }
 .card p { color: var(--muted); font-size: 15.5px; margin: 0; }
 .card strong { color: var(--text); font-weight: 600; }
