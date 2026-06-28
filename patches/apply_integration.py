@@ -1077,17 +1077,86 @@ def main(src: Path):
         app_controller.write_text(t)
         print(f"  edited: {app_controller}")
 
-    # XPLORER: compile the Sparkle updater glue into static_library("browser").
-    # Append next to app_controller_mac.mm in the is_mac sources block (paths in
-    # that block are relative to chrome/browser, so bare filenames). Sparkle is
-    # runtime-loaded, so there is no GN framework dep / rpath to add.
-    if "xplorer_sparkle_updater.mm" not in browser_gn.read_text():
+    # XPLORER: LINK Sparkle.framework via a dedicated source_set (runtime-loading
+    # via NSBundle fails under the hardened runtime — [NSBundle load] returns NO;
+    # linking emits the LC_LOAD_DYLIB + rpath at link time, the way Vivaldi/Brave
+    # embed Sparkle). The glue lives in its OWN source_set so the vendored
+    # framework's -F search path (framework_dirs) is applied ONLY to this one .mm,
+    # NOT to all ~3000 files of static_library("browser") (a target-level
+    # framework_dirs would change every file's compile command and force a full
+    # chrome/browser rebuild). `frameworks`/`framework_dirs` still propagate
+    # across the static-library boundary into the Xplorer Framework dylib (the
+    # final link), so xplorer_sparkle_updater.mm gets <Sparkle/Sparkle.h> at
+    # compile time and the binary gets -framework Sparkle (LC_LOAD_DYLIB
+    # @rpath/Sparkle.framework/Versions/B/Sparkle) at link time. ARC is on by
+    # default (default_compiler_configs); Sparkle 2.9.3 headers are -Werror-clean.
+    # Injected into the existing standalone is_mac block alongside the other mac
+    # source_sets (app_controller_mac etc.) that static_library("browser") deps.
+    if 'source_set("xplorer_sparkle")' not in browser_gn.read_text():
         edit(
             browser_gn,
-            '      "app_controller_mac.mm",\n',
-            '      "app_controller_mac.mm",\n'
-            '      "xplorer_sparkle_updater.h",  # XPLORER\n'
-            '      "xplorer_sparkle_updater.mm",  # XPLORER\n',
+            'if (is_mac) {\n'
+            '  source_set("chrome_browser_main_mac") {',
+            'if (is_mac) {\n'
+            '  # XPLORER: Sparkle auto-updater glue (linked, not runtime-loaded).\n'
+            '  source_set("xplorer_sparkle") {\n'
+            '    sources = [\n'
+            '      "xplorer_sparkle_updater.h",\n'
+            '      "xplorer_sparkle_updater.mm",\n'
+            '    ]\n'
+            '    frameworks = [ "Sparkle.framework" ]\n'
+            '    framework_dirs = [ "//third_party/sparkle" ]\n'
+            '  }\n\n'
+            '  source_set("chrome_browser_main_mac") {',
+        )
+    # Pull the source_set into static_library("browser") on mac (next to the other
+    # mac source_set deps). This carries Sparkle through to the final framework
+    # link without putting the .mm in browser's own sources list.
+    if '":xplorer_sparkle",' not in browser_gn.read_text():
+        edit(
+            browser_gn,
+            '      ":app_controller_mac",\n',
+            '      ":app_controller_mac",\n'
+            '      ":xplorer_sparkle",  # XPLORER: linked Sparkle auto-updater\n',
+        )
+
+    # XPLORER: rpath so the linked Sparkle.framework resolves at runtime.
+    # Chromium emits NO LC_RPATH on the Xplorer Framework binary (it references
+    # sibling dylibs via @executable_path/... directly). Sparkle's dylib id is
+    # @rpath/Sparkle.framework/Versions/B/Sparkle, so the loading binary (this
+    # framework, which links //chrome/browser and thus carries the Sparkle
+    # LC_LOAD_DYLIB) needs an rpath that resolves @rpath to Contents/Frameworks,
+    # where build.sh / release_arch.sh stage Sparkle.framework. The chrome_app
+    # executable lives at Contents/MacOS/, so @executable_path/../Frameworks ==
+    # Contents/Frameworks. Added to mac_framework_bundle("chrome_framework")'s
+    # ldflags (forwarded to its internal shared_library — the final link target).
+    chrome_gn = src / "chrome/BUILD.gn"
+    if "XPLORER: rpath for the linked Sparkle" not in chrome_gn.read_text():
+        edit(
+            chrome_gn,
+            "    ldflags = [\n"
+            '      "-compatibility_version",\n'
+            "      chrome_dylib_version,\n"
+            '      "-current_version",\n'
+            "      chrome_dylib_version,\n"
+            "    ]\n",
+            "    ldflags = [\n"
+            '      "-compatibility_version",\n'
+            "      chrome_dylib_version,\n"
+            '      "-current_version",\n'
+            "      chrome_dylib_version,\n"
+            "      # XPLORER: rpath for the linked Sparkle.framework\n"
+            "      # (id @rpath/Sparkle.framework/...) -> Contents/Frameworks.\n"
+            "      # @loader_path is RELATIVE TO THIS FRAMEWORK BINARY (same for the\n"
+            "      # browser process AND every helper that loads it), so it resolves\n"
+            "      # for all process types; @executable_path/../Frameworks only works\n"
+            "      # for the main exe (helpers live deeper -> their ../Frameworks is\n"
+            "      # empty -> dlopen crash). Binary is at\n"
+            "      # Contents/Frameworks/Xplorer Framework.framework/Versions/<V>/, so\n"
+            "      # @loader_path/../../.. == Contents/Frameworks. Keep both.\n"
+            '      "-Wl,-rpath,@loader_path/../../..",\n'
+            '      "-Wl,-rpath,@executable_path/../Frameworks",\n'
+            "    ]\n",
         )
 
     # The visible app name comes from IDS_PRODUCT_NAME / IDS_SHORT_PRODUCT_NAME

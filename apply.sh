@@ -99,6 +99,25 @@ else
 fi
 fi  # end macOS-only product-logo block
 
+# macOS-only: stage the vendored Sparkle.framework INTO the chromium tree so GN
+# can resolve it at gn-gen/link time. chrome/browser/BUILD.gn (patched by
+# apply_integration.py) sets framework_dirs = //third_party/sparkle and links
+# Sparkle.framework, which gives xplorer_sparkle_updater.mm <Sparkle/Sparkle.h>
+# at compile time and emits the LC_LOAD_DYLIB (@rpath/Sparkle.framework/...) at
+# link time. This is the LINK-time copy; build.sh / release_arch.sh separately
+# ditto the SAME framework into the bundle's Contents/Frameworks for RUNTIME
+# presence (different purpose). third_party/sparkle is untracked in the chromium
+# tree, so `git checkout -- .` leaves it; ditto preserves the Versions/Current
+# symlink layout a plain cp -R would mangle. (Linux/Windows don't ship Sparkle.)
+if [ "$(uname)" = "Darwin" ]; then
+echo "Staging Sparkle.framework into chromium tree (link-time)..."
+SPARKLE_TREE="$SRC/third_party/sparkle"
+mkdir -p "$SPARKLE_TREE"
+rm -rf "$SPARKLE_TREE/Sparkle.framework"
+ditto "$XPLORER/third_party/Sparkle/Sparkle.framework" "$SPARKLE_TREE/Sparkle.framework"
+echo "  staged -> $SPARKLE_TREE/Sparkle.framework"
+fi  # end macOS-only Sparkle link-time staging
+
 echo "Applying integration edits..."
 python3 "$XPLORER/patches/apply_integration.py" "$SRC"
 
