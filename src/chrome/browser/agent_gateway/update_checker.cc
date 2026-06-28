@@ -101,7 +101,7 @@ std::string Sha256HexOfFile(const base::FilePath& path) {
 bool IsAllowedHost(const GURL& url) {
   if (!url.is_valid() || !url.SchemeIs("https"))
     return false;
-  const std::string host = url.host();
+  const std::string host(url.host());  // GURL::host() returns string_view
   auto host_is = [&](const char* domain) {
     const std::string suffix = std::string(".") + domain;
     return host == domain || base::EndsWith(host, suffix);
