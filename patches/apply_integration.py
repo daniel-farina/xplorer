@@ -1196,6 +1196,24 @@ def main(src: Path):
         app_info.write_text(ai)
         print(f"  set CFBundleDisplayName=Xplor: {app_info}")
 
+    # XPLORER: the macOS app-menu BOLD title and the auto "About <X>" item come
+    # from CFBundleName (NOT CFBundleDisplayName or the grit product strings), so
+    # pin CFBundleName to "Xplor" too for a fully-branded menu. Display-only: the
+    # on-disk bundle ("Xplorer.app"), CFBundleIdentifier (org.xplorer.Xplorer),
+    # the executable + framework/helper names (all from PRODUCT_FULLNAME), the
+    # OSCrypt keychain service ("Chromium Safe Storage", a compile constant), and
+    # Sparkle's identifier/version compare are all INDEPENDENT of CFBundleName, so
+    # bundle identity / updates / keychain are untouched.
+    ai = app_info.read_text()
+    if "\t<key>CFBundleName</key>\n\t<string>${CHROMIUM_SHORT_NAME}</string>\n" in ai:
+        ai = ai.replace(
+            "\t<key>CFBundleName</key>\n"
+            "\t<string>${CHROMIUM_SHORT_NAME}</string>\n",
+            "\t<key>CFBundleName</key>\n"
+            "\t<string>Xplor</string>\n")
+        app_info.write_text(ai)
+        print(f"  set CFBundleName=Xplor: {app_info}")
+
     # XPLORER: Sparkle 2.x auto-update keys. tweak_info_plist passes unknown
     # keys through to the built Info.plist unchanged, so writing them into the
     # template here is sufficient. SUFeedURL is the appcast (GitHub Pages),
@@ -1904,7 +1922,7 @@ def main(src: Path):
     # (Developer Build) ..."). Prepend the Xplorer product version so users see
     # OUR version first. NOTE: bump XPLORER_VERSION here per release (or wire it
     # to the release version later).
-    XPLORER_VERSION = "0.8.7"
+    XPLORER_VERSION = "0.8.8"
     ss = src / "chrome/app/settings_strings.grdp"
     sst = ss.read_text()
     _ver_marker = "Xplor " + XPLORER_VERSION + " · Chromium"
