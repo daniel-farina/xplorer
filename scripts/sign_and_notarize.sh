@@ -75,6 +75,18 @@ ent_for() {
 # part-appropriate entitlements.
 sign_one() {
   local path="$1" ent
+  # XPLORER: Sparkle.framework and all its nested code (Updater.app, Autoupdate,
+  # Installer.xpc, Downloader.xpc) ship their OWN entitlements that must survive
+  # re-signing. Sign every Sparkle component with hardened runtime + a secure
+  # timestamp and --preserve-metadata=entitlements, never the app entitlements.
+  # The existing inside-out loop visits these parts deepest-first already, so we
+  # only special-case the entitlement handling here.
+  case "$path" in
+    *"/Sparkle.framework/"*|*"/Sparkle.framework")
+      codesign --force --timestamp --options runtime \
+               --preserve-metadata=entitlements -s "$IDENTITY" "$path"
+      return ;;
+  esac
   ent="$(ent_for "$path")"
   if [ -n "$ent" ] && [ -f "$ent" ]; then
     codesign --force --timestamp --options runtime \

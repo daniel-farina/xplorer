@@ -940,6 +940,11 @@ initModels().then(() => refresh().then(() => {
   consumePendingApp();
 }));
 
+// Cross-platform "update available" banner (no-op on macOS, where Sparkle's
+// native dialog handles it). The gateway only checks upstream every ~6h, so a
+// mount on load plus a recheck on visibilitychange is plenty.
+mountUpdateBanner();
+
 // The side panel keeps its WebContents alive across close/open, so a stale
 // error / "thinking" bubble from a previous failed send lingers when reopened.
 // On reopen, re-render the active conversation from its saved messages (errors
@@ -950,6 +955,7 @@ document.addEventListener('visibilitychange', () => {
     return;
   }
   refresh().then(() => startRemotePoll()).catch(() => {});
+  mountUpdateBanner();  // recheck for a newer release on reopen
   if (isRunning(activeId)) return;
   if (!activeId) return;
   const conv = conversations.find((c) => c.id === activeId);

@@ -50,5 +50,12 @@ else
   rm -rf "$UI_DST"
   cp -R "$XPLORER/companion/ui" "$UI_DST"
   echo "Bundled companion UI -> $UI_DST"
+  # Stage Sparkle.framework into Contents/Frameworks so the auto-updater can be
+  # runtime-loaded. ditto preserves the Versions/Current symlink layout (a plain
+  # cp -R would mangle it and break codesigning). Must happen before signing.
+  SPARKLE_DST="$APP/Contents/Frameworks/Sparkle.framework"
+  rm -rf "$SPARKLE_DST"
+  ditto "$XPLORER/third_party/Sparkle/Sparkle.framework" "$SPARKLE_DST"
+  echo "Bundled Sparkle.framework -> $SPARKLE_DST"
   echo "Built ($ARCH): $APP"
 fi

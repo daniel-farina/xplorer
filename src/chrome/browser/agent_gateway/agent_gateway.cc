@@ -8,6 +8,7 @@
 #include "chrome/browser/agent_gateway/focus_arbiter.h"
 #include "chrome/browser/agent_gateway/grok_companion_launcher.h"
 #include "chrome/browser/agent_gateway/scheduler.h"
+#include "chrome/browser/agent_gateway/update_checker.h"
 #include "chrome/browser/agent_gateway/xplorer_paths.h"
 #include "chrome/browser/agent_gateway/grok_native.h"
 
@@ -144,6 +145,8 @@ void AgentGateway::Shutdown() {
       FROM_HERE, base::BindOnce([](AgentGateway* self) {
         // Cancel the poll timer (armed on this same IO thread in Start()).
         Scheduler::Get()->Stop();
+        // Cancel the update-check timer (also armed on this IO thread in Start()).
+        UpdateChecker::Get()->Stop();
         // Destroy the HttpServer + listening socket on their owning thread,
         // releasing port 9334.
         self->server_.reset();
@@ -234,6 +237,13 @@ void AgentGateway::StartServerOnIOThread(int port) {
   // not re-arm the scheduler or re-clear env.
   ClearLeakedScheduledRunEnv();
   Scheduler::Get()->Start();
+
+  // The in-app update checker is likewise owned by the gateway (process-lifetime
+  // singleton). Arm it here, on server_thread_, so its base::RepeatingTimer runs
+  // on the gateway IO thread (the HTTPS fetch/download/install hop to the UI
+  // thread as needed). ONE-TIME only — NOT part of RebindServer(), so a
+  // sleep/wake rebind does not re-arm it.
+  UpdateChecker::Get()->Start();
 }
 
 void AgentGateway::OnSuspend() {

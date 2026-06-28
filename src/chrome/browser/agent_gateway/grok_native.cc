@@ -54,6 +54,7 @@
 #include "chrome/browser/agent_gateway/browser_api.h"
 #include "chrome/browser/agent_gateway/focus_arbiter.h"
 #include "chrome/browser/agent_gateway/scheduler.h"
+#include "chrome/browser/agent_gateway/update_checker.h"
 #include "chrome/browser/agent_gateway/xplorer_paths.h"
 #include "chrome/browser/grok_companion/grok_companion_util.h"
 #include "chrome/browser/agent_gateway/tab_screenshot.h"
@@ -2999,6 +3000,27 @@ bool GrokNative::TryHandleRequest(
   // creating/building apps if grok isn't runnable.
   if (info.method == "GET" && path == "/api/grok/status") {
     SendJson(server, connection_id, net::HTTP_OK, GetGrokInstallStatus());
+    return true;
+  }
+
+  // In-app updater (localhost UI, same as /api/status — no auth). The checker
+  // runs the GitHub-releases poll on its own timer; these endpoints just expose
+  // its state and drive the per-OS install. Apply()/Restart()/StatusDict() are
+  // safe to call on this (the gateway IO) thread; they take the checker's lock
+  // and hop to the UI thread internally where the work is UI-affine.
+  if (info.method == "GET" && path == "/api/update/status") {
+    SendJson(server, connection_id, net::HTTP_OK,
+             UpdateChecker::Get()->StatusDict());
+    return true;
+  }
+  if (info.method == "POST" && path == "/api/update/apply") {
+    SendJson(server, connection_id, net::HTTP_OK,
+             UpdateChecker::Get()->Apply());
+    return true;
+  }
+  if (info.method == "POST" && path == "/api/update/restart") {
+    SendJson(server, connection_id, net::HTTP_OK,
+             UpdateChecker::Get()->Restart());
     return true;
   }
 

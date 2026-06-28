@@ -1035,6 +1035,61 @@ def main(src: Path):
         app_info.write_text(ai)
         print(f"  edited: {app_info}")
 
+    # XPLORER: Sparkle 2.x auto-update keys. tweak_info_plist passes unknown
+    # keys through to the built Info.plist unchanged, so writing them into the
+    # template here is sufficient. SUFeedURL is the appcast (GitHub Pages),
+    # SUPublicEDKey is the EdDSA public key the updater verifies signatures
+    # against, and the AutomaticChecks/ScheduledCheckInterval pair makes Sparkle
+    # self-check daily. NOTE: deliberately no SUEnableInstallerLauncherService —
+    # the app is not sandboxed, so the launcher XPC service must NOT be enabled.
+    ai = app_info.read_text()
+    if "SUFeedURL" not in ai:
+        su_keys = (
+            "\t<key>SUFeedURL</key>\n"
+            "\t<string>https://daniel-farina.github.io/xplorer/appcast.xml</string>\n"
+            "\t<key>SUPublicEDKey</key>\n"
+            "\t<string>1dT5/+AbAMKH6F1IrtejPfrplH9JVKDqMLGfhzQhaiI=</string>\n"
+            "\t<key>SUEnableAutomaticChecks</key>\n"
+            "\t<true/>\n"
+            "\t<key>SUScheduledCheckInterval</key>\n"
+            "\t<integer>86400</integer>\n"
+        )
+        ai = ai.replace("</dict>\n</plist>", su_keys + "</dict>\n</plist>")
+        app_info.write_text(ai)
+        print(f"  added Sparkle keys: {app_info}")
+
+    # XPLORER: wire the Sparkle auto-updater into browser startup. Add the
+    # include next to app_controller_mac.h, and kick off the updater right after
+    # the controller marks startup complete in -applicationDidFinishLaunching:.
+    app_controller = src / "chrome/browser/app_controller_mac.mm"
+    t = app_controller.read_text()
+    if "XplorerStartSparkleUpdater" not in t:
+        t = t.replace(
+            '#import "chrome/browser/app_controller_mac.h"\n',
+            '#import "chrome/browser/app_controller_mac.h"\n'
+            '#import "chrome/browser/xplorer_sparkle_updater.h"\n',
+        )
+        t = t.replace(
+            "  _startupComplete = YES;\n",
+            "  _startupComplete = YES;\n"
+            "  XplorerStartSparkleUpdater();  // XPLORER: Sparkle auto-update\n",
+        )
+        app_controller.write_text(t)
+        print(f"  edited: {app_controller}")
+
+    # XPLORER: compile the Sparkle updater glue into static_library("browser").
+    # Append next to app_controller_mac.mm in the is_mac sources block (paths in
+    # that block are relative to chrome/browser, so bare filenames). Sparkle is
+    # runtime-loaded, so there is no GN framework dep / rpath to add.
+    if "xplorer_sparkle_updater.mm" not in browser_gn.read_text():
+        edit(
+            browser_gn,
+            '      "app_controller_mac.mm",\n',
+            '      "app_controller_mac.mm",\n'
+            '      "xplorer_sparkle_updater.h",  # XPLORER\n'
+            '      "xplorer_sparkle_updater.mm",  # XPLORER\n',
+        )
+
     # The visible app name comes from IDS_PRODUCT_NAME / IDS_SHORT_PRODUCT_NAME
     # in the (non-Google, non-CfT) else branch of chromium_strings.grd.
     grd = src / "chrome/app/chromium_strings.grd"

@@ -673,3 +673,42 @@ html[data-theme="dark"] .markdown .hl-num { color: #fbbf24; }
 /* Xplorer: app-build conversations in the sidebar list */
 #conv-list .conv-app-tag { font-size: 0.85em; opacity: 0.65; flex: none; padding: 0 3px; }
 #conv-list li.conv-app .conv-title { font-style: italic; }
+
+/* In-app "update available" banner: a thin, dismissible bar at the top of the
+   chat. Suppressed on macOS (Sparkle's native dialog handles it there). Keeps
+   the low-key tone of .apps-toast / .building-notice. */
+.xplorer-update-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: none;
+  padding: 8px 12px;
+  font-size: 12.5px;
+  color: var(--text);
+  background: var(--accent-soft);
+  border-bottom: 1px solid var(--accent);
+}
+.xplorer-update-banner__text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.xplorer-update-banner__btn {
+  flex: none;
+  padding: 4px 10px;
+  font-size: 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+}
+.xplorer-update-banner__btn:hover { border-color: var(--accent); }
+.xplorer-update-banner__btn.primary {
+  border-color: var(--button-bg);
+  background: var(--button-bg);
+  color: var(--button-text);
+}
+.xplorer-update-banner__btn:disabled { opacity: 0.5; cursor: not-allowed; }

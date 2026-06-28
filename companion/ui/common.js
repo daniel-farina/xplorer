@@ -901,3 +901,173 @@ async function ensureGrokReady() {
   showGrokInstallSplash();
   return false;
 }
+
+// ---- In-app update banner -------------------------------------------------
+// Cross-platform "update available" bar. Consumes GET /api/update/status from
+// the gateway and drives POST /api/update/apply + /api/update/restart.
+// macOS is intentionally excluded: there the Sparkle framework presents its own
+// native update dialog, so an in-app banner would be redundant.
+const UPDATE_DISMISS_KEY = 'xplorer_update_dismissed';
+
+// Fetch the current update status, or null on any failure (offline / no route).
+async function fetchUpdateStatus() {
+  try {
+    const r = await fetch('/api/update/status', { cache: 'no-store' });
+    if (!r.ok) return null;
+    return await r.json();
+  } catch {
+    return null;
+  }
+}
+
+// Mount (or refresh) the dismissible "update available" banner at the top of
+// the page. Idempotent: re-calling won't stack banners, clobber an in-progress
+// install, or re-render an unchanged "available" state (so it's safe to call on
+// load and again on visibilitychange).
+async function mountUpdateBanner() {
+  const s = await fetchUpdateStatus();
+  if (!s || !s.available) return;
+  // macOS ships Sparkle, which shows its own native update prompt.
+  if (s.os === 'mac') return;
+  // Per-version dismiss: "Later" hides the banner until a newer release ships.
+  if (s.latest && localStorage.getItem(UPDATE_DISMISS_KEY) === s.latest) return;
+
+  let el = document.getElementById('xplorer-update-banner');
+  if (el) {
+    // Don't disturb an in-progress install, and don't re-render an identical
+    // "available" banner on a recheck.
+    if (el.dataset.busy === '1') return;
+    if (el.dataset.version === (s.latest || '')) return;
+  } else {
+    el = document.createElement('div');
+    el.id = 'xplorer-update-banner';
+    el.className = 'xplorer-update-banner';
+    // Prepend so the bar sits above the chat header / page content.
+    const host = document.querySelector('main.chat') || document.body;
+    host.insertBefore(el, host.firstChild);
+  }
+  renderUpdateAvailable(el, s);
+}
+
+// Default state: "<version> is available" + Install / Later actions.
+function renderUpdateAvailable(el, s) {
+  el.dataset.version = s.latest || '';
+  el.dataset.busy = '';
+  el.innerHTML = '';
+
+  const msg = document.createElement('span');
+  msg.className = 'xplorer-update-banner__text';
+  msg.textContent = `Xplorer ${s.latest} is available`;
+
+  const install = document.createElement('button');
+  install.type = 'button';
+  install.className = 'xplorer-update-banner__btn primary';
+  install.textContent = 'Install';
+  install.onclick = () => applyUpdate(el, s);
+
+  const later = document.createElement('button');
+  later.type = 'button';
+  later.className = 'xplorer-update-banner__btn';
+  later.textContent = 'Later';
+  later.onclick = () => {
+    if (s.latest) localStorage.setItem(UPDATE_DISMISS_KEY, s.latest);
+    el.remove();
+  };
+
+  el.append(msg, install, later);
+}
+
+// Kick off the install and poll status ~every 1.5s, swapping the banner text /
+// buttons as the update moves downloading -> needs_restart (or errors out).
+async function applyUpdate(el, s) {
+  el.dataset.busy = '1';
+  el.innerHTML = '';
+  const msg = document.createElement('span');
+  msg.className = 'xplorer-update-banner__text';
+  msg.textContent = 'Starting update…';
+  el.appendChild(msg);
+
+  try {
+    await fetch('/api/update/apply', { method: 'POST' });
+  } catch {
+    return showUpdateError(el, s);
+  }
+
+  const tick = async () => {
+    const next = await fetchUpdateStatus();
+    if (!next) { setTimeout(tick, 1500); return; }  // transient fetch error: retry
+    const state = next.state;
+    if (state === 'downloading') {
+      const pct = Number(next.progress) || 0;
+      msg.textContent = `Downloading… ${pct}%`;
+      setTimeout(tick, 1500);
+      return;
+    }
+    if (state === 'installing') {
+      msg.textContent = 'Installing…';
+      setTimeout(tick, 1500);
+      return;
+    }
+    if (state === 'needs_restart') return showUpdateReady(el, next);
+    if (state === 'error') return showUpdateError(el, next);
+    // idle / checking / available: keep polling until a terminal state.
+    setTimeout(tick, 1500);
+  };
+  setTimeout(tick, 1500);
+}
+
+// Terminal "ready" state. Windows relaunches in place (Restart button); on
+// Linux the package/AppImage is merely downloaded, so we surface that instead
+// of a restart prompt (using a server hint if one is provided).
+function showUpdateReady(el, s) {
+  el.dataset.busy = '1';
+  el.innerHTML = '';
+  const msg = document.createElement('span');
+  msg.className = 'xplorer-update-banner__text';
+
+  if (s.os === 'linux') {
+    msg.textContent = s.hint || 'Update downloaded';
+    const dismiss = document.createElement('button');
+    dismiss.type = 'button';
+    dismiss.className = 'xplorer-update-banner__btn';
+    dismiss.textContent = 'Dismiss';
+    dismiss.onclick = () => el.remove();
+    el.append(msg, dismiss);
+    return;
+  }
+
+  msg.textContent = 'Update ready';
+  const restart = document.createElement('button');
+  restart.type = 'button';
+  restart.className = 'xplorer-update-banner__btn primary';
+  restart.textContent = 'Restart';
+  restart.onclick = async () => {
+    restart.disabled = true;
+    try { await fetch('/api/update/restart', { method: 'POST' }); }
+    catch { restart.disabled = false; }
+  };
+  el.append(msg, restart);
+}
+
+// Terminal "error" state: surface the failure with Retry + Dismiss.
+function showUpdateError(el, s) {
+  el.dataset.busy = '1';
+  el.innerHTML = '';
+  const msg = document.createElement('span');
+  msg.className = 'xplorer-update-banner__text';
+  msg.textContent = s && s.error ? `Update failed: ${s.error}` : 'Update failed';
+
+  const retry = document.createElement('button');
+  retry.type = 'button';
+  retry.className = 'xplorer-update-banner__btn primary';
+  retry.textContent = 'Retry';
+  retry.onclick = () => applyUpdate(el, s);
+
+  const dismiss = document.createElement('button');
+  dismiss.type = 'button';
+  dismiss.className = 'xplorer-update-banner__btn';
+  dismiss.textContent = 'Dismiss';
+  dismiss.onclick = () => el.remove();
+
+  el.append(msg, retry, dismiss);
+}

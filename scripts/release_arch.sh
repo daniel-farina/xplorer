@@ -40,6 +40,14 @@ mkdir -p "$(dirname "$UI_DST")"
 rm -rf "$UI_DST"
 cp -R "$XPLORER/companion/ui" "$UI_DST"
 
+# Stage Sparkle.framework into the bundle BEFORE signing so it is covered by the
+# signature. ditto preserves the Versions/Current symlink layout that a plain
+# cp -R would mangle.
+echo "==> [$ARCH] Staging Sparkle.framework"
+SPARKLE_DST="$APP/Contents/Frameworks/Sparkle.framework"
+rm -rf "$SPARKLE_DST"
+ditto "$XPLORER/third_party/Sparkle/Sparkle.framework" "$SPARKLE_DST"
+
 echo "==> [$ARCH] Signing app"
 if [ -n "$SIGN_ONLY" ]; then
   "$XPLORER/scripts/sign_and_notarize.sh" "$APP" xplorer-notary --sign-only
