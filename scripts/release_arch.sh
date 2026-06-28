@@ -48,6 +48,15 @@ SPARKLE_DST="$APP/Contents/Frameworks/Sparkle.framework"
 rm -rf "$SPARKLE_DST"
 ditto "$XPLORER/third_party/Sparkle/Sparkle.framework" "$SPARKLE_DST"
 
+# Marketing version for the bundle's CFBundleShortVersionString (what Sparkle's
+# update dialog displays + what generate_appcast puts in sparkle:shortVersionString).
+# Chromium defaults it to the full engine version (151.0.7897.x); set it to OUR
+# version (e.g. 0.8.7) so the dialog reads "Xplorer 0.8.7", not "151.0.7897.807".
+# CFBundleVersion (the 7897.<patch> Sparkle COMPARES) is left untouched. Must run
+# BEFORE signing so the edited Info.plist is covered by the signature.
+echo "==> [$ARCH] Setting CFBundleShortVersionString -> $VERSION"
+/usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" "$APP/Contents/Info.plist"
+
 echo "==> [$ARCH] Signing app"
 if [ -n "$SIGN_ONLY" ]; then
   "$XPLORER/scripts/sign_and_notarize.sh" "$APP" xplorer-notary --sign-only
