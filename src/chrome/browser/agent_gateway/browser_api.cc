@@ -271,7 +271,7 @@ std::string TabCategory(const GURL& url, const std::string& title) {
   if (host == "grokipedia.com")
     return "Wiki";
   if (host == "127.0.0.1" && (url.port() == "9334" || spec.find(":9334") != std::string::npos))
-    return "Xplorer";
+    return "Xplor";
   if (host.find("news") != std::string::npos ||
       host.find("cnn.com") != std::string::npos ||
       host.find("bbc.") != std::string::npos ||
@@ -291,7 +291,7 @@ std::string TabCategory(const GURL& url, const std::string& title) {
 tab_groups::TabGroupColorId ColorForCategory(const std::string& category) {
   if (category == "Grok")
     return tab_groups::TabGroupColorId::kPurple;
-  if (category == "Xplorer")
+  if (category == "Xplor")
     return tab_groups::TabGroupColorId::kBlue;
   if (category == "News")
     return tab_groups::TabGroupColorId::kRed;

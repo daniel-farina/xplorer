@@ -54,7 +54,7 @@ def rebrand_grd_strings(path: Path):
     if g.count("Chromium") <= g.count("Chromium Authors"):
         return
     g = g.replace("Chromium Authors", "\x00A\x00")
-    g = g.replace("Chromium", "Xplorer")
+    g = g.replace("Chromium", "Xplor")
     g = g.replace("\x00A\x00", "Chromium Authors")
     path.write_text(g)
     print(f"  rebranded grd: {path.name}")
@@ -77,7 +77,7 @@ def patch_xplorer_settings_access(src: Path):
         '  <message name="IDS_XPLORER_SETTINGS" '
         'desc="App menu item to open Xplorer companion settings" '
         'translateable="false">\n'
-        "    Xplorer settings\n"
+        "    Xplor settings\n"
         "  </message>\n\n"
         "  <!-- About Page -->",
     )
@@ -127,7 +127,7 @@ def patch_xplorer_settings_access(src: Path):
         '            on-click="onLinkClick_"\n'
         '            title="Bookmarks, models, and Grok defaults">\n'
         '          <cr-icon icon="settings:settings"></cr-icon>\n'
-        '          <span>Xplorer settings</span>\n'
+        '          <span>Xplor settings</span>\n'
         '          <div class="cr-icon icon-external"></div>\n'
         '          <cr-ripple></cr-ripple>\n'
         '        </a>\n'
@@ -1182,6 +1182,20 @@ def main(src: Path):
         app_info.write_text(ai)
         print(f"  edited: {app_info}")
 
+    # XPLORER: Finder/Dock DISPLAY name "Xplor". CFBundleDisplayName is the name
+    # the Finder/Dock surface; pin it to the literal "Xplor". CFBundleName stays
+    # ${CHROMIUM_SHORT_NAME} (= Xplorer) and the on-disk bundle remains
+    # "Xplorer.app", so bundle identity / Sparkle updates are untouched.
+    ai = app_info.read_text()
+    if "<string>Xplor</string>" not in ai:
+        ai = ai.replace(
+            "\t<key>CFBundleDisplayName</key>\n"
+            "\t<string>${EXECUTABLE_NAME}</string>\n",
+            "\t<key>CFBundleDisplayName</key>\n"
+            "\t<string>Xplor</string>\n")
+        app_info.write_text(ai)
+        print(f"  set CFBundleDisplayName=Xplor: {app_info}")
+
     # XPLORER: Sparkle 2.x auto-update keys. tweak_info_plist passes unknown
     # keys through to the built Info.plist unchanged, so writing them into the
     # template here is sufficient. SUFeedURL is the appcast (GitHub Pages),
@@ -1310,19 +1324,19 @@ def main(src: Path):
     # in the (non-Google, non-CfT) else branch of chromium_strings.grd.
     grd = src / "chrome/app/chromium_strings.grd"
     g = grd.read_text()
-    if ">\n            Xplorer\n" not in g:
+    if ">\n            Xplor\n" not in g:
         for old in ("Chromium", "XBrowser"):
             g = g.replace(
                 'desc="The Chrome application name" translateable="false">\n'
                 f"            {old}\n",
                 'desc="The Chrome application name" translateable="false">\n'
-                "            Xplorer\n",
+                "            Xplor\n",
             )
             g = g.replace(
                 'desc="The Chrome application short name." translateable="false">\n'
                 f"            {old}\n",
                 'desc="The Chrome application short name." translateable="false">\n'
-                "            Xplorer\n",
+                "            Xplor\n",
             )
         grd.write_text(g)
         print(f"  edited: {grd}")
@@ -1333,11 +1347,11 @@ def main(src: Path):
     # macOS accessible title + channel variants (Beta/Dev/Canary), and the
     # ChromeOS / captive-portal layouts.
     g = grd.read_text()
-    if "</ph> - Xplorer" not in g:
-        g = g.replace("</ph> - Chromium", "</ph> - Xplorer")
-        g = g.replace("Chromium - <ph", "Xplorer - <ph")
-        g = g.replace("- Network Sign-in - Chromium", "- Network Sign-in - Xplorer")
-        g = g.replace("Chromium - Network Sign-in", "Xplorer - Network Sign-in")
+    if "</ph> - Xplor" not in g:
+        g = g.replace("</ph> - Chromium", "</ph> - Xplor")
+        g = g.replace("Chromium - <ph", "Xplor - <ph")
+        g = g.replace("- Network Sign-in - Chromium", "- Network Sign-in - Xplor")
+        g = g.replace("Chromium - Network Sign-in", "Xplor - Network Sign-in")
         grd.write_text(g)
         print(f"  edited (title formats): {grd}")
 
@@ -1351,7 +1365,7 @@ def main(src: Path):
     g = grd.read_text()
     if g.count("Chromium") > g.count("Chromium Authors"):
         g = g.replace("Chromium Authors", "\x00AUTH\x00")
-        g = g.replace("Chromium", "Xplorer")
+        g = g.replace("Chromium", "Xplor")
         g = g.replace("\x00AUTH\x00", "Chromium Authors")
         grd.write_text(g)
         print(f"  edited (broad app-name rebrand): {grd}")
@@ -1866,22 +1880,22 @@ def main(src: Path):
     # --- About page: "About Xplorer" + no failed-update error -------------
     grdp = src / "chrome/app/settings_chromium_strings.grdp"
     sg = grdp.read_text()
-    if "About Xplorer" not in sg:
+    if "About Xplor" not in sg:
         sg = sg.replace(
             'desc="Menu title for the About Chromium page.">\n'
             "        About Chromium\n",
             'desc="Menu title for the About Chromium page.">\n'
-            "        About Xplorer\n")
+            "        About Xplor\n")
         sg = sg.replace(
             'desc="Text of the button which takes the user to the Chrome help'
             ' page.">\n        Get help with Chromium\n',
             'desc="Text of the button which takes the user to the Chrome help'
-            ' page.">\n        Get help with Xplorer\n')
+            ' page.">\n        Get help with Xplor\n')
         sg = sg.replace(
             'desc="Status label: Already up to date (Chromium)">\n'
             "      Chromium is up to date\n",
             'desc="Status label: Already up to date (Chromium)">\n'
-            "      Xplorer is up to date\n")
+            "      Xplor is up to date\n")
         grdp.write_text(sg)
         print(f"  edited: {grdp}")
 
@@ -1893,14 +1907,14 @@ def main(src: Path):
     XPLORER_VERSION = "0.8.7"
     ss = src / "chrome/app/settings_strings.grdp"
     sst = ss.read_text()
-    _ver_marker = "Xplorer " + XPLORER_VERSION + " · Chromium"
+    _ver_marker = "Xplor " + XPLORER_VERSION + " · Chromium"
     if _ver_marker not in sst:
         # Bump-safe: matches a fresh checkout ("Version <ph>") OR an earlier
         # patched version ("Xplorer 0.6.1 · Chromium <ph>") and rewrites it to
         # the current version. (A plain string anchor breaks on version bumps
         # because the prior patch already consumed "Version <ph>".)
         sst, _n = re.subn(
-            r'(?:Version|Xplorer [0-9][0-9.]* · Chromium) '
+            r'(?:Version|Xplor [0-9][0-9.]* · Chromium) '
             r'(<ph name="PRODUCT_VERSION">)',
             _ver_marker + r" \1",
             sst, count=1)
@@ -1983,11 +1997,11 @@ def main(src: Path):
     # --- 3-dot menu + macOS menus: "About Chromium" -> "About Xplorer" -------
     cs = src / "chrome/app/chromium_strings.grd"
     cst = cs.read_text()
-    if "About &amp;Xplorer" not in cst:
+    if "About &amp;Xplor" not in cst:
         # All 3 non-"for Testing" IDS_ABOUT bodies (use_titlecase, not-
         # use_titlecase, is_chromeos). The "Google Chrome for Testing" lines
         # are a different string and are intentionally left alone.
-        cst = cst.replace("About &amp;Chromium", "About &amp;Xplorer")
+        cst = cst.replace("About &amp;Chromium", "About &amp;Xplor")
         cs.write_text(cst)
         print(f"  edited (About Xplorer menus): {cs}")
 
@@ -2007,7 +2021,7 @@ def main(src: Path):
         "short name, used for the Mac's application menu, activity monitor, "
         "etc. This should be less than 16 characters. Example: Chrome, not "
         'Google Chrome." translateable="false">\n'
-        "          Xplorer\n"
+        "          Xplor\n"
         "        </message>"
     )
     if _app_menu_new not in cst2 and _app_menu_old in cst2:

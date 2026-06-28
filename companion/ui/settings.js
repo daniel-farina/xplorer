@@ -284,7 +284,7 @@ document.getElementById('bookmarks-save')?.addEventListener('click', async () =>
   setBookmarksStatus('Saving…');
   try {
     await saveSettings({ bookmarks: collectBookmarks() });
-    setBookmarksStatus('Saved — changes apply immediately in Xplorer', 'ok');
+    setBookmarksStatus('Saved — changes apply immediately in Xplor', 'ok');
     setTimeout(() => setBookmarksStatus(''), 3000);
   } catch (e) {
     setBookmarksStatus(e.message, 'err');

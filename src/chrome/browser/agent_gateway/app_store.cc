@@ -1071,7 +1071,7 @@ bool TryHandleAppsRequest(
     base::FilePath app_dir = AppsRootDir().AppendASCII(id);
     base::CreateDirectory(app_dir);
     const std::string readme =
-        "# " + name + "\n\nBuilt with Grok Build in Xplorer.\n";
+        "# " + name + "\n\nBuilt with Grok Build in Xplor.\n";
     base::WriteFile(app_dir.AppendASCII("README.md"), readme);
     const std::string conv_id = CreateAppConversation(id, name);
     base::DictValue app;

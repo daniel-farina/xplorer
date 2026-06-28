@@ -424,11 +424,11 @@ constexpr char kSearchHomeWiki[] = "wiki";
 constexpr char kGrokWikiHomeURL[] = "https://grokipedia.com/";
 
 constexpr char kChatRules[] =
-    "You are Grok, the native AI companion built into Xplorer. You can "
+    "You are Grok, the native AI companion built into Xplor. You can "
     "control the browser through MCP tools.";
 
 constexpr char kBrowserChatRules[] =
-    "You are Grok, the native AI companion built into Xplorer, an AI-native web "
+    "You are Grok, the native AI companion built into Xplor, an AI-native web "
     "browser. Your browser-control tools (tabs, navigation, bookmarks, history, "
     "tab groups, click/type, screenshots, theme) are ALREADY loaded and ready in "
     "this session — call them directly and immediately. Do NOT announce that you "
@@ -1007,7 +1007,7 @@ void AppendParsedItems(const base::ListValue* src,
 
 const char* SearchPromptForMode(const std::string& mode, bool has_image) {
   if (mode == "images" && has_image) {
-    return "You are Grok Vision Search for Xplorer. Analyze the attached "
+    return "You are Grok Vision Search for Xplor. Analyze the attached "
            "image; use web search for similar images. Give a short answer, "
            "then end with ONLY a ```json code block:\n"
            "{\"answer\":\"...\",\"images\":[{\"title\":\"...\",\"url\":"
@@ -1017,7 +1017,7 @@ const char* SearchPromptForMode(const std::string& mode, bool has_image) {
            "Include up to 20 image results.";
   }
   if (mode == "images") {
-    return "You are Grok Image Search for Xplorer. Use web search for image "
+    return "You are Grok Image Search for Xplor. Use web search for image "
            "results across multiple sites. Short summary, then ONLY ```json:\n"
            "{\"answer\":\"...\",\"images\":[{\"title\":\"...\",\"url\":"
            "\"https://...\",\"thumbnail\":\"https://...\",\"source\":"
@@ -1026,7 +1026,7 @@ const char* SearchPromptForMode(const std::string& mode, bool has_image) {
            "Include up to 20 images.";
   }
   if (mode == "videos") {
-    return "You are Grok Video Search for Xplorer. Use web search. Find videos "
+    return "You are Grok Video Search for Xplor. Use web search. Find videos "
            "on YouTube, Vimeo, and Dailymotion. Brief summary, then ONLY "
            "```json:\n"
            "{\"videos\":[{\"title\":\"...\",\"url\":\"https://...\","
@@ -1038,7 +1038,7 @@ const char* SearchPromptForMode(const std::string& mode, bool has_image) {
     return "Generate an image for this prompt. Return a brief caption then "
            "any image URLs produced.";
   }
-  return "You are Grok Search for Xplorer. Use web search. Give a concise "
+  return "You are Grok Search for Xplor. Use web search. Give a concise "
          "formatted answer with citations, then ONLY ```json:\n"
          "{\"links\":[{\"title\":\"...\",\"url\":\"https://...\","
          "\"snippet\":\"...\"}]}\n"
@@ -1373,7 +1373,7 @@ std::string FormatOrganizeTabsReply(const base::DictValue& result) {
                             done.Set("reply", reply);
                             done.Set("text", reply);
                             done.Set("model", "native");
-                            done.Set("model_label", "Xplorer");
+                            done.Set("model_label", "Xplor");
                             std::string done_line;
                             base::JSONWriter::Write(done, &done_line);
                             done_line.push_back('\n');
@@ -2238,11 +2238,11 @@ base::CommandLine BuildGrokAgentCommand(const std::string& message,
 }
 
 constexpr char kAppBuildRules[] =
-    "You are Grok Build, an app builder inside Xplorer. Work only inside the "
+    "You are Grok Build, an app builder inside Xplor. Work only inside the "
     "app directory (--cwd). Create and modify files to build working apps. "
     "Prefer simple HTML/CSS/JS static apps with index.html as the entry point. "
     "Do NOT start web servers or tell the user to run npm/python servers — "
-    "Xplorer auto-hosts each app on its own localhost port. Use relative paths "
+    "Xplor auto-hosts each app on its own localhost port. Use relative paths "
     "for assets (./style.css, ./app.js). Write a short README. Be concise in "
     "chat; put code in files.";
 
@@ -2290,7 +2290,7 @@ void RunGrokChatStream(
   // (Composer is Cursor's model, agent type 'cursor') — confusing in a browser.
   std::string rules =
       std::string(ChatRulesForMessage(message)) +
-      "\n\nIDENTITY: You are Grok, the AI assistant built into Xplorer — an "
+      "\n\nIDENTITY: You are Grok, the AI assistant built into Xplor — an "
       "AI-native web browser (NOT Cursor or any code editor). You are running as "
       "the \"" +
       ModelDisplayName(model) + "\" model (" + model +

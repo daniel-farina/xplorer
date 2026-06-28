@@ -22,7 +22,7 @@ class WebContents;
 
 namespace grok_companion {
 
-inline constexpr char kProductName[] = "Xplorer";
+inline constexpr char kProductName[] = "Xplor";
 
 inline constexpr char kCompanionHost[] = "127.0.0.1";
 // Grok UI is served natively by AgentGateway (default 9334).

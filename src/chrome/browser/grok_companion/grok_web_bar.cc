@@ -128,7 +128,7 @@ std::string BrowserThemeAttribute() {
 // companion/ui/toolbar.html.
 std::string MinimalFallbackScript(const std::string& gateway_origin) {
   return base::StringPrintf(
-      R"((function(){if(!document.documentElement)return;var ID='xplorer-grok-bar';if(document.getElementById(ID))return;var b=document.createElement('header');b.id=ID;b.setAttribute('style','position:fixed;top:0;left:0;right:0;z-index:2147483647;display:flex;align-items:center;height:44px;padding:0 14px;background:#161616;color:#f2f2f2;font:600 14px -apple-system,system-ui,sans-serif;border-bottom:1px solid #333');var a=document.createElement('a');a.href=%s+'/search';a.textContent='Xplorer';a.setAttribute('style','color:#f2f2f2;text-decoration:none');b.appendChild(a);document.documentElement.insertBefore(b,document.documentElement.firstChild);document.documentElement.style.setProperty('padding-top','44px','important');})();)",
+      R"((function(){if(!document.documentElement)return;var ID='xplorer-grok-bar';if(document.getElementById(ID))return;var b=document.createElement('header');b.id=ID;b.setAttribute('style','position:fixed;top:0;left:0;right:0;z-index:2147483647;display:flex;align-items:center;height:44px;padding:0 14px;background:#161616;color:#f2f2f2;font:600 14px -apple-system,system-ui,sans-serif;border-bottom:1px solid #333');var a=document.createElement('a');a.href=%s+'/search';a.textContent='Xplor';a.setAttribute('style','color:#f2f2f2;text-decoration:none');b.appendChild(a);document.documentElement.insertBefore(b,document.documentElement.firstChild);document.documentElement.style.setProperty('padding-top','44px','important');})();)",
       JsonStringLiteral(gateway_origin).c_str());
 }
 

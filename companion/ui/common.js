@@ -187,9 +187,9 @@ function companionBuildSubRoute(path) {
  *  emergency fallback, used only if the live /toolbar.html fetch fails. */
 const GROK_TOOLBAR_FALLBACK =
   '<header class="grok-toolbar">' +
-  '<a class="grok-logo" href="/search" title="Xplorer home" aria-label="Xplorer">' +
+  '<a class="grok-logo" href="/search" title="Xplor home" aria-label="Xplor">' +
   '<svg class="gi" viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 9.5 L22.5 22.5 M22.5 9.5 L9.5 22.5"/></svg>' +
-  '<span>plorer</span></a>' +
+  '<span>plor</span></a>' +
   '<div class="grok-toolbar-spacer"></div>' +
   '</header>';
 
@@ -957,7 +957,7 @@ function renderUpdateAvailable(el, s) {
 
   const msg = document.createElement('span');
   msg.className = 'xplorer-update-banner__text';
-  msg.textContent = `Xplorer ${s.latest} is available`;
+  msg.textContent = `Xplor ${s.latest} is available`;
 
   const install = document.createElement('button');
   install.type = 'button';
