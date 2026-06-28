@@ -1978,11 +1978,11 @@ def main(src: Path):
         t = t.replace('.browser_prog_id_prefix = L"ChromiumHTM",',
                       '.browser_prog_id_prefix = L"XplorerHTM",')
         t = t.replace('L"Chromium HTML Document",',
-                      'L"Xplorer HTML Document",')
+                      'L"Xplor HTML Document",')
         t = t.replace('.pdf_prog_id_prefix = L"ChromiumPDF",',
                       '.pdf_prog_id_prefix = L"XplorerPDF",')
         t = t.replace('L"Chromium PDF Document",',
-                      'L"Xplorer PDF Document",')
+                      'L"Xplor PDF Document",')
         # Active Setup GUID (system-level installs) -> fresh unique GUID.
         t = t.replace('L"{7D2B3E1D-D096-4594-9D8F-A6667F12E0AC}"',
                       'L"{63C1B345-8998-4A62-A654-70144D87282D}"')
@@ -2049,7 +2049,7 @@ def main(src: Path):
 
     # macOS app menu "About Chromium" (IDS_ABOUT_MAC). Upstream uses a $1
     # substitution of the product name, which is unpatched and would render
-    # "About Chromium". Pin it to a literal "About Xplorer".
+    # "About Chromium". Pin it to a literal "About Xplor".
     gen = src / "chrome/app/generated_resources.grd"
     gent = gen.read_text()
     _about_mac_old = (
@@ -2062,10 +2062,10 @@ def main(src: Path):
     _about_mac_new = (
         '<message name="IDS_ABOUT_MAC" desc="The Mac menu item to open the '
         'about box." translateable="false">\n'
-        "          About Xplorer\n"
+        "          About Xplor\n"
         "        </message>"
     )
-    if "About Xplorer" not in gent and _about_mac_old in gent:
+    if "About Xplor" not in gent and _about_mac_old in gent:
         gent = gent.replace(_about_mac_old, _about_mac_new)
         gen.write_text(gent)
         print(f"  edited (About Mac menu): {gen}")
@@ -2156,7 +2156,7 @@ def main(src: Path):
         "              status = VersionUpdater::Status::FAILED;\n"
         "              out_version = latest;\n"
         "              message = base::UTF8ToUTF16(\n"
-        '                  std::string("Xplorer v") + latest +\n'
+        '                  std::string("Xplor v") + latest +\n'
         '                  " is available -- download from "\n'
         '                  "github.com/daniel-farina/xplorer/releases/latest");\n'
         "            }\n"

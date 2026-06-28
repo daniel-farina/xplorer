@@ -97,7 +97,7 @@ void CaptureViaCompositor(
             hold.RunAndReset();
             if (!result.has_value() || result->bitmap.drawsNothing()) {
               ReplyError(std::move(cb),
-                          "capture failed — grant Screen Recording to Xplorer "
+                          "capture failed — grant Screen Recording to Xplor "
                           "in System Settings › Privacy & Security");
               return;
             }
