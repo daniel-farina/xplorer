@@ -71,11 +71,22 @@ def patch_xplorer_settings_access(src: Path):
     )
 
     grdp = src / "chrome/app/settings_chromium_strings.grdp"
+    # Self-heal: strip ANY existing IDS_XPLORER_SETTINGS message(s) before adding
+    # one. A plain idempotent insert is defeated when the message TEXT changes
+    # (e.g. "Xplorer settings" -> "Xplor settings"): the "already-present" check
+    # misses the old wording and inserts a second copy, so a build tree that has
+    # an older copy committed in ends up with a grit DuplicateKey. Stripping
+    # first guarantees exactly one regardless of prior wording or tree state.
+    _g = grdp.read_text()
+    _g = re.sub(
+        r'[ \t]*<message name="IDS_XPLORER_SETTINGS"[\s\S]*?</message>\n*',
+        "", _g)
+    grdp.write_text(_g)
     edit(
         grdp,
         "  <!-- About Page -->",
         '  <message name="IDS_XPLORER_SETTINGS" '
-        'desc="App menu item to open Xplorer companion settings" '
+        'desc="App menu item to open Xplor companion settings" '
         'translateable="false">\n'
         "    Xplor settings\n"
         "  </message>\n\n"
