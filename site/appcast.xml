@@ -3,13 +3,13 @@
     <channel>
         <title>Xplorer</title>
         <item>
-            <title>151.0.7897.807</title>
-            <pubDate>Sun, 28 Jun 2026 08:13:37 -0400</pubDate>
+            <title>0.8.7</title>
+            <pubDate>Sun, 28 Jun 2026 08:32:04 -0400</pubDate>
             <sparkle:version>7897.807</sparkle:version>
-            <sparkle:shortVersionString>151.0.7897.807</sparkle:shortVersionString>
+            <sparkle:shortVersionString>0.8.7</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
             <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
-            <enclosure url="https://github.com/daniel-farina/xplorer/releases/download/v0.8.7/Xplorer-macos-arm64.zip" length="179825800" type="application/octet-stream" sparkle:edSignature="uHeeXe7H/CDwoaCM7ywOiSodrWYG4xydNn6HTGPU3GwB5AwW0pZU/bbouhJolauvxyZPH7+LEGaBAjsLSCZBAQ=="/>
+            <enclosure url="https://github.com/daniel-farina/xplorer/releases/download/v0.8.7/Xplorer-macos-arm64.zip" length="179825774" type="application/octet-stream" sparkle:edSignature="PMCYkSBE1gkPjhyYOUQafys8onMyM99fmTssHmnrUH+ekYpiXlEY9SL8bs4C8r1Hrw+NI0Nyi5p0hBl+lhtTDw=="/>
         </item>
     </channel>
 </rss>
