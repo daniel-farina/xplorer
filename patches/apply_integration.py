@@ -887,6 +887,153 @@ def patch_vertical_sidebar(src: Path):
         "BEGIN_METADATA(VerticalTabGroupHeaderView)",
     )
 
+    # === XPLORER: bookmarks-settings gear button (sibling of open_chat_button_).
+    # A second header button — a gear that opens the companion settings page to
+    # the Bookmarks pane (/settings#bookmarks). Shown only on the native
+    # "Bookmarks" group, identified by its first tab's bookmark_node_id (the
+    # semantic marker, same spirit as open_chat_button_'s "chat:" owner check).
+    # New .h member, declared AFTER open_chat_button_ so the ctor init order
+    # (-Wreorder) stays: editor, open_chat, open_bookmarks_settings, collapse.
+    edit(
+        vtgh_h,
+        "  const raw_ptr<views::ImageButton> open_chat_button_ = nullptr;",
+        "  const raw_ptr<views::ImageButton> open_chat_button_ = nullptr;\n\n"
+        "  // XPLORER: opens the companion settings page to the Bookmarks pane.\n"
+        "  // Only shown for the native Bookmarks group (toggled in OnDataChanged).\n"
+        "  const raw_ptr<views::ImageButton> open_bookmarks_settings_button_ =\n"
+        "      nullptr;",
+    )
+    # New private method declaration.
+    edit(
+        vtgh_h,
+        "  void OnOpenChatPressed();\n",
+        "  void OnOpenChatPressed();\n"
+        "  // XPLORER: open the companion settings page to the Bookmarks pane.\n"
+        "  void OnManageBookmarksPressed();\n",
+    )
+    # Includes: kSettingsIcon + OpenXplorerSettings (no GN dep — final-link, like
+    # the open-chat button's grok_companion include above).
+    edit(
+        vtgh_cc,
+        '#include "ui/views/controls/button/image_button.h"  // XPLORER',
+        '#include "ui/views/controls/button/image_button.h"  // XPLORER\n'
+        '#include "chrome/browser/ui/views/xplorer/xplorer_settings_nav.h"  // XPLORER\n'
+        '#include "components/vector_icons/vector_icons.h"  // XPLORER',
+    )
+    # File-local helper: is this the native Bookmarks group? Match the grouper's
+    # title format ("Bookmarks (N)" from GroupTitle()). Title-based on purpose:
+    # bookmark tabs may be UNLOADED (no WebContents/TabOwnership), so reading the
+    # first tab's bookmark_node_id is unreliable; the group title is always set
+    # by the time OnDataChanged runs.
+    edit(
+        vtgh_cc,
+        "class VerticalTabGroupHeaderLabel : public views::Label {",
+        "// XPLORER: true if |title| is the native Bookmarks group's title. The\n"
+        '// grouper names it "Bookmarks (N)" via GroupTitle(); match that prefix.\n'
+        "bool IsBookmarksGroup(const std::u16string& title) {\n"
+        '  return base::StartsWith(title, u"Bookmarks (",\n'
+        "                          base::CompareCase::SENSITIVE);\n"
+        "}\n"
+        "\n"
+        "class VerticalTabGroupHeaderLabel : public views::Label {",
+    )
+    # Constructor init-list: AddChildView the gear button right after the
+    # open-chat button (matches the .h declaration order).
+    edit(
+        vtgh_cc,
+        "                              base::Unretained(this))))),  // XPLORER\n"
+        "      collapse_icon_(AddChildView(std::make_unique<views::ImageView>())),",
+        "                              base::Unretained(this))))),  // XPLORER\n"
+        "      open_bookmarks_settings_button_(\n"
+        "          AddChildView(std::make_unique<views::ImageButton>(\n"
+        "              base::BindRepeating(\n"
+        "                  &VerticalTabGroupHeaderView::OnManageBookmarksPressed,\n"
+        "                  base::Unretained(this))))),  // XPLORER\n"
+        "      collapse_icon_(AddChildView(std::make_unique<views::ImageView>())),",
+    )
+    # Constructor body: configure the gear button (hidden until OnDataChanged
+    # finds the Bookmarks group). Spliced after the open-chat button's config.
+    edit(
+        vtgh_cc,
+        "  open_chat_button_->SetProperty(\n"
+        "      views::kFlexBehaviorKey,\n"
+        "      views::FlexSpecification(views::MinimumFlexSizeRule::kPreferred,\n"
+        "                               views::MaximumFlexSizeRule::kPreferred));",
+        "  open_chat_button_->SetProperty(\n"
+        "      views::kFlexBehaviorKey,\n"
+        "      views::FlexSpecification(views::MinimumFlexSizeRule::kPreferred,\n"
+        "                               views::MaximumFlexSizeRule::kPreferred));\n"
+        "  // XPLORER: bookmarks-settings gear — hidden unless this is Bookmarks.\n"
+        '  open_bookmarks_settings_button_->SetTooltipText(u"Manage bookmarks");\n'
+        "  open_bookmarks_settings_button_->GetViewAccessibility().SetName(\n"
+        '      u"Manage bookmarks");\n'
+        "  open_bookmarks_settings_button_->SetImageHorizontalAlignment(\n"
+        "      views::ImageButton::ALIGN_CENTER);\n"
+        "  open_bookmarks_settings_button_->SetImageVerticalAlignment(\n"
+        "      views::ImageButton::ALIGN_MIDDLE);\n"
+        "  open_bookmarks_settings_button_->SetVisible(false);\n"
+        "  open_bookmarks_settings_button_->SetProperty(\n"
+        "      views::kFlexBehaviorKey,\n"
+        "      views::FlexSpecification(views::MinimumFlexSizeRule::kPreferred,\n"
+        "                               views::MaximumFlexSizeRule::kPreferred));",
+    )
+    # OnDataChanged: toggle the gear's visibility (native Bookmarks group only).
+    edit(
+        vtgh_cc,
+        "  if (open_chat_button_) {\n"
+        "    open_chat_button_->SetVisible(\n"
+        "        !GetOwningChatConvId(delegate_->GetTabGroup()).empty());\n"
+        "  }",
+        "  if (open_chat_button_) {\n"
+        "    open_chat_button_->SetVisible(\n"
+        "        !GetOwningChatConvId(delegate_->GetTabGroup()).empty());\n"
+        "  }\n"
+        "  // XPLORER: show the gear only on the native Bookmarks group.\n"
+        "  if (open_bookmarks_settings_button_) {\n"
+        "    open_bookmarks_settings_button_->SetVisible(\n"
+        "        IsBookmarksGroup(tab_group_visual_data_.title()));\n"
+        "  }",
+    )
+    # OnDataChanged: tint the gear icon to match the header (in the color block).
+    edit(
+        vtgh_cc,
+        "    open_chat_button_->SetImageModel(\n"
+        "        views::Button::STATE_NORMAL,\n"
+        "        ui::ImageModel::FromVectorIcon(kGrokIcon, foreground_color,\n"
+        "                                       kIconSize));",
+        "    open_chat_button_->SetImageModel(\n"
+        "        views::Button::STATE_NORMAL,\n"
+        "        ui::ImageModel::FromVectorIcon(kGrokIcon, foreground_color,\n"
+        "                                       kIconSize));\n"
+        "    open_bookmarks_settings_button_->SetImageModel(\n"
+        "        views::Button::STATE_NORMAL,\n"
+        "        ui::ImageModel::FromVectorIcon(vector_icons::kSettingsIcon,\n"
+        "                                       foreground_color, kIconSize));",
+    )
+    # OnManageBookmarksPressed: open the settings page to the Bookmarks pane.
+    edit(
+        vtgh_cc,
+        "BEGIN_METADATA(VerticalTabGroupHeaderView)",
+        "void VerticalTabGroupHeaderView::OnManageBookmarksPressed() {\n"
+        "  // XPLORER: open the companion settings page to the Bookmarks pane.\n"
+        "  if (!IsBookmarksGroup(tab_group_visual_data_.title())) {\n"
+        "    return;\n"
+        "  }\n"
+        "  views::Widget* widget = GetWidget();\n"
+        "  if (!widget) {\n"
+        "    return;\n"
+        "  }\n"
+        "  BrowserView* browser_view =\n"
+        "      BrowserView::GetBrowserViewForNativeWindow(widget->GetNativeWindow());\n"
+        "  if (browser_view && browser_view->browser()) {\n"
+        "    xplorer::OpenXplorerSettings(browser_view->browser(), \"bookmarks\",\n"
+        "                                 /*in_new_tab=*/true);\n"
+        "  }\n"
+        "}\n"
+        "\n"
+        "BEGIN_METADATA(VerticalTabGroupHeaderView)",
+    )
+
 
 def main(src: Path):
     # 1. Start the AgentGateway once the browser UI is up.

@@ -131,6 +131,17 @@ function showPane(name) {
 navButtons.forEach((b) => {
   b.addEventListener('click', () => showPane(b.dataset.pane));
 });
+// Deep-link to a pane via URL fragment, e.g. /settings#bookmarks (the native
+// "Manage bookmarks" group-header button opens this). Only honor a hash that
+// names a real pane; otherwise leave the default (first) pane active.
+function showPaneFromHash() {
+  const name = (location.hash || '').replace(/^#/, '');
+  if (name && [...panes].some((p) => p.dataset.pane === name)) {
+    showPane(name);
+  }
+}
+showPaneFromHash();
+window.addEventListener('hashchange', showPaneFromHash);
 
 // --------------------------------------------------------------------------
 // Bookmarks editor. Config contract (stored top-level under "bookmarks") is an
