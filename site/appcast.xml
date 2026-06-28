@@ -1,0 +1,15 @@
+<?xml version="1.0" standalone="yes"?>
+<rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0">
+    <channel>
+        <title>Xplorer</title>
+        <item>
+            <title>151.0.7897.807</title>
+            <pubDate>Sun, 28 Jun 2026 08:13:37 -0400</pubDate>
+            <sparkle:version>7897.807</sparkle:version>
+            <sparkle:shortVersionString>151.0.7897.807</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
+            <enclosure url="https://github.com/daniel-farina/xplorer/releases/download/v0.8.7/Xplorer-macos-arm64.zip" length="179825800" type="application/octet-stream" sparkle:edSignature="uHeeXe7H/CDwoaCM7ywOiSodrWYG4xydNn6HTGPU3GwB5AwW0pZU/bbouhJolauvxyZPH7+LEGaBAjsLSCZBAQ=="/>
+        </item>
+    </channel>
+</rss>
