@@ -1227,19 +1227,18 @@ def main(src: Path):
 
     # XPLORER: Sparkle 2.x auto-update keys. tweak_info_plist passes unknown
     # keys through to the built Info.plist unchanged, so writing them into the
-    # template here is sufficient. SUFeedURL is the appcast — served from
-    # xplor.sh (Vercel, no-cache) so update notifications propagate instantly;
-    # the legacy GitHub Pages feed stays alive for <=0.8.8 installs that shipped
-    # pointing at it. SUPublicEDKey is the EdDSA public key the updater verifies
-    # signatures against, and the AutomaticChecks/ScheduledCheckInterval pair
-    # makes Sparkle self-check daily. NOTE: deliberately no
+    # template here is sufficient. SUFeedURL is the appcast (GitHub Pages —
+    # moving it to a no-cache host like xplor.sh, for instant propagation, is
+    # deferred for now). SUPublicEDKey is the EdDSA public key the updater
+    # verifies signatures against, and the AutomaticChecks/ScheduledCheckInterval
+    # pair makes Sparkle self-check daily. NOTE: deliberately no
     # SUEnableInstallerLauncherService — the app is not sandboxed, so the
     # launcher XPC service must NOT be enabled.
     ai = app_info.read_text()
     if "SUFeedURL" not in ai:
         su_keys = (
             "\t<key>SUFeedURL</key>\n"
-            "\t<string>https://xplor.sh/appcast.xml</string>\n"
+            "\t<string>https://daniel-farina.github.io/xplorer/appcast.xml</string>\n"
             "\t<key>SUPublicEDKey</key>\n"
             "\t<string>1dT5/+AbAMKH6F1IrtejPfrplH9JVKDqMLGfhzQhaiI=</string>\n"
             "\t<key>SUEnableAutomaticChecks</key>\n"
@@ -1936,7 +1935,7 @@ def main(src: Path):
     # (Developer Build) ..."). Prepend the Xplorer product version so users see
     # OUR version first. NOTE: bump XPLORER_VERSION here per release (or wire it
     # to the release version later).
-    XPLORER_VERSION = "0.8.8"
+    XPLORER_VERSION = "0.8.9"
     ss = src / "chrome/app/settings_strings.grdp"
     sst = ss.read_text()
     _ver_marker = "Xplor " + XPLORER_VERSION + " · Chromium"
