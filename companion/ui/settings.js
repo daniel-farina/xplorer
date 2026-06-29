@@ -311,10 +311,10 @@ function setUpdatesStatus(msg, kind = '') {
 
 async function loadUpdates() {
   try {
-    const res = await fetch('/api/update/sparkle');
+    const res = await fetch('/api/update/controls');
     if (!res.ok) throw new Error('unavailable');
     const d = await res.json();
-    if (!d.available) throw new Error('unavailable');
+    if (!d.supported) throw new Error('unavailable');
     if (updatesAutoCheck) updatesAutoCheck.checked = !!d.auto_check;
     if (updatesVersion) updatesVersion.textContent = d.current_version || '—';
   } catch {
@@ -328,7 +328,7 @@ async function loadUpdates() {
 updatesAutoCheck?.addEventListener('change', async () => {
   setUpdatesStatus('Saving…');
   try {
-    const res = await fetch('/api/update/sparkle/auto-check', {
+    const res = await fetch('/api/update/controls/auto-check', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ enabled: updatesAutoCheck.checked }),
@@ -351,7 +351,7 @@ updatesAutoCheck?.addEventListener('change', async () => {
 updatesCheckBtn?.addEventListener('click', async () => {
   setUpdatesStatus('Checking for updates…');
   try {
-    const res = await fetch('/api/update/sparkle/check', { method: 'POST' });
+    const res = await fetch('/api/update/controls/check', { method: 'POST' });
     if (!res.ok) throw new Error(res.statusText);
     setUpdatesStatus('Checking — Xplor will show a dialog if an update is available.', 'ok');
     setTimeout(() => setUpdatesStatus(''), 4000);

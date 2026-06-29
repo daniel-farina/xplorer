@@ -3027,29 +3027,39 @@ bool GrokNative::TryHandleRequest(
     return true;
   }
 
+  // Update controls (companion Settings "Updates" pane). macOS routes to Sparkle
+  // (main-thread-affine -> UI-thread hop); Win/Linux route to the GitHub-releases
+  // UpdateChecker (IO-thread safe). The pane reads "supported" to decide whether
+  // to render the controls.
+  if (info.method == "GET" && path == "/api/update/controls") {
 #if BUILDFLAG(IS_MAC)
-  // macOS Sparkle update controls (companion Settings "Updates" pane). Sparkle
-  // is main-thread-affine, so every call hops to the UI thread and replies from
-  // there via ReplyJsonOnIO. These exist only on macOS; the pane treats a 404 on
-  // other platforms as "managed by the platform updater".
-  if (info.method == "GET" && path == "/api/update/sparkle") {
     content::GetUIThreadTaskRunner({})->PostTask(
         FROM_HERE,
         base::BindOnce(
             [](net::HttpServer* srv,
                scoped_refptr<base::SingleThreadTaskRunner> io, int cid) {
               base::DictValue d;
-              d.Set("available", XplorerSparkleAvailable());
+              d.Set("supported", XplorerSparkleAvailable());
               d.Set("auto_check", XplorerSparkleAutoCheckEnabled());
               d.Set("current_version", XplorerSparkleCurrentVersion());
+              d.Set("mechanism", "sparkle");
               ReplyJsonOnIO(srv, io, cid, std::move(d));
             },
             server, io_task_runner, connection_id));
+#else
+    base::DictValue d = UpdateChecker::Get()->StatusDict();
+    if (const std::string* cur = d.FindString("current"))
+      d.Set("current_version", *cur);
+    d.Set("supported", true);
+    d.Set("mechanism", "github");
+    SendJson(server, connection_id, net::HTTP_OK, std::move(d));
+#endif
     return true;
   }
-  if (info.method == "POST" && path == "/api/update/sparkle/auto-check") {
+  if (info.method == "POST" && path == "/api/update/controls/auto-check") {
     auto body = base::JSONReader::ReadDict(info.data, base::JSON_PARSE_RFC);
     const bool enabled = body ? body->FindBool("enabled").value_or(true) : true;
+#if BUILDFLAG(IS_MAC)
     content::GetUIThreadTaskRunner({})->PostTask(
         FROM_HERE,
         base::BindOnce(
@@ -3063,9 +3073,17 @@ bool GrokNative::TryHandleRequest(
               ReplyJsonOnIO(srv, io, cid, std::move(d));
             },
             server, io_task_runner, connection_id, enabled));
+#else
+    UpdateChecker::Get()->SetAutoCheck(enabled);
+    base::DictValue d;
+    d.Set("ok", true);
+    d.Set("auto_check", UpdateChecker::Get()->AutoCheckEnabled());
+    SendJson(server, connection_id, net::HTTP_OK, std::move(d));
+#endif
     return true;
   }
-  if (info.method == "POST" && path == "/api/update/sparkle/check") {
+  if (info.method == "POST" && path == "/api/update/controls/check") {
+#if BUILDFLAG(IS_MAC)
     content::GetUIThreadTaskRunner({})->PostTask(
         FROM_HERE,
         base::BindOnce(
@@ -3077,9 +3095,14 @@ bool GrokNative::TryHandleRequest(
               ReplyJsonOnIO(srv, io, cid, std::move(d));
             },
             server, io_task_runner, connection_id));
+#else
+    UpdateChecker::Get()->CheckNow();
+    base::DictValue d;
+    d.Set("ok", true);
+    SendJson(server, connection_id, net::HTTP_OK, std::move(d));
+#endif
     return true;
   }
-#endif  // BUILDFLAG(IS_MAC)
 
   if (info.method == "GET" && path == "/api/logs") {
     const std::map<std::string, std::string> params = QueryParams(info.path);

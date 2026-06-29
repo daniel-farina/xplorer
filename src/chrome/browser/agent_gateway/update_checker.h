@@ -102,6 +102,18 @@ class UpdateChecker {
   // the IO thread; hops to the UI thread for chrome::AttemptRelaunch().
   base::DictValue Restart();
 
+  // --- Update controls for the Settings "Updates" pane (Win/Linux; the macOS
+  // build routes the same UI to Sparkle instead). Called on the gateway IO
+  // thread (the timer's sequence). ---
+
+  // Whether scheduled auto-checks are enabled (persisted; default true).
+  bool AutoCheckEnabled();
+  // Enable/disable scheduled auto-checks: persists the preference and (re)arms or
+  // cancels the poll timer. Manual CheckNow() still works when disabled.
+  void SetAutoCheck(bool enabled);
+  // Run a check immediately, regardless of the auto-check preference.
+  void CheckNow();
+
  private:
   friend class base::NoDestructor<UpdateChecker>;
   UpdateChecker();
@@ -119,6 +131,11 @@ class UpdateChecker {
   void SetState(State s);
   void SetError(const std::string& message);
   static const char* StateName(State s);
+
+  // Persisted auto-check preference (~/.xplorer/update_prefs.json). Read in
+  // Start(); written by SetAutoCheck. Defaults to true when absent.
+  bool ReadAutoCheckPref();
+  void WriteAutoCheckPref(bool enabled);
 
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX)
   // UI thread: begin the download of the chosen asset, then verify + install.
@@ -143,6 +160,9 @@ class UpdateChecker {
 
   base::RepeatingTimer timer_;
   bool started_ = false;
+  // Scheduled auto-check enabled (persisted). IO-thread-only (set in Start() /
+  // SetAutoCheck, read in StatusDict / AutoCheckEnabled — all on the IO thread).
+  bool auto_check_ = true;
   // The sequence that owns the timer (the gateway IO thread). Captured in
   // Start(); used to schedule the delayed first check.
   scoped_refptr<base::SequencedTaskRunner> task_runner_;

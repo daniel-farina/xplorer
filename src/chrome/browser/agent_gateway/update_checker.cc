@@ -9,8 +9,10 @@
 #include <vector>
 
 #include "base/containers/span.h"
+#include "base/files/file_util.h"
 #include "base/functional/bind.h"
 #include "base/json/json_reader.h"
+#include "base/json/json_writer.h"
 #include "base/logging.h"
 #include "base/no_destructor.h"
 #include "base/strings/string_number_conversions.h"
@@ -19,6 +21,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/version.h"
 #include "build/build_config.h"
+#include "chrome/browser/agent_gateway/xplorer_paths.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "components/version_info/version_info.h"
@@ -120,6 +123,13 @@ UpdateChecker* UpdateChecker::Get() {
 
 UpdateChecker::UpdateChecker() {
   status_.os = RunningOs();
+  // Show the running marketing version immediately (before the first poll), the
+  // same way OnBody reconstructs it from the PATCH code (MAJOR==0): 809 -> 0.8.9.
+  const base::Version v(version_info::GetVersionNumber());
+  if (v.IsValid() && v.components().size() >= 4) {
+    const uint32_t patch = v.components()[3];
+    status_.current = base::StringPrintf("0.%u.%u", patch / 100, patch % 100);
+  }
 }
 UpdateChecker::~UpdateChecker() = default;
 
@@ -130,6 +140,11 @@ void UpdateChecker::Start() {
   // The timer + the delayed first check live on this sequence (the gateway IO
   // thread). Record it so the delayed first check is posted back here.
   task_runner_ = base::SequencedTaskRunner::GetCurrentDefault();
+  // Respect the persisted auto-check preference: when off, don't arm the poll
+  // timer or run the first check. Manual CheckNow() still works.
+  auto_check_ = ReadAutoCheckPref();
+  if (!auto_check_)
+    return;
   // base::Unretained is safe everywhere in this class: UpdateChecker is a
   // process-lifetime NoDestructor singleton, so it outlives every posted task.
   timer_.Start(FROM_HERE, kCheckInterval,
@@ -156,6 +171,49 @@ void UpdateChecker::OnTimer() {
   content::GetUIThreadTaskRunner({})->PostTask(
       FROM_HERE,
       base::BindOnce(&UpdateChecker::FetchOnUI, base::Unretained(this)));
+}
+
+bool UpdateChecker::AutoCheckEnabled() {
+  return auto_check_;
+}
+
+void UpdateChecker::CheckNow() {
+  // Run the same poll the timer would, regardless of the auto-check preference.
+  // Called on the gateway IO thread; OnTimer hops to the UI thread.
+  OnTimer();
+}
+
+void UpdateChecker::SetAutoCheck(bool enabled) {
+  auto_check_ = enabled;
+  WriteAutoCheckPref(enabled);
+  if (enabled) {
+    if (!timer_.IsRunning()) {
+      timer_.Start(FROM_HERE, kCheckInterval,
+                   base::BindRepeating(&UpdateChecker::OnTimer,
+                                       base::Unretained(this)));
+    }
+  } else {
+    timer_.Stop();
+  }
+}
+
+bool UpdateChecker::ReadAutoCheckPref() {
+  std::string body;
+  if (!base::ReadFileToString(
+          xplorer_paths::DataDir().AppendASCII("update_prefs.json"), &body)) {
+    return true;  // default: auto-check on
+  }
+  auto d = base::JSONReader::ReadDict(body, base::JSON_PARSE_RFC);
+  return d ? d->FindBool("auto_check").value_or(true) : true;
+}
+
+void UpdateChecker::WriteAutoCheckPref(bool enabled) {
+  base::DictValue d;
+  d.Set("auto_check", enabled);
+  std::string json;
+  base::JSONWriter::Write(d, &json);
+  base::WriteFile(xplorer_paths::DataDir().AppendASCII("update_prefs.json"),
+                  json);
 }
 
 void UpdateChecker::FetchOnUI() {
@@ -371,6 +429,7 @@ base::DictValue UpdateChecker::StatusDict() {
   d.Set("error", status_.error);
   d.Set("progress", status_.progress);
   d.Set("installed_path", status_.installed_path);
+  d.Set("auto_check", auto_check_);
   return d;
 }
 
