@@ -1,16 +1,18 @@
 #!/bin/sh
-# Package a built Xplorer.app into distributable .zip + .dmg with checksums.
+# Package the built Xplor.app into distributable .zip + .dmg with checksums.
+# (The build emits Xplorer.app — PRODUCT_FULLNAME, kept for profile/update identity;
+# release_arch.sh renames the visible bundle to Xplor.app before packaging.)
 # Usage: ./scripts/package.sh [path-to-out-dir] [version]
 set -eu
 XPLORER="$(cd "$(dirname "$0")/.." && pwd)"
 OUT="${1:-$XPLORER/../chromium/src/out/aether}"
 VERSION="${2:-dev}"
-APP="$OUT/Xplorer.app"
+APP="$OUT/Xplor.app"
 DIST="$XPLORER/dist"
 
-[ -d "$APP" ] || { echo "No Xplorer.app at $APP — build first." >&2; exit 1; }
+[ -d "$APP" ] || { echo "No Xplor.app at $APP — build first." >&2; exit 1; }
 ARCH="$("$XPLORER/scripts/app_arch.sh" "$APP")"
-NAME="Xplorer-macos-$ARCH"
+NAME="Xplor-macos-$ARCH"
 mkdir -p "$DIST"
 
 echo "Packaging $NAME (version $VERSION)..."
@@ -21,7 +23,7 @@ echo "Building DMG..."
 TMP="$(mktemp -d)"
 cp -R "$APP" "$TMP/"
 ln -s /Applications "$TMP/Applications"
-hdiutil create -volname "Xplorer" -srcfolder "$TMP" -ov -format UDZO \
+hdiutil create -volname "Xplor" -srcfolder "$TMP" -ov -format UDZO \
   "$DIST/$NAME.dmg" >/dev/null
 rm -rf "$TMP"
 

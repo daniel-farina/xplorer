@@ -22,7 +22,7 @@ case "$ARCH" in
   *) echo "Unknown arch: $ARCH" >&2; exit 1 ;;
 esac
 
-APP="$SRC/out/$OUT_DIR/Xplorer.app"
+APP="$SRC/out/$OUT_DIR/Xplor.app"
 DIST="$XPLORER/dist"
 
 echo "==> [$ARCH] Applying overlay"
@@ -30,6 +30,14 @@ echo "==> [$ARCH] Applying overlay"
 
 echo "==> [$ARCH] Building"
 "$XPLORER/build.sh" "$SRC" "$ARCH"
+
+# XPLOR: the build emits Xplorer.app (PRODUCT_FULLNAME=Xplorer is kept so the
+# user-data dir, Keychain ACL, bundle ID, and Sparkle identity are all unchanged).
+# Rename only the VISIBLE bundle to Xplor.app for the shipped app — the executable,
+# framework, and bundle ID inside stay Xplorer. The signature seals Contents/, not
+# the folder name, so this rename keeps any existing signature/staple valid.
+BUILT_APP="$SRC/out/$OUT_DIR/Xplorer.app"
+if [ -d "$BUILT_APP" ]; then rm -rf "$APP"; mv "$BUILT_APP" "$APP"; fi
 
 # The build does not refresh the bundled companion UI (it persists across builds),
 # so copy the current companion/ui into the bundle BEFORE signing — otherwise the
@@ -68,7 +76,7 @@ echo "==> [$ARCH] Packaging"
 "$XPLORER/scripts/package.sh" "$SRC/out/$OUT_DIR" "$VERSION"
 
 BIN_ARCH="$("$XPLORER/scripts/app_arch.sh" "$APP")"
-NAME="Xplorer-macos-$BIN_ARCH"
+NAME="Xplor-macos-$BIN_ARCH"
 
 if [ -z "$SIGN_ONLY" ]; then
   echo "==> [$ARCH] Notarizing DMG"
