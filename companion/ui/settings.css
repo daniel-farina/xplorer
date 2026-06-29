@@ -417,6 +417,18 @@ html.grok-build body {
   font-size: 14px;
 }
 
+.settings-field-check {
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+}
+
+.settings-field-check input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+}
+
 .settings-field:last-child {
   margin-bottom: 0;
 }

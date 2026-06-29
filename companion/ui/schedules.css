@@ -1,0 +1,538 @@
+/* Scheduled-tasks page. Mirrors the settings shell (cards, buttons, status
+   colors, theme vars) but lays out as a two-column mail-client view: a task
+   list on the left, the selected task's detail on the right. */
+
+html.grok-build body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--text);
+  font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+.settings-page {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 28px 20px 48px;
+}
+
+/* Two-column shell: a sticky list rail + a detail column. */
+.sched-shell {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 640px);
+  gap: 28px;
+  max-width: 960px;
+  align-items: start;
+}
+
+/* ---- Left column ---------------------------------------------------------- */
+.sched-list-col {
+  position: sticky;
+  top: 60px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 12px;
+  max-height: calc(100vh - 84px);
+  overflow-y: auto;
+}
+
+.sched-back-btn {
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  text-align: left;
+  padding: 6px 8px;
+  cursor: pointer;
+}
+
+.sched-back-btn:hover {
+  color: var(--text);
+  background: var(--accent-soft);
+}
+
+.sched-new-btn {
+  width: 100%;
+  text-align: center;
+}
+
+.sched-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.sched-list-item {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-elevated);
+  padding: 10px 12px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.sched-list-item:hover {
+  border-color: var(--accent);
+}
+
+.sched-list-item.active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.sched-list-item.disabled .sched-li-label {
+  color: var(--text-secondary);
+}
+
+.sched-li-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.sched-li-label {
+  font-weight: 600;
+  font-size: 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.sched-li-next {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+/* ---- Status pills --------------------------------------------------------- */
+.sched-pill {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  padding: 4px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-secondary);
+  text-transform: capitalize;
+  white-space: nowrap;
+}
+
+.sched-pill::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.sched-pill.ok       { color: #0d9488; border-color: rgba(13, 148, 136, 0.4); }
+.sched-pill.failed   { color: #dc2626; border-color: rgba(220, 38, 38, 0.4); }
+.sched-pill.running  { color: #2563eb; border-color: rgba(37, 99, 235, 0.4); }
+.sched-pill.cancelled { color: #d97706; border-color: rgba(217, 119, 6, 0.4); }
+.sched-pill.skipped  { color: #d97706; border-color: rgba(217, 119, 6, 0.4); }
+.sched-pill.deferred { color: #d97706; border-color: rgba(217, 119, 6, 0.4); }
+.sched-pill.paused   { color: var(--text-secondary); }
+
+.sched-pill.running::before {
+  animation: sched-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes sched-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+/* ---- Right column --------------------------------------------------------- */
+.sched-main {
+  min-width: 0;
+}
+
+.sched-detail[hidden],
+.sched-placeholder[hidden] {
+  display: none;
+}
+
+/* Editable label in the detail header */
+.sched-detail-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 18px;
+  flex-wrap: wrap;
+}
+
+.sched-label-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  padding: 6px 8px;
+}
+
+.sched-label-input:hover {
+  border-color: var(--border);
+}
+
+.sched-label-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  background: var(--input-bg);
+}
+
+/* ---- Cards (reused settings styling) -------------------------------------- */
+.settings-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 20px 22px;
+  margin-bottom: 16px;
+}
+
+.settings-card h2 {
+  margin: 0 0 14px;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.settings-card h2 .sched-card-hint {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--text-secondary);
+  margin-left: 8px;
+}
+
+.settings-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 14px;
+  font-size: 14px;
+}
+
+.settings-field:last-child {
+  margin-bottom: 0;
+}
+
+.settings-field span {
+  font-weight: 500;
+}
+
+.settings-field small {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.settings-field select,
+.settings-field input[type="text"],
+.settings-field input[type="number"],
+.settings-field input[type="datetime-local"],
+.settings-field textarea {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--input-bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  padding: 10px 12px;
+}
+
+.settings-field textarea {
+  resize: vertical;
+  min-height: 64px;
+  line-height: 1.5;
+}
+
+.sched-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.settings-head h1 {
+  margin: 0 0 8px;
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.settings-head p {
+  margin: 0 0 24px;
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+/* ---- "Talk to it" box ----------------------------------------------------- */
+.sched-talk-row {
+  display: flex;
+  gap: 10px;
+  align-items: flex-end;
+}
+
+.sched-talk-row textarea {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--input-bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  padding: 10px 12px;
+  resize: vertical;
+  min-height: 52px;
+  line-height: 1.5;
+}
+
+.sched-talk-send {
+  flex: none;
+}
+
+.sched-talk-status {
+  margin: 10px 0 0;
+  min-height: 1.2em;
+  font-size: 13px;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sched-talk-status.err { color: #dc2626; }
+.sched-talk-status.ok { color: #0d9488; }
+
+.sched-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: sched-spin 0.7s linear infinite;
+  flex: none;
+}
+
+@keyframes sched-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ---- Trigger-type selector ------------------------------------------------ */
+.sched-trigtype {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.sched-trigtype-btn {
+  flex: 1 1 0;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-elevated);
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 9px 8px;
+  cursor: pointer;
+}
+
+.sched-trigtype-btn:hover {
+  color: var(--text);
+  border-color: var(--accent);
+}
+
+.sched-trigtype-btn.active {
+  color: var(--text);
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.sched-trig-input[hidden] {
+  display: none;
+}
+
+/* ---- Run history ---------------------------------------------------------- */
+.sched-history {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.sched-history-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 0;
+  border-top: 1px solid var(--border);
+  font-size: 13px;
+}
+
+.sched-history-row:first-child {
+  border-top: none;
+}
+
+.sched-history-time {
+  color: var(--text-secondary);
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.sched-history-link {
+  flex: none;
+  border: none;
+  background: none;
+  color: var(--link);
+  font: inherit;
+  font-size: 13px;
+  text-decoration: underline;
+  cursor: pointer;
+  padding: 0;
+}
+
+.sched-history-empty {
+  color: var(--text-secondary);
+  font-size: 13px;
+  margin: 0;
+}
+
+/* ---- Actions row ---------------------------------------------------------- */
+.settings-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 4px 0 12px;
+}
+
+.settings-btn {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-elevated);
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  padding: 10px 16px;
+  cursor: pointer;
+}
+
+.settings-btn:hover {
+  border-color: var(--accent);
+}
+
+.settings-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.settings-btn-primary {
+  background: var(--button-bg);
+  color: var(--button-text);
+  border-color: var(--button-bg);
+}
+
+.settings-btn-primary:hover {
+  opacity: 0.9;
+  border-color: var(--button-bg);
+}
+
+.sched-btn-danger {
+  color: #dc2626;
+}
+
+.sched-btn-danger:hover {
+  border-color: #dc2626;
+}
+
+.sched-link-btn {
+  border: none;
+  background: none;
+  color: var(--link);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+  padding: 0;
+}
+
+.settings-status {
+  min-height: 1.2em;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.settings-status.ok { color: #0d9488; }
+.settings-status.err { color: #dc2626; }
+
+.sched-empty {
+  color: var(--text-secondary);
+  font-size: 13px;
+  padding: 6px 8px;
+}
+
+/* ---- In-page confirm overlay ---------------------------------------------- */
+.sched-confirm-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.4);
+}
+
+.sched-confirm-overlay[hidden] {
+  display: none;
+}
+
+.sched-confirm-box {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 22px;
+  max-width: 360px;
+  width: calc(100% - 40px);
+  box-shadow: 0 12px 40px var(--shadow);
+}
+
+.sched-confirm-msg {
+  margin: 0 0 18px;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.sched-confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+/* ---- Responsive ----------------------------------------------------------- */
+@media (max-width: 760px) {
+  .sched-shell {
+    grid-template-columns: 1fr;
+    max-width: 640px;
+  }
+  .sched-list-col {
+    position: static;
+    max-height: none;
+  }
+}

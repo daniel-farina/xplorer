@@ -9,6 +9,8 @@
 #include <string>
 
 #include "base/memory/weak_ptr.h"
+#include "base/power_monitor/power_monitor.h"
+#include "base/power_monitor/power_observer.h"
 #include "base/threading/thread.h"
 #include "base/values.h"
 #include "net/server/http_server.h"
@@ -42,11 +44,31 @@ class AgentSession;
 // content::DevToolsAgentHost, so there is no second protocol hop.
 // Authentication: every request must carry the bearer token written to
 // <profile>/agent_token at startup. The server binds 127.0.0.1 only.
-class AgentGateway : public net::HttpServer::Delegate {
+//
+// Sleep/wake recovery: AgentGateway is a base::PowerSuspendObserver. After a
+// macOS sleep/wake the bound 127.0.0.1 listening socket is silently
+// invalidated and net::HttpServer's accept loop takes the error once and goes
+// permanently quiet with no re-listen — the process lives (the Scheduler's
+// poll timer keeps the IO thread alive) but `lsof -iTCP:9334` is empty and
+// curl returns 000. On OnResume() we hop to server_thread_ and RebindServer():
+// destroy the stale HttpServer + socket and create a fresh one (preferring the
+// same port to keep the URL stable, ephemeral fallback otherwise), rewriting
+// gateway.json so agents re-discover the (possibly new) port.
+class AgentGateway : public net::HttpServer::Delegate,
+                     public base::PowerSuspendObserver {
  public:
   // Starts the gateway. |port| of 0 picks 9334 or the next free port.
   static AgentGateway* Start(int port);
   static AgentGateway* GetInstance();
+
+  // Deterministic, explicit shutdown. The instance is a leaked raw global whose
+  // destructor effectively never runs, so the server thread / HttpServer / the
+  // Scheduler poll timer must be torn down here. Called from
+  // ChromeBrowserMainParts::PostMainMessageLoopRun(), after the main loop quits
+  // but before thread teardown. Idempotent and safe to call when the server
+  // thread was never started or has already been stopped. After it returns,
+  // GetInstance() yields null.
+  void Shutdown();
 
   AgentGateway(const AgentGateway&) = delete;
   AgentGateway& operator=(const AgentGateway&) = delete;
@@ -63,6 +85,12 @@ class AgentGateway : public net::HttpServer::Delegate {
                           const net::HttpServerRequestInfo& info) override;
   void OnWebSocketMessage(int connection_id, std::string data) override;
   void OnClose(int connection_id) override;
+
+  // base::PowerSuspendObserver:
+  // Both callbacks fire on the sequence the observer was registered on — here
+  // the gateway's IO server_thread_ (we subscribe from StartServerOnIOThread).
+  void OnSuspend() override;
+  void OnResume() override;
 
  private:
   // Live counters for everything flowing through the gateway. Surfaced both at
@@ -86,6 +114,12 @@ class AgentGateway : public net::HttpServer::Delegate {
 
   explicit AgentGateway(int port);
   void StartServerOnIOThread(int port);
+  // (Re)creates the listening socket + net::HttpServer and rewrites the
+  // discovery files. MUST run on server_thread_ (it touches server_ and the
+  // socket, both of which are IO-thread affine). Destroys the old server_
+  // first so the stale fd is released before the new bind. Called once from
+  // StartServerOnIOThread and again after each sleep/wake via OnResume().
+  void RebindServer();
   bool CheckAuth(const net::HttpServerRequestInfo& info);
   void RouteRequest(int connection_id,
                     const net::HttpServerRequestInfo& info);

@@ -6,12 +6,10 @@
 #include <memory>
 #include <string>
 
-#include "base/base_paths.h"
 #include "base/files/file_util.h"
 #include "base/functional/bind.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
-#include "base/path_service.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
@@ -130,7 +128,7 @@ std::string BrowserThemeAttribute() {
 // companion/ui/toolbar.html.
 std::string MinimalFallbackScript(const std::string& gateway_origin) {
   return base::StringPrintf(
-      R"((function(){if(!document.documentElement)return;var ID='xplorer-grok-bar';if(document.getElementById(ID))return;var b=document.createElement('header');b.id=ID;b.setAttribute('style','position:fixed;top:0;left:0;right:0;z-index:2147483647;display:flex;align-items:center;height:44px;padding:0 14px;background:#161616;color:#f2f2f2;font:600 14px -apple-system,system-ui,sans-serif;border-bottom:1px solid #333');var a=document.createElement('a');a.href=%s+'/search';a.textContent='Xplorer';a.setAttribute('style','color:#f2f2f2;text-decoration:none');b.appendChild(a);document.documentElement.insertBefore(b,document.documentElement.firstChild);document.documentElement.style.setProperty('padding-top','44px','important');})();)",
+      R"((function(){if(!document.documentElement)return;var ID='xplorer-grok-bar';if(document.getElementById(ID))return;var b=document.createElement('header');b.id=ID;b.setAttribute('style','position:fixed;top:0;left:0;right:0;z-index:2147483647;display:flex;align-items:center;height:44px;padding:0 14px;background:#161616;color:#f2f2f2;font:600 14px -apple-system,system-ui,sans-serif;border-bottom:1px solid #333');var a=document.createElement('a');a.href=%s+'/search';a.textContent='Xplor';a.setAttribute('style','color:#f2f2f2;text-decoration:none');b.appendChild(a);document.documentElement.insertBefore(b,document.documentElement.firstChild);document.documentElement.style.setProperty('padding-top','44px','important');})();)",
       JsonStringLiteral(gateway_origin).c_str());
 }
 
@@ -254,10 +252,9 @@ class GrokWebBarInjector : public content::WebContentsObserver,
   }
 
   bool ShouldInject(content::WebContents* /*contents*/) const {
-    // XPLORER: native chrome toolbar replaces the injected web bar.
-    // The native Views bar (xplorer::XplorerToolbarView) is now the single
-    // toolbar surface on every tab, so the in-page injection on
-    // x.com/grok.com/grokipedia is disabled to avoid a double bar.
+    // XPLORER: the injected in-page web bar is disabled. Navigation now lives in
+    // the native "Bookmarks" tab group (seeded by AgentTabGrouper), so the
+    // in-page injection on x.com/grok.com/grokipedia is suppressed.
     return false;
   }
 

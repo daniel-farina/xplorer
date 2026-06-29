@@ -33,6 +33,11 @@ void OnAppBuildStreamFinished(const std::string& app_id,
                               const std::string& full_text,
                               const std::string& detail);
 
+// Terminate every per-app python http.server runtime child. Called from
+// AgentGateway::Shutdown (next to StopAllActiveRuns) so the helper servers do
+// not survive a restart holding their 127.0.0.1 ports.
+void StopAllAppRuntimeServers();
+
 }  // namespace agent_gateway
 
 #endif  // CHROME_BROWSER_AGENT_GATEWAY_APP_STORE_H_

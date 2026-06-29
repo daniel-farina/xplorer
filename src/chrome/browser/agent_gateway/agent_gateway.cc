@@ -2,29 +2,35 @@
 // Use of this source code is governed by a BSD-style license.
 
 #include "chrome/browser/agent_gateway/agent_gateway.h"
+#include "chrome/browser/agent_gateway/app_store.h"
 
 #include "chrome/browser/agent_gateway/browser_api.h"
+#include "chrome/browser/agent_gateway/focus_arbiter.h"
 #include "chrome/browser/agent_gateway/grok_companion_launcher.h"
+#include "chrome/browser/agent_gateway/scheduler.h"
+#include "chrome/browser/agent_gateway/update_checker.h"
 #include "chrome/browser/agent_gateway/xplorer_paths.h"
 #include "chrome/browser/agent_gateway/grok_native.h"
 
 #include <utility>
 
 #include "base/base64.h"
-#include "base/base_paths.h"
 #include "base/files/file_util.h"
 #include "base/functional/bind.h"
-#include "base/path_service.h"
 #include "base/logging.h"
 #include "base/message_loop/message_pump_type.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
+#include "base/power_monitor/power_monitor.h"
 #include "base/rand_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/environment.h"
 #include "chrome/browser/agent_gateway/agent_session.h"
 #include "chrome/browser/agent_gateway/tab_ownership.h"
+#include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/browser_window/public/global_browser_collection.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface_iterator.h"
@@ -50,6 +56,15 @@ namespace {
 AgentGateway* g_instance = nullptr;
 constexpr int kDefaultPort = 9334;
 constexpr int kBacklog = 5;
+
+void ClearLeakedScheduledRunEnv() {
+  std::unique_ptr<base::Environment> env = base::Environment::Create();
+  if (!env) {
+    return;
+  }
+  env->UnSetVar("XPLORER_AGENT_ID");
+  env->UnSetVar("XPLORER_TASK_ID");
+}
 }  // namespace
 
 // static
@@ -83,12 +98,93 @@ AgentGateway::~AgentGateway() {
   g_instance = nullptr;
 }
 
-void AgentGateway::StartServerOnIOThread(int port) {
+void AgentGateway::Shutdown() {
+  // The gateway is a leaked raw global; its destructor effectively never runs,
+  // so without this explicit teardown the server thread keeps running, the
+  // net::HttpServer (and its listening socket) is never destroyed, and the
+  // Scheduler poll timer stays armed — CompleteShutdown then hangs and a zombie
+  // keeps port 9334 bound. Tear everything down deterministically here.
+  //
+  // Kill any in-flight grok subprocesses first. Their stream/run tasks are
+  // CONTINUE_ON_SHUTDOWN (so TaskTracker::CompleteShutdown does not wait on them),
+  // but a grok child can hang with no output, leaving the worker parked in a
+  // blocking pipe read() forever. Terminating the children makes that read return
+  // EOF immediately, so the tasks finish promptly and we don't leak zombies.
+  // Touches only NoDestructor statics (ActiveRuns + its lock), so it is safe to
+  // run here on the main thread regardless of the IO thread's state.
+  StopAllActiveRuns();
+
+  // Likewise terminate the per-app python http.server runtime children. They are
+  // separate from the grok runs above and would otherwise be orphaned across a
+  // restart, holding their 127.0.0.1 ports. Also touches only NoDestructor
+  // statics, so it is safe to run here on the main thread.
+  StopAllAppRuntimeServers();
+
+  // Stop receiving power events BEFORE tearing down the thread. Otherwise a
+  // sleep/wake racing with shutdown could post RebindServer() onto a thread
+  // we're about to stop (or fire OnResume into a half-destroyed gateway).
+  // RemovePowerSuspendObserver is safe even if we never added (e.g. the server
+  // thread never started), so it's fine to call unconditionally / idempotently.
+  base::PowerMonitor::GetInstance()->RemovePowerSuspendObserver(this);
+
+  // Idempotent: once the thread is stopped/null, there is nothing left to do.
+  if (!server_thread_) {
+    g_instance = nullptr;
+    return;
+  }
+
+  // Post the IO-thread teardown BEFORE Stop(). base::Thread::Stop() posts a
+  // Quit and joins, flushing already-queued tasks first, so this task is
+  // guaranteed to run on the IO thread before the join completes. It must run
+  // there because:
+  //   - the Scheduler's base::RepeatingTimer was armed on this thread and is
+  //     sequence-affine, so it can only be cancelled here;
+  //   - net::HttpServer and its TCPServerSocket were created on this thread and
+  //     Chromium threading requires them to be destroyed on it too.
+  server_thread_->task_runner()->PostTask(
+      FROM_HERE, base::BindOnce([](AgentGateway* self) {
+        // Cancel the poll timer (armed on this same IO thread in Start()).
+        Scheduler::Get()->Stop();
+        // Cancel the update-check timer (also armed on this IO thread in Start()).
+        UpdateChecker::Get()->Stop();
+        // Destroy the HttpServer + listening socket on their owning thread,
+        // releasing port 9334.
+        self->server_.reset();
+      }, base::Unretained(this)));
+
+  // Stop() posts the Quit and joins the thread. net::HttpServer uses async
+  // (non-blocking) accept on the IO message loop, so the loop is not parked in a
+  // blocking accept(): the Quit wakes it and the join returns cleanly once the
+  // posted reset task above has drained.
+  server_thread_->Stop();
+  server_thread_.reset();
+
+  // After this point GetInstance() returns null, so no late caller can touch the
+  // now-destroyed server.
+  g_instance = nullptr;
+}
+
+void AgentGateway::RebindServer() {
+  // Must run on server_thread_: net::HttpServer + its TCPServerSocket are
+  // IO-thread affine, and this is also where the PowerSuspendObserver fires.
+  DCHECK(server_thread_->task_runner()->RunsTasksInCurrentSequence());
+
+  // Destroy the old HttpServer + listening socket FIRST so the stale fd is
+  // released before we try to bind again. On the sleep/wake path the kernel
+  // has already invalidated the socket, but the net::HttpServer still owns it;
+  // resetting here lets us re-listen on the SAME port instead of being pushed
+  // to an ephemeral one because the old fd is lingering.
+  server_.reset();
+
   auto socket = std::make_unique<net::TCPServerSocket>(nullptr,
                                                        net::NetLogSource());
-  if (socket->ListenWithAddressAndPort("127.0.0.1", port, kBacklog) !=
+  // Try the CURRENT port first to keep the gateway URL stable across rebinds.
+  // port_ is the default on first start and the live port on a re-bind.
+  if (socket->ListenWithAddressAndPort("127.0.0.1", port_, kBacklog) !=
       net::OK) {
-    // Port taken (another Xplorer instance): fall back to ephemeral.
+    // Port taken (another Xplorer instance, or the old fd not yet released):
+    // fall back to ephemeral. gateway.json is rewritten below so agents pick
+    // up the new port.
     socket->ListenWithAddressAndPort("127.0.0.1", 0, kBacklog);
   }
   net::IPEndPoint addr;
@@ -100,7 +196,8 @@ void AgentGateway::StartServerOnIOThread(int port) {
   // Write a FIXED discovery file so any agent finds the gateway without
   // knowing the profile path or branding. This is the canonical way to
   // connect: read ~/.xplorer/gateway.json -> {port, token}. Solves the
-  // "where is the token?" problem that trips agents up.
+  // "where is the token?" problem that trips agents up. Rewritten on every
+  // rebind so a port change after sleep/wake is reflected for agents.
   base::FilePath dir = xplorer_paths::DataDir();
   if (!dir.empty()) {
     base::DictValue d;
@@ -117,6 +214,57 @@ void AgentGateway::StartServerOnIOThread(int port) {
   WriteCompanionDiscovery(port_);
 }
 
+void AgentGateway::StartServerOnIOThread(int port) {
+  port_ = port ? port : kDefaultPort;
+
+  // Create the socket + server + discovery files. Factored into RebindServer()
+  // so the sleep/wake OnResume() path can re-run exactly this after the
+  // listening socket is invalidated.
+  RebindServer();
+
+  // Subscribe to power events so we recover from sleep/wake. The browser-
+  // process PowerMonitor global is initialized long before the gateway starts,
+  // so GetInstance() is valid here. Observer callbacks are delivered on the
+  // sequence that registered — server_thread_ — but OnResume() still re-posts
+  // RebindServer() (see there) to be robust to that contract.
+  base::PowerMonitor::GetInstance()->AddPowerSuspendObserver(this);
+
+  // The background-task scheduler is owned by the gateway (process-lifetime
+  // singleton). Arm it here, on server_thread_, so its base::RepeatingTimer
+  // runs on the gateway IO thread (the run machinery hops to the UI thread as
+  // needed). Loads schedules.json and re-arms persisted jobs across restarts.
+  // ONE-TIME only — NOT part of RebindServer(), so a sleep/wake rebind does
+  // not re-arm the scheduler or re-clear env.
+  ClearLeakedScheduledRunEnv();
+  Scheduler::Get()->Start();
+
+  // The in-app update checker is likewise owned by the gateway (process-lifetime
+  // singleton). Arm it here, on server_thread_, so its base::RepeatingTimer runs
+  // on the gateway IO thread (the HTTPS fetch/download/install hop to the UI
+  // thread as needed). ONE-TIME only — NOT part of RebindServer(), so a
+  // sleep/wake rebind does not re-arm it.
+  UpdateChecker::Get()->Start();
+}
+
+void AgentGateway::OnSuspend() {
+  // No teardown on suspend: the socket is already going away under us and we
+  // recover on resume. Logging only so the recovery is traceable.
+  VLOG(1) << "AgentGateway: system suspend";
+}
+
+void AgentGateway::OnResume() {
+  // PowerSuspendObserver callbacks may be delivered on a sequence other than
+  // server_thread_ (and on some platforms on the main/UI thread). RebindServer
+  // touches server_ + the listening socket, which are IO-thread affine, so we
+  // ALWAYS hop to server_thread_ rather than rebinding inline.
+  VLOG(1) << "AgentGateway: system resume — rebinding listening socket";
+  if (server_thread_) {
+    server_thread_->task_runner()->PostTask(
+        FROM_HERE, base::BindOnce(&AgentGateway::RebindServer,
+                                  base::Unretained(this)));
+  }
+}
+
 bool AgentGateway::CheckAuth(const net::HttpServerRequestInfo& info) {
   auto it = info.headers.find("authorization");
   return it != info.headers.end() && it->second == "Bearer " + token_;
@@ -128,6 +276,101 @@ namespace {
 // closes cleanly instead of wedging the connection (the default 1 MB read
 // buffer could hang on an oversized body).
 constexpr int kMaxRequestBodyBytes = 1024 * 1024;
+
+constexpr char kScheduledAgentPrefix[] = "schedule:";
+// Ad-hoc chat agent tabs are owned by "chat:<conv_id>". The per-agent tab group
+// is titled by the conversation's topic (its persisted title) rather than the
+// raw owner string, so the grouper can show a human-readable, rename-stable name.
+constexpr char kChatAgentPrefix[] = "chat:";
+
+bool IsScheduledAgentId(const std::string& agent_id) {
+  return base::StartsWith(agent_id, kScheduledAgentPrefix);
+}
+
+// Returns the persisted conversation title (topic) for |conv_id|, or "" if none
+// is set yet (or it's still the placeholder "New chat"). Read from the same
+// sessions store the companion UI writes (LoadCompanionSessions()).
+std::string LookupConversationTitle(const std::string& conv_id) {
+  base::DictValue data = LoadCompanionSessions();
+  const base::ListValue* convs = data.FindList("conversations");
+  if (!convs)
+    return std::string();
+  for (const base::Value& v : *convs) {
+    if (!v.is_dict())
+      continue;
+    const std::string* id = v.GetDict().FindString("id");
+    if (!id || *id != conv_id)
+      continue;
+    const std::string* title = v.GetDict().FindString("title");
+    if (title && !title->empty() && *title != "New chat")
+      return *title;
+    break;
+  }
+  return std::string();
+}
+
+// task_id is only stamped for scheduled agents (schedule:<job_id>). Ad-hoc chat
+// agents must never inherit a stale X-Task-Id header from a prior scheduled run.
+std::string ResolveTaskIdForAgent(const std::string& agent_id,
+                                  const std::string& body_task_id,
+                                  const std::string& header_task_id) {
+  if (!IsScheduledAgentId(agent_id)) {
+    return std::string();
+  }
+  if (!body_task_id.empty()) {
+    return body_task_id;
+  }
+  if (!header_task_id.empty()) {
+    return header_task_id;
+  }
+  return agent_id.substr(sizeof(kScheduledAgentPrefix) - 1);
+}
+
+// True when the tab is a normal user tab (not agent-owned, not a bookmark tab).
+bool IsUnownedUserTab(const TabOwnership* own) {
+  if (!own) {
+    return true;
+  }
+  if (own->bookmark_node_id != 0) {
+    return false;
+  }
+  return own->task_id.empty() && own->owner.empty();
+}
+
+// Agents may only drive tabs they (or their scheduled task) opened. User and
+// sidebar-bookmark tabs are off limits — POST /tabs / xplorer_new_tab instead.
+// Checks run BEFORE owner is stamped so a mistaken call cannot claim a tab.
+bool AgentMayUseTab(const std::string& agent_id,
+                    const TabOwnership* own,
+                    const std::string& header_task_id,
+                    base::DictValue* err) {
+  if (agent_id.empty() || !own) {
+    return true;
+  }
+  if (own->bookmark_node_id != 0) {
+    err->Set("error",
+             "cannot use a sidebar bookmark tab — use POST /tabs to open a "
+             "new background tab");
+    return false;
+  }
+  if (IsUnownedUserTab(own)) {
+    err->Set("error",
+             "cannot use a user tab — use POST /tabs (or xplorer_new_tab) to "
+             "open a dedicated background tab");
+    return false;
+  }
+  if (!own->task_id.empty() && !header_task_id.empty() &&
+      own->task_id != header_task_id) {
+    err->Set("error", "tab belongs to another scheduled task");
+    return false;
+  }
+  if (!own->owner.empty() && own->owner != agent_id) {
+    err->Set("error", "tab is owned by another agent");
+    return false;
+  }
+  return true;
+}
+
 }  // namespace
 
 void AgentGateway::OnConnect(int connection_id) {
@@ -224,6 +467,57 @@ void AgentGateway::RouteRequest(int connection_id,
   // GET /stats — live metrics (also rendered in the in-tab HUD).
   if (parts.size() == 1 && parts[0] == "stats") {
     std::move(reply).Run(metrics_.ToDict());
+    return;
+  }
+
+  // POST /api/debug/rebind — force a listening-socket rebind (auth-required;
+  // we only reach RouteRequest after CheckAuth passed in OnHttpRequest). This
+  // exercises the same code path as sleep/wake recovery without a real sleep,
+  // so we can verify the gateway re-listens. Hops to server_thread_ because
+  // RebindServer touches the IO-thread-affine socket/server_. Replies with the
+  // CURRENT port_ (the rebind runs async, but it keeps the same port unless
+  // it's still held, in which case the client should re-read gateway.json).
+  if (parts.size() == 3 && parts[0] == "api" && parts[1] == "debug" &&
+      parts[2] == "rebind" && info.method == "POST") {
+    // Delay the rebind so THIS response flushes and its connection closes first.
+    // server_.reset() inside RebindServer() tears down all live connections; if
+    // it ran before the pending response send (queued on this same IO sequence)
+    // it would drop the reply and operate on a stale connection id. A real
+    // OnResume() has no in-flight response, so the delay makes the test match it.
+    server_thread_->task_runner()->PostDelayedTask(
+        FROM_HERE,
+        base::BindOnce(&AgentGateway::RebindServer, base::Unretained(this)),
+        base::Seconds(1));
+    base::DictValue d;
+    d.Set("ok", true);
+    d.Set("port", port_);
+    std::move(reply).Run(std::move(d));
+    return;
+  }
+
+  // POST /focus {"owner": "<agent_id>", "conv_id"?} — user-only grant of the
+  // foreground to one agent task (G5: deliberate foreground only). Empty/absent
+  // owner resets focus to the user. An agent request (carrying X-Agent-Id) may
+  // NOT call this — only the user-driven sidebar UI (no X-Agent-Id) can, so an
+  // agent can never grant itself focus.
+  if (parts.size() == 1 && parts[0] == "focus" && info.method == "POST") {
+    base::DictValue d;
+    if (!agent_id.empty()) {
+      d.Set("error", "focus grant is user-only");
+    } else {
+      auto body = base::JSONReader::ReadDict(info.data, base::JSON_PARSE_RFC);
+      const std::string* owner = body ? body->FindString("owner") : nullptr;
+      const std::string* conv_id = body ? body->FindString("conv_id") : nullptr;
+      if (owner && !owner->empty()) {
+        FocusArbiter::Get()->SetOwner(*owner,
+                                      conv_id ? *conv_id : std::string());
+      } else {
+        FocusArbiter::Get()->ResetToUser();
+      }
+      d.Set("ok", true);
+      d.Set("owner", FocusArbiter::Get()->owner());
+    }
+    std::move(reply).Run(std::move(d));
     return;
   }
 
@@ -358,6 +652,9 @@ void AgentGateway::RouteRequest(int connection_id,
         TabOwnership* own = TabOwnership::Get(wc);
         t.Set("owner", own ? own->owner : std::string());
         t.Set("label", own ? own->label : std::string());
+        t.Set("task_id", own ? own->task_id : std::string());
+        t.Set("background", own ? own->background : false);
+        t.Set("bookmark", own && own->bookmark_node_id != 0);
         t.Set("mine", own && !agent_id.empty() && own->owner == agent_id);
         tabs.Append(std::move(t));
       }
@@ -377,10 +674,30 @@ void AgentGateway::RouteRequest(int connection_id,
     const std::string* url = body ? body->FindString("url") : nullptr;
     const std::string* owner = body ? body->FindString("owner") : nullptr;
     const std::string* label = body ? body->FindString("label") : nullptr;
+    const std::string* task_id = body ? body->FindString("task_id") : nullptr;
+    std::string header_task_id;
+    if (auto it = info.headers.find("x-task-id"); it != info.headers.end())
+      header_task_id = it->second;
+    std::string effective_task_id = ResolveTaskIdForAgent(
+        agent_id, task_id ? *task_id : std::string(), header_task_id);
+    // Background by default: agent tabs must never steal the user's focus.
+    // {"focus": true} is honored ONLY if the focus arbiter currently permits it
+    // (a live user grant). Otherwise it is downgraded to a background open — an
+    // agent cannot foreground a new tab on its own. This closes the
+    // focus:true-bypasses-the-arbiter hole.
+    const bool focus_requested = body && body->FindBool("focus").value_or(false);
+    const bool focus =
+        focus_requested && FocusArbiter::Get()->MayActivate(agent_id);
     NavigateParams params(ProfileManager::GetLastUsedProfile(),
                           GURL(url ? *url : "about:blank"),
                           ui::PAGE_TRANSITION_TYPED);
-    params.disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
+    // NEW_BACKGROUND_TAB: Chromium clears ADD_ACTIVE and creates the contents
+    // initially_hidden, so the active index never moves and the window is not
+    // raised. (Falls back to foreground only on an empty strip — see scheduler
+    // window-pinning; an agent POST during a live session always has a
+    // non-empty last-used window, so it stays background.)
+    params.disposition = focus ? WindowOpenDisposition::NEW_FOREGROUND_TAB
+                               : WindowOpenDisposition::NEW_BACKGROUND_TAB;
     Navigate(&params);
     base::DictValue d;
     d.Set("ok", true);
@@ -388,10 +705,36 @@ void AgentGateway::RouteRequest(int connection_id,
     if (params.navigated_or_inserted_contents) {
       TabOwnership* own =
           TabOwnership::GetOrCreate(params.navigated_or_inserted_contents);
-      own->owner = owner ? *owner : agent_id;
-      if (label)
+      std::string effective_owner = owner ? *owner : agent_id;
+      if (!IsScheduledAgentId(agent_id) &&
+          base::StartsWith(effective_owner, kScheduledAgentPrefix)) {
+        effective_owner = agent_id.empty() ? "mcp" : agent_id;
+      }
+      own->owner = effective_owner;
+      // Prefer an explicit body label; otherwise, for chat-owned tabs, derive
+      // the label from the conversation's topic so the per-agent tab group is
+      // titled by what the chat is about (own->owner is "chat:<conv_id>").
+      if (label && !label->empty()) {
         own->label = *label;
+      } else if (base::StartsWith(own->owner, kChatAgentPrefix)) {
+        own->label = LookupConversationTitle(
+            own->owner.substr(sizeof(kChatAgentPrefix) - 1));
+      }
+      if (!effective_task_id.empty()) {
+        own->task_id = effective_task_id;
+      } else {
+        own->task_id.clear();
+      }
+      own->background = !focus;
       d.Set("owner", own->owner);
+      if (IsScheduledTaskTab(own)) {
+        d.Set("task_id", own->task_id);
+        // Scheduled-task tabs are VISIBLE in the strip (under the "Scheduled task
+        // tabs" group) like agent tabs — they still open in the background (no
+        // focus steal: NEW_BACKGROUND_TAB + own->background above), but the user
+        // can see and click them to inspect what a job did. (Previously the row
+        // was force-hidden, which made the group show a count with no visible tab.)
+      }
     }
     std::move(reply).Run(std::move(d));
     return;
@@ -432,6 +775,16 @@ void AgentGateway::RouteRequest(int connection_id,
 
   // POST /tabs/{id}/activate — focus a tab.
   if (parts.size() > 2 && parts[2] == "activate" && info.method == "POST") {
+    // Focus arbitration: an agent may foreground a tab only if it holds the
+    // current grant (set via the user-only POST /focus). The user/UI (no
+    // X-Agent-Id) is always allowed. This is the gate that stops agents from
+    // stealing focus or fighting over the active tab.
+    if (!FocusArbiter::Get()->MayActivate(agent_id)) {
+      base::DictValue err;
+      err.Set("error", "focus denied: another activity owns focus");
+      std::move(reply).Run(std::move(err));
+      return;
+    }
     BrowserApi::ActivateTab(parts[1],
                             base::BindOnce([](decltype(reply) r, base::DictValue d) {
                               std::move(r).Run(std::move(d));
@@ -440,6 +793,13 @@ void AgentGateway::RouteRequest(int connection_id,
   }
   // POST /tabs/{id}/split {"layout": "side_by_side"|"stacked"}
   if (parts.size() > 2 && parts[2] == "split" && info.method == "POST") {
+    // Split activates the tab, so it is gated by the same focus arbitration.
+    if (!FocusArbiter::Get()->MayActivate(agent_id)) {
+      base::DictValue err;
+      err.Set("error", "focus denied: another activity owns focus");
+      std::move(reply).Run(std::move(err));
+      return;
+    }
     auto body = base::JSONReader::ReadDict(info.data, base::JSON_PARSE_RFC);
     const std::string* layout = body ? body->FindString("layout") : nullptr;
     BrowserApi::SplitTab(parts[1], layout ? *layout : "side_by_side",
@@ -499,13 +859,30 @@ void AgentGateway::RouteRequest(int connection_id,
     return v ? *v : std::string();
   };
 
+  std::string header_task_id;
+  if (auto it = info.headers.find("x-task-id"); it != info.headers.end())
+    header_task_id = it->second;
+
   // Per-tab metrics + identity: the HUD on this tab reflects only the agent
   // driving THIS tab, not a global blend across agents.
   TabOwnership* tm = TabOwnership::GetOrCreate(wc);
+  if (!agent_id.empty()) {
+    base::DictValue err;
+    if (!AgentMayUseTab(agent_id, tm, header_task_id, &err)) {
+      std::move(done).Run(std::move(err));
+      return;
+    }
+    if (tm->owner.empty()) {
+      tm->owner = agent_id;
+    }
+    const std::string resolved_task_id =
+        ResolveTaskIdForAgent(agent_id, std::string(), header_task_id);
+    if (tm->task_id.empty() && !resolved_task_id.empty()) {
+      tm->task_id = resolved_task_id;
+    }
+  }
   tm->requests++;
   tm->bytes_in += static_cast<int64_t>(info.data.size());
-  if (!agent_id.empty() && tm->owner.empty())
-    tm->owner = agent_id;
   if (auto it = info.headers.find("x-agent-model"); it != info.headers.end())
     tm->model = it->second;
   tm->last_action = verb;

@@ -14,6 +14,13 @@ class WebContents;
 
 namespace agent_gateway {
 
+class TabOwnership;
+
+// True when a tab belongs to a scheduled background task (not ad-hoc agent chat).
+// Requires both task_id and owner "schedule:<job_id>" so leaked task_id alone
+// cannot pull normal chat tabs into the scheduled group.
+bool IsScheduledTaskTab(const TabOwnership* own);
+
 // Per-tab metadata that an agent can own. Stored as user-data on the
 // WebContents, so it travels with the tab for the tab's whole lifetime and
 // survives tab reordering, unlike the session_id:index handle. This is how
@@ -37,6 +44,18 @@ class TabOwnership : public base::SupportsUserData::Data {
   // The model driving this tab (e.g. "Grok"), from X-Agent-Model.
   std::string model;
   std::string last_action;
+  // Which scheduled/user task owns this tab ("" == ad-hoc). Lets GET /tabs
+  // answer "which tabs belong to task X" and the UI offer per-task focus.
+  std::string task_id;
+  // True if this tab was opened as a background agent tab (inactive/hidden);
+  // false for user/foreground tabs. Agent tabs default to background so they
+  // never steal the user's focus.
+  bool background = false;
+
+  // Marks a tab opened from the sidebar Bookmarks group. Non-zero ==
+  // member of the native "Bookmarks" tab group; used for grouping + the
+  // sidebar's active-row highlight.
+  int64_t bookmark_node_id = 0;
 
   // Per-tab activity counters — what the in-tab HUD shows, so each tab
   // reflects only the agent controlling it (not a global blend).

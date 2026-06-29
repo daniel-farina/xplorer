@@ -1,4 +1,4 @@
-/** First-run welcome screen for Xplorer. */
+/** First-run welcome screen for Xplor. */
 
 const getStartedBtn = document.getElementById('get-started');
 

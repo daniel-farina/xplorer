@@ -46,6 +46,16 @@ void RecordGatewayLog(const std::string& level,
 
 base::DictValue LoadCompanionSessions();
 void SaveCompanionSessions(const base::DictValue& data);
+
+// True if a grok run for conversation |conv_id| is currently active (registered
+// in the gateway's ActiveRuns map). Used by the scheduler's manual run-now path
+// to apply the same 409 "conversation is busy" guard the message handler uses.
+bool IsConversationRunActive(const std::string& conv_id);
+
+// Terminate every in-flight grok subprocess. Called from AgentGateway::Shutdown
+// so the now-CONTINUE_ON_SHUTDOWN grok read loops hit EOF and finish promptly
+// instead of leaving orphaned children + a parked worker thread at shutdown.
+void StopAllActiveRuns();
 std::string ResolveConfiguredModel(const std::string* model_override);
 std::string ResolveAppBuildModel(const std::string* model_override);
 
@@ -59,6 +69,53 @@ void RunGrokAgentStream(
     const std::string& session_id,
     const std::string& model,
     const base::FilePath& cwd);
+
+// Headless run dispatch for the background-task scheduler: runs |message| with
+// |model| and appends the reply to conversation |target_conv_id|, with NO live
+// HTTP connection. Reuses the same machinery as POST /api/conversations/{id}/
+// message (append user msg -> register in ActiveRuns -> blocking RunGrokChat ->
+// SaveChatAssistantReply), including the busy guard. If |target_conv_id| is
+// empty a new conversation is created. The blocking run is posted to a
+// base::ThreadPool {MayBlock, USER_VISIBLE} task, so this returns immediately.
+//
+// |on_done| (optional) is invoked on the ThreadPool task once the run resolves,
+// with the final status string ("ok" | "failed" | "skipped") and the conv_id
+// the run was appended to (newly minted if |target_conv_id| was empty). The
+// scheduler uses it to stamp last_status / last_fire_us back onto the job.
+//
+// |max_concurrent_tabs|, when > 0, is a SOFT cap on how many browser tabs the
+// run should open: we append a one-line instruction to |message| asking the
+// agent to open at most that many tabs. This is NOT hard-enforced — the real
+// grok agent does not attribute the tabs it opens to a particular task, so the
+// gateway cannot count or cap them per run; the cap is only respected to the
+// extent the LLM honors the instruction. <= 0 leaves the message untouched.
+void DispatchScheduledRun(
+    const std::string& job_id,
+    const std::string& job_label,
+    const std::string& message,
+    const std::string& model,
+    const std::string& target_conv_id,
+    int max_concurrent_tabs,
+    base::OnceCallback<void(const std::string& status,
+                            const std::string& conv_id)> on_done);
+
+// Headless app-build dispatch for the scheduler. Like DispatchScheduledRun, but
+// runs a blocking app-build (grok with --cwd <cwd> + the app-build rules — the
+// same command POST /apps/{id}/build/stream runs) and appends the reply to
+// |target_conv_id| (auto-created if empty). The model defaults via
+// ResolveAppBuildModel when |model| is empty. The blocking run is posted to a
+// base::ThreadPool {MayBlock, USER_VISIBLE} task, so this returns immediately.
+// |on_done| (optional) fires on that task with "ok" | "failed" | "skipped" and
+// the conv_id the reply was appended to. Used when a scheduled Job has a cwd.
+void DispatchScheduledAppBuild(
+    const std::string& job_id,
+    const std::string& job_label,
+    const std::string& message,
+    const std::string& model,
+    const std::string& cwd,
+    const std::string& target_conv_id,
+    base::OnceCallback<void(const std::string& status,
+                            const std::string& conv_id)> on_done);
 
 class GrokNative {
  public:

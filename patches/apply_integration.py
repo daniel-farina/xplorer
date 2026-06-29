@@ -54,138 +54,995 @@ def rebrand_grd_strings(path: Path):
     if g.count("Chromium") <= g.count("Chromium Authors"):
         return
     g = g.replace("Chromium Authors", "\x00A\x00")
-    g = g.replace("Chromium", "Xplorer")
+    g = g.replace("Chromium", "Xplor")
     g = g.replace("\x00A\x00", "Chromium Authors")
     path.write_text(g)
     print(f"  rebranded grd: {path.name}")
 
 
-def patch_native_toolbar(src: Path):
-    """SCAFFOLD: native browser-chrome Xplorer pill toolbar.
+def patch_xplorer_settings_access(src: Path):
+    """Xplorer settings in app menu, chrome://settings nav, and command handler."""
+    cmd_ids = src / "chrome/app/chrome_command_ids.h"
+    edit(
+        cmd_ids,
+        "#define IDC_CHROME_ENTERPRISE_RELEASE_NOTES 40305",
+        "#define IDC_CHROME_ENTERPRISE_RELEASE_NOTES 40305\n"
+        "#define IDC_XPLORER_SETTINGS 40306  // XPLORER",
+    )
 
-    Adds an xplorer::XplorerToolbarView strip to top_container_, between the
-    bookmark bar and the contents separator. The new view source lives in
-    src/chrome/browser/ui/views/xplorer/ (copied into the checkout by apply.sh)
-    and is compiled into the existing static_library("ui") target next to
-    bookmark_bar_view.cc. This step only wires the existing-Chromium files.
+    grdp = src / "chrome/app/settings_chromium_strings.grdp"
+    # Self-heal: strip ANY existing IDS_XPLORER_SETTINGS message(s) before adding
+    # one. A plain idempotent insert is defeated when the message TEXT changes
+    # (e.g. "Xplorer settings" -> "Xplor settings"): the "already-present" check
+    # misses the old wording and inserts a second copy, so a build tree that has
+    # an older copy committed in ends up with a grit DuplicateKey. Stripping
+    # first guarantees exactly one regardless of prior wording or tree state.
+    _g = grdp.read_text()
+    _g = re.sub(
+        r'[ \t]*<message name="IDS_XPLORER_SETTINGS"[\s\S]*?</message>\n*',
+        "", _g)
+    grdp.write_text(_g)
+    edit(
+        grdp,
+        "  <!-- About Page -->",
+        '  <message name="IDS_XPLORER_SETTINGS" '
+        'desc="App menu item to open Xplor companion settings" '
+        'translateable="false">\n'
+        "    Xplor settings\n"
+        "  </message>\n\n"
+        "  <!-- About Page -->",
+    )
+
+    app_menu = src / "chrome/browser/ui/toolbar/app_menu_model.cc"
+    edit(
+        app_menu,
+        "  AddItemWithStringIdAndVectorIcon(\n"
+        "      this, IDC_OPTIONS, IDS_SETTINGS,\n"
+        "      features::IsRoundedIconsEnabled() ? kSettingsIcon : kSettingsMenuOldIcon);\n",
+        "  AddItemWithStringIdAndVectorIcon(\n"
+        "      this, IDC_OPTIONS, IDS_SETTINGS,\n"
+        "      features::IsRoundedIconsEnabled() ? kSettingsIcon : kSettingsMenuOldIcon);\n\n"
+        "  // XPLORER: companion settings (bookmarks, models, Grok defaults).\n"
+        "  AddItemWithStringId(IDC_XPLORER_SETTINGS, IDS_XPLORER_SETTINGS);\n",
+    )
+
+    bcc = src / "chrome/browser/ui/browser_command_controller.cc"
+    edit(
+        bcc,
+        '#include "chrome/browser/ui/browser_commands.h"',
+        '#include "chrome/browser/ui/browser_commands.h"\n'
+        '#include "chrome/browser/ui/views/xplorer/xplorer_settings_nav.h"  // XPLORER',
+    )
+    edit(
+        bcc,
+        "    case IDC_OPTIONS:\n"
+        "      ShowSettings(browser_->GetBrowserForOpeningWebUi());\n"
+        "      break;",
+        "    case IDC_OPTIONS:\n"
+        "      ShowSettings(browser_->GetBrowserForOpeningWebUi());\n"
+        "      break;\n"
+        "    case IDC_XPLORER_SETTINGS:  // XPLORER\n"
+        "      xplorer::OpenXplorerSettings(browser_);\n"
+        "      break;",
+    )
+
+    settings_menu = (
+        src / "chrome/browser/resources/settings/settings_menu/settings_menu.html"
+    )
+    edit(
+        settings_menu,
+        '        <a role="menuitem" id="about-menu" href="/help"\n'
+        '            class="cr-nav-menu-item">',
+        '        <a role="menuitem" id="xplorer-settings-link" class="cr-nav-menu-item"\n'
+        '            href="http://127.0.0.1:9334/settings" target="_blank"\n'
+        '            on-click="onLinkClick_"\n'
+        '            title="Bookmarks, models, and Grok defaults">\n'
+        '          <cr-icon icon="settings:settings"></cr-icon>\n'
+        '          <span>Xplor settings</span>\n'
+        '          <div class="cr-icon icon-external"></div>\n'
+        '          <cr-ripple></cr-ripple>\n'
+        '        </a>\n'
+        '        <a role="menuitem" id="about-menu" href="/help"\n'
+        '            class="cr-nav-menu-item">',
+    )
+
+
+def patch_vertical_sidebar(src: Path):
+    """Arc-style sidebar chrome in the vertical tab strip.
+
+    Injects XplorerSidebarChromeView (the "Tabs" section label) at the top of
+    VerticalTabStripRegionView and auto-groups agent-owned tabs.
     """
-    # --- browser_view.h: forward-decl + owned member -----------------------
+    vts_h = src / "chrome/browser/ui/views/frame/vertical_tab_strip_region_view.h"
+    edit(
+        vts_h,
+        "class VerticalTabStripBottomContainer;",
+        "class VerticalTabStripBottomContainer;\n"
+        "namespace xplorer {\n"
+        "class XplorerSidebarChromeView;\n"
+        "}  // namespace xplorer  // XPLORER",
+    )
+    # Scheduled-section forward declaration in its OWN namespace block, spliced
+    # after the chrome view's block. Important: do NOT add a line *inside* the
+    # chrome view's block — that block is the verbatim insertion of the edit
+    # above, and mutating it would break that edit's idempotency guard and cause
+    # it to re-fire (duplicating the block) on the next apply.
+    if "XplorerSidebarScheduledView" not in vts_h.read_text():
+        edit(
+            vts_h,
+            "class XplorerSidebarChromeView;\n"
+            "}  // namespace xplorer  // XPLORER",
+            "class XplorerSidebarChromeView;\n"
+            "}  // namespace xplorer  // XPLORER\n"
+            "namespace xplorer {\n"
+            "class XplorerSidebarScheduledView;\n"
+            "}  // namespace xplorer  // XPLORER",
+        )
+    vts_h_text = vts_h.read_text()
+    if "InstallXplorerSidebarChrome" not in vts_h_text:
+        edit(
+            vts_h,
+            "  VerticalPinnedTabContainerView* GetPinnedTabsContainer();\n"
+            "  VerticalUnpinnedTabContainerView* GetUnpinnedTabsContainer();\n\n"
+            "  VerticalTabStripTopContainer* GetTopContainer() {\n"
+            "    return top_button_container_;\n"
+            "  }",
+            "  VerticalPinnedTabContainerView* GetPinnedTabsContainer();\n"
+            "  VerticalUnpinnedTabContainerView* GetUnpinnedTabsContainer();\n\n"
+            "  // XPLORER: Arc-style sidebar chrome below the top menu bar.\n"
+            "  void InstallXplorerSidebarChrome(\n"
+            "      std::unique_ptr<xplorer::XplorerSidebarChromeView> chrome);\n"
+            "  xplorer::XplorerSidebarChromeView* xplorer_sidebar_chrome() {\n"
+            "    return xplorer_sidebar_chrome_;\n"
+            "  }\n\n"
+            "  VerticalTabStripTopContainer* GetTopContainer() {\n"
+            "    return top_button_container_;\n"
+            "  }",
+        )
+    edit(
+        vts_h,
+        "  bool tab_strip_editable_for_testing_ = true;\n\n"
+        "  raw_ptr<VerticalTabStripTopContainer> top_button_container_ = nullptr;",
+        "  bool tab_strip_editable_for_testing_ = true;\n\n"
+        "  raw_ptr<xplorer::XplorerSidebarChromeView> xplorer_sidebar_chrome_ =\n"
+        "      nullptr;  // XPLORER\n"
+        "  raw_ptr<VerticalTabStripTopContainer> top_button_container_ = nullptr;",
+    )
+    # Scheduled-section installer + accessor, mirroring the chrome view.
+    if "InstallXplorerSidebarScheduled" not in vts_h.read_text():
+        edit(
+            vts_h,
+            "  void InstallXplorerSidebarChrome(\n"
+            "      std::unique_ptr<xplorer::XplorerSidebarChromeView> chrome);\n"
+            "  xplorer::XplorerSidebarChromeView* xplorer_sidebar_chrome() {\n"
+            "    return xplorer_sidebar_chrome_;\n"
+            "  }",
+            "  void InstallXplorerSidebarChrome(\n"
+            "      std::unique_ptr<xplorer::XplorerSidebarChromeView> chrome);\n"
+            "  xplorer::XplorerSidebarChromeView* xplorer_sidebar_chrome() {\n"
+            "    return xplorer_sidebar_chrome_;\n"
+            "  }\n"
+            "  // XPLORER: native \"Scheduled\" section, BELOW the tab list.\n"
+            "  void InstallXplorerSidebarScheduled(\n"
+            "      std::unique_ptr<xplorer::XplorerSidebarScheduledView> scheduled);\n"
+            "  xplorer::XplorerSidebarScheduledView* xplorer_sidebar_scheduled() {\n"
+            "    return xplorer_sidebar_scheduled_;\n"
+            "  }",
+        )
+    # Scheduled-section member, appended AFTER the chrome view member's full
+    # block. The guard checks the member-declaration text specifically (the
+    # accessor above already put the bare name "xplorer_sidebar_scheduled_" into
+    # the file). We RESTATE the chrome member block verbatim and add the
+    # scheduled member after its last line, so the chrome member edit's exact
+    # insertion stays present contiguously and its idempotency guard keeps
+    # passing (splitting that block would make it re-fire and duplicate).
+    if ("raw_ptr<xplorer::XplorerSidebarScheduledView> xplorer_sidebar_scheduled_"
+            not in vts_h.read_text()):
+        edit(
+            vts_h,
+            "  raw_ptr<xplorer::XplorerSidebarChromeView> xplorer_sidebar_chrome_ =\n"
+            "      nullptr;  // XPLORER\n"
+            "  raw_ptr<VerticalTabStripTopContainer> top_button_container_ = nullptr;",
+            "  raw_ptr<xplorer::XplorerSidebarChromeView> xplorer_sidebar_chrome_ =\n"
+            "      nullptr;  // XPLORER\n"
+            "  raw_ptr<VerticalTabStripTopContainer> top_button_container_ = nullptr;\n"
+            "  raw_ptr<xplorer::XplorerSidebarScheduledView> xplorer_sidebar_scheduled_ =\n"
+            "      nullptr;  // XPLORER",
+        )
+
+    vts_cc = src / "chrome/browser/ui/views/frame/vertical_tab_strip_region_view.cc"
+    edit(
+        vts_cc,
+        '#include "chrome/browser/ui/views/frame/browser_view.h"',
+        '#include "chrome/browser/ui/views/frame/browser_view.h"\n'
+        '#include "chrome/browser/ui/views/xplorer/xplorer_sidebar_chrome_view.h"'
+        "  // XPLORER",
+    )
+    if "xplorer_sidebar_scheduled_view.h" not in vts_cc.read_text():
+        edit(
+            vts_cc,
+            '#include "chrome/browser/ui/views/xplorer/xplorer_sidebar_chrome_view.h"'
+            "  // XPLORER",
+            '#include "chrome/browser/ui/views/xplorer/xplorer_sidebar_chrome_view.h"'
+            "  // XPLORER\n"
+            '#include "chrome/browser/ui/views/xplorer/xplorer_sidebar_scheduled_view.h"'
+            "  // XPLORER",
+        )
+    vts_cc_text = vts_cc.read_text()
+    if "InstallXplorerSidebarChrome" not in vts_cc_text:
+        edit(
+            vts_cc,
+            "VerticalTabStripRegionView::~VerticalTabStripRegionView() {",
+            "void VerticalTabStripRegionView::InstallXplorerSidebarChrome(\n"
+            "    std::unique_ptr<xplorer::XplorerSidebarChromeView> chrome) {\n"
+            "  // Below the collapse/tab-search top bar, not above it.\n"
+            "  size_t insert_index = 0;\n"
+            "  if (top_button_separator_) {\n"
+            "    insert_index = GetIndexOf(top_button_separator_).value() + 1;\n"
+            "  } else if (top_button_container_) {\n"
+            "    insert_index = GetIndexOf(top_button_container_).value() + 1;\n"
+            "  }\n"
+            "  xplorer_sidebar_chrome_ = AddChildViewAt(std::move(chrome), insert_index);\n"
+            "  const int region_horizontal_padding =\n"
+            "      GetLayoutConstant(LayoutConstant::kVerticalTabStripHorizontalPadding);\n"
+            "  xplorer_sidebar_chrome_->SetProperty(\n"
+            "      views::kMarginsKey, gfx::Insets::VH(0, region_horizontal_padding));\n"
+            "  xplorer_sidebar_chrome_->SetProperty(\n"
+            "      views::kFlexBehaviorKey,\n"
+            "      views::FlexSpecification(views::MinimumFlexSizeRule::kPreferred,\n"
+            "                               views::MaximumFlexSizeRule::kPreferred));\n"
+            "}\n\n"
+            "VerticalTabStripRegionView::~VerticalTabStripRegionView() {",
+        )
+    if "tab_strip_index" not in vts_cc.read_text():
+        edit(
+            vts_cc,
+            "  std::optional<size_t> separator_index = GetIndexOf(top_button_separator_);\n"
+            "  CHECK(separator_index.has_value());\n"
+            "  ReorderChildView(tab_strip_view_, separator_index.value() + 1);",
+            "  std::optional<size_t> separator_index = GetIndexOf(top_button_separator_);\n"
+            "  CHECK(separator_index.has_value());\n"
+            "  size_t tab_strip_index = separator_index.value() + 1;\n"
+            "  if (xplorer_sidebar_chrome_) {\n"
+            "    tab_strip_index = GetIndexOf(xplorer_sidebar_chrome_).value() + 1;\n"
+            "  }\n"
+            "  ReorderChildView(tab_strip_view_, tab_strip_index);  // XPLORER",
+        )
+    # InstallXplorerSidebarScheduled: append the "Scheduled" section below the tab
+    # list. At install time tab_strip_view_ does not exist yet (the tab strip is
+    # created lazily via InitializeTabStrip()/SetTabStripView, well after this
+    # runs), so just append it for now; SetTabStripView re-anchors it directly
+    # after tab_strip_view_ (see the reorder below). That ordering puts it between
+    # the scrollable tab list and the bottom new-tab container.
+    if "InstallXplorerSidebarScheduled" not in vts_cc.read_text():
+        edit(
+            vts_cc,
+            "VerticalTabStripRegionView::~VerticalTabStripRegionView() {",
+            "void VerticalTabStripRegionView::InstallXplorerSidebarScheduled(\n"
+            "    std::unique_ptr<xplorer::XplorerSidebarScheduledView> scheduled) {\n"
+            "  // Append for now; SetTabStripView() reorders it to sit just below\n"
+            "  // tab_strip_view_ once the tab strip exists.\n"
+            "  xplorer_sidebar_scheduled_ = AddChildView(std::move(scheduled));\n"
+            "  const int region_horizontal_padding =\n"
+            "      GetLayoutConstant(LayoutConstant::kVerticalTabStripHorizontalPadding);\n"
+            "  xplorer_sidebar_scheduled_->SetProperty(\n"
+            "      views::kMarginsKey, gfx::Insets::VH(0, region_horizontal_padding));\n"
+            "  xplorer_sidebar_scheduled_->SetProperty(\n"
+            "      views::kFlexBehaviorKey,\n"
+            "      views::FlexSpecification(views::MinimumFlexSizeRule::kPreferred,\n"
+            "                               views::MaximumFlexSizeRule::kPreferred));\n"
+            "  if (tab_strip_view_) {\n"
+            "    ReorderChildView(xplorer_sidebar_scheduled_,\n"
+            "                     GetIndexOf(tab_strip_view_).value() + 1);\n"
+            "  }\n"
+            "}\n\n"
+            "VerticalTabStripRegionView::~VerticalTabStripRegionView() {",
+        )
+    # Keep the Scheduled section directly below the tab list whenever the tab
+    # strip view is (re)installed. Anchor on the SetTabStripView() tail (the
+    # collapse-state call + return) so this is independent of whether the
+    # tab_strip_index reorder line carries a "// XPLORER" suffix (it does on a
+    # fresh apply, but may not on a tree patched by an earlier script).
+    if "if (xplorer_sidebar_scheduled_) {  // XPLORER" not in vts_cc.read_text():
+        edit(
+            vts_cc,
+            "  OnCollapseStateChanged(state_controller_->GetCollapseState());\n\n"
+            "  return tab_strip_view_;",
+            "  if (xplorer_sidebar_scheduled_) {  // XPLORER\n"
+            "    ReorderChildView(xplorer_sidebar_scheduled_,\n"
+            "                     GetIndexOf(tab_strip_view_).value() + 1);\n"
+            "  }\n\n"
+            "  OnCollapseStateChanged(state_controller_->GetCollapseState());\n\n"
+            "  return tab_strip_view_;",
+        )
+
     browser_view_h = src / "chrome/browser/ui/views/frame/browser_view.h"
     edit(
         browser_view_h,
         "class BookmarkBarView;",
         "class BookmarkBarView;\n"
         "namespace xplorer {\n"
-        "class XplorerToolbarView;\n"
+        "class AgentTabGrouper;\n"
+        "class XplorerSidebarChromeView;\n"
         "}  // namespace xplorer  // XPLORER",
     )
     edit(
         browser_view_h,
+        "  TopContainerView* top_container() { return top_container_; }",
+        "  TopContainerView* top_container() { return top_container_; }\n\n"
+        "  // XPLORER: Arc-style vertical sidebar chrome accessors.\n"
+        "  VerticalTabStripRegionView* vertical_tab_strip_region_view() {\n"
+        "    return vertical_tab_strip_region_view_;\n"
+        "  }\n"
+        "  xplorer::XplorerSidebarChromeView* xplorer_sidebar_chrome() {\n"
+        "    return xplorer_sidebar_chrome_;\n"
+        "  }",
+    )
+    edit(
+        browser_view_h,
         "  raw_ptr<BookmarkBarView> bookmark_bar_view_ = nullptr;",
-        "  raw_ptr<BookmarkBarView> bookmark_bar_view_ = nullptr;\n\n"
-        "  // XPLORER: native pill toolbar; always parented to top_container_.\n"
-        "  raw_ptr<xplorer::XplorerToolbarView> xplorer_toolbar_ = nullptr;",
+        "  raw_ptr<BookmarkBarView> bookmark_bar_view_ = nullptr;\n"
+        "  raw_ptr<xplorer::XplorerSidebarChromeView> xplorer_sidebar_chrome_ =\n"
+        "      nullptr;  // XPLORER\n"
+        "  std::unique_ptr<xplorer::AgentTabGrouper> agent_tab_grouper_;  // XPLORER",
     )
 
-    # --- browser_view.cc: create + parent, register with layout, include ---
     browser_view_cc = src / "chrome/browser/ui/views/frame/browser_view.cc"
     edit(
         browser_view_cc,
         '#include "chrome/browser/ui/views/bookmarks/bookmark_bar_view.h"',
         '#include "chrome/browser/ui/views/bookmarks/bookmark_bar_view.h"\n'
-        '#include "chrome/browser/ui/views/xplorer/xplorer_toolbar_view.h"'
-        "  // XPLORER",
+        '#include "chrome/browser/ui/views/xplorer/xplorer_agent_tab_grouper.h"  // XPLORER\n'
+        '#include "chrome/browser/ui/views/xplorer/xplorer_sidebar_chrome_view.h"  // XPLORER',
     )
+    # Append the scheduled-view include AFTER the chrome include block's last
+    # line (restated), not inside it: the chrome include edit above has no outer
+    # name-guard and relies on edit()'s verbatim-presence check, so splitting its
+    # block would duplicate the whole block on the next apply.
+    if "xplorer_sidebar_scheduled_view.h" not in browser_view_cc.read_text():
+        edit(
+            browser_view_cc,
+            '#include "chrome/browser/ui/views/xplorer/xplorer_sidebar_chrome_view.h"  // XPLORER',
+            '#include "chrome/browser/ui/views/xplorer/xplorer_sidebar_chrome_view.h"  // XPLORER\n'
+            '#include "chrome/browser/ui/views/xplorer/xplorer_sidebar_scheduled_view.h"  // XPLORER',
+        )
     edit(
         browser_view_cc,
-        "  toolbar_ = top_container_->AddChildView(\n"
-        "      std::make_unique<ToolbarView>(browser_.get(), this));\n",
-        "  toolbar_ = top_container_->AddChildView(\n"
-        "      std::make_unique<ToolbarView>(browser_.get(), this));\n\n"
-        "  // XPLORER: native pill toolbar, owned by top_container_, always\n"
-        "  // present (parented eagerly, between bookmarks and the separator).\n"
-        "  xplorer_toolbar_ = top_container_->AddChildView(\n"
-        "      std::make_unique<xplorer::XplorerToolbarView>(\n"
-        "          browser_.get(), browser_->profile()));\n",
+        "    vertical_tab_strip_region_view_ =\n"
+        "        AddChildView(std::move(vertical_tab_strip_container));",
+        "    vertical_tab_strip_region_view_ =\n"
+        "        AddChildView(std::move(vertical_tab_strip_container));\n\n"
+        "    // XPLORER: Arc-style sidebar chrome (\"Tabs\" section label)\n"
+        "    // + auto-group agent-owned tabs.\n"
+        "    {\n"
+        "      auto sidebar_chrome =\n"
+        "          std::make_unique<xplorer::XplorerSidebarChromeView>(\n"
+        "              browser_.get(), browser_->profile());\n"
+        "      xplorer_sidebar_chrome_ = sidebar_chrome.get();\n"
+        "      vertical_tab_strip_region_view_->InstallXplorerSidebarChrome(\n"
+        "          std::move(sidebar_chrome));\n"
+        "      agent_tab_grouper_ = std::make_unique<xplorer::AgentTabGrouper>(\n"
+        "          browser_->GetTabStripModel());\n"
+        "    }",
     )
-    edit(
-        browser_view_cc,
-        "  layout_views.top_container_separator = top_container_separator_;",
-        "  layout_views.top_container_separator = top_container_separator_;\n"
-        "  layout_views.xplorer_toolbar = xplorer_toolbar_;  // XPLORER",
-    )
+    # XPLORER: native "Scheduled" section, installed AFTER the chrome view so it
+    # renders below the tab list (sidebar order: Bookmarks -> Tabs -> Scheduled).
+    # Spliced AFTER the chrome instantiation block's closing brace (restated
+    # verbatim) rather than inside it: the chrome instantiation edit above has no
+    # outer name-guard and relies on edit()'s verbatim-presence check, so
+    # mutating its block would make it re-fire and duplicate on the next apply.
+    # InstallXplorerSidebarScheduled only needs the region view member, so a
+    # standalone block after the chrome block is fine.
+    if "InstallXplorerSidebarScheduled" not in browser_view_cc.read_text():
+        edit(
+            browser_view_cc,
+            "      agent_tab_grouper_ = std::make_unique<xplorer::AgentTabGrouper>(\n"
+            "          browser_->GetTabStripModel());\n"
+            "    }",
+            "      agent_tab_grouper_ = std::make_unique<xplorer::AgentTabGrouper>(\n"
+            "          browser_->GetTabStripModel());\n"
+            "    }\n"
+            "    // XPLORER: native \"Scheduled\" section below the tab list.\n"
+            "    vertical_tab_strip_region_view_->InstallXplorerSidebarScheduled(\n"
+            "        std::make_unique<xplorer::XplorerSidebarScheduledView>(\n"
+            "            browser_.get()));",
+        )
 
-    # --- browser_view_layout.h: forward-decl + struct field ----------------
-    layout_h = src / "chrome/browser/ui/views/frame/layout/browser_view_layout.h"
-    edit(
-        layout_h,
-        "class BookmarkBarView;",
-        "class BookmarkBarView;\n"
-        "namespace xplorer {\n"
-        "class XplorerToolbarView;\n"
-        "}  // namespace xplorer  // XPLORER",
-    )
-    edit(
-        layout_h,
-        "  raw_ptr<views::View> top_container_separator = nullptr;",
-        "  raw_ptr<views::View> top_container_separator = nullptr;\n\n"
-        "  // XPLORER: native pill toolbar strip (top_container child).\n"
-        "  raw_ptr<xplorer::XplorerToolbarView> xplorer_toolbar = nullptr;",
-    )
-
-    # --- browser_view_tabbed_layout_impl.cc: layout block + include --------
-    layout_impl = (src / "chrome/browser/ui/views/frame/layout/"
-                   "browser_view_tabbed_layout_impl.cc")
-    edit(
-        layout_impl,
-        '#include "chrome/browser/ui/views/bookmarks/bookmark_bar_view.h"',
-        '#include "chrome/browser/ui/views/bookmarks/bookmark_bar_view.h"\n'
-        '#include "chrome/browser/ui/views/xplorer/xplorer_toolbar_view.h"'
-        "  // XPLORER",
-    )
-    edit(
-        layout_impl,
-        "  // Maybe show the separator in the top container.\n"
-        "  if (IsParentedTo(views().top_container_separator, "
-        "views().top_container)) {",
-        "  // XPLORER: native Xplorer pill toolbar, below bookmarks, above the\n"
-        "  // contents separator. Scaffold: always visible.\n"
-        "  if (views().xplorer_toolbar &&\n"
-        "      IsParentedTo(views().xplorer_toolbar, views().top_container)) {\n"
-        "    const bool xplorer_visible = true;\n"
-        "    const gfx::Rect xplorer_bounds(\n"
-        "        params.visual_client_area.x(), params.visual_client_area.y(),\n"
-        "        params.visual_client_area.width(),\n"
-        "        xplorer_visible\n"
-        "            ? views().xplorer_toolbar->GetPreferredSize().height()\n"
-        "            : 0);\n"
-        "    layout.AddChild(views().xplorer_toolbar, xplorer_bounds,\n"
-        "                    xplorer_visible);\n"
-        "    params.SetTop(xplorer_bounds.bottom());\n"
-        "  }\n\n"
-        "  // Maybe show the separator in the top container.\n"
-        "  if (IsParentedTo(views().top_container_separator, "
-        "views().top_container)) {",
-    )
-
-    # --- BUILD.gn: compile the new source into the static_library("ui")
-    # target next to bookmark_bar_view.cc (avoids a new GN target and the
-    # grok_companion <-> //chrome/browser/ui dependency cycle). Symbols resolve
-    # at the final chrome/browser link, exactly like the existing grok patch
-    # into toolbar_view.cc.
     browser_ui_gn = src / "chrome/browser/ui/BUILD.gn"
+    # Order matters: the chrome-view block below adds the
+    # xplorer_agent_tab_grouper.h line, which the scheduled_task_tabs block
+    # anchors on. On a clean chromium reset that anchor does not exist until
+    # this block adds it, so the chrome-view block MUST run first. Each block
+    # keeps its own verbatim-presence guard for idempotency.
+    observer_cc = '      "views/xplorer/xplorer_bookmark_tab_observer.cc",  # XPLORER\n'
+    observer_h = '      "views/xplorer/xplorer_bookmark_tab_observer.h",  # XPLORER\n'
+    gn_text = browser_ui_gn.read_text()
+    if observer_cc in gn_text or observer_h in gn_text:
+        gn_text = gn_text.replace(observer_cc, "").replace(observer_h, "")
+        browser_ui_gn.write_text(gn_text)
+        print(f"  removed bookmark_tab_observer from: {browser_ui_gn}")
+
+    if "xplorer_sidebar_chrome_view.cc" not in browser_ui_gn.read_text():
+        edit(
+            browser_ui_gn,
+            '      "views/bookmarks/bookmark_bar_view.cc",\n'
+            '      "views/bookmarks/bookmark_bar_view.h",',
+            '      "views/bookmarks/bookmark_bar_view.cc",\n'
+            '      "views/bookmarks/bookmark_bar_view.h",\n'
+            '      "views/xplorer/xplorer_sidebar_chrome_view.cc",  # XPLORER\n'
+            '      "views/xplorer/xplorer_sidebar_chrome_view.h",  # XPLORER\n'
+            '      "views/xplorer/xplorer_sidebar_row_button.cc",  # XPLORER\n'
+            '      "views/xplorer/xplorer_sidebar_row_button.h",  # XPLORER\n'
+            '      "views/xplorer/xplorer_sidebar_section_label.cc",  # XPLORER\n'
+            '      "views/xplorer/xplorer_sidebar_section_label.h",  # XPLORER\n'
+            '      "views/xplorer/xplorer_agent_tab_grouper.cc",  # XPLORER\n'
+            '      "views/xplorer/xplorer_agent_tab_grouper.h",  # XPLORER\n'
+            '      "views/xplorer/xplorer_settings_nav.cc",  # XPLORER\n'
+            '      "views/xplorer/xplorer_settings_nav.h",  # XPLORER\n'
+            '      "views/xplorer/xplorer_sidebar_scheduled_view.cc",  # XPLORER\n'
+            '      "views/xplorer/xplorer_sidebar_scheduled_view.h",  # XPLORER',
+        )
+
+    if "xplorer_scheduled_task_tabs.cc" not in browser_ui_gn.read_text():
+        edit(
+            browser_ui_gn,
+            '      "views/xplorer/xplorer_agent_tab_grouper.h",  # XPLORER\n',
+            '      "views/xplorer/xplorer_agent_tab_grouper.h",  # XPLORER\n'
+            '      "views/xplorer/xplorer_scheduled_task_tabs.cc",  # XPLORER\n'
+            '      "views/xplorer/xplorer_scheduled_task_tabs.h",  # XPLORER\n',
+        )
+
+    # XPLORER: Arc-style bookmark tabs hide their row from the vertical tab list.
+    # Hiding is STATEFUL: a tab handle stays in `hidden_rows_` so it can be
+    # re-asserted at the relayout boundary (OnAnimationEnded in the unpinned
+    # container), mirroring how collapsed tab groups re-assert visibility. A
+    # one-shot SetVisible(false) is otherwise clobbered when the insert
+    # animation's TabCollectionAnimatingLayoutManager forces the new row back
+    # visible for the duration of the animation.
+    vts_view_h = (src / "chrome/browser/ui/views/tabs/vertical/"
+                  "vertical_tab_strip_view.h")
+    vts_view_h_text = vts_view_h.read_text()
+    if "SetTabRowVisible" not in vts_view_h_text:
+        # flat_set for the persistent set of hidden tab-row handles.
+        edit(
+            vts_view_h,
+            '#include "base/memory/raw_ptr.h"',
+            '#include "base/containers/flat_set.h"  // XPLORER\n'
+            '#include "base/memory/raw_ptr.h"',
+        )
+        # Public API: SetTabRowVisible + ReassertHiddenRows.
+        edit(
+            vts_view_h,
+            "  void OnTabChanged(const tabs::TabInterface* active_tab);\n\n"
+            "  void RecordMousePressedInTab();",
+            "  void OnTabChanged(const tabs::TabInterface* active_tab);\n\n"
+            "  // XPLORER: hide/show a tab row (Arc-style sidebar bookmark tabs).\n"
+            "  // Hiding is stateful so it survives insert + activate + the insert\n"
+            "  // animation; ReassertHiddenRows() re-applies SetVisible(false) at\n"
+            "  // the relayout boundary (the unpinned container's OnAnimationEnded).\n"
+            "  void SetTabRowVisible(const tabs::TabHandle& handle, bool visible);\n"
+            "  void ReassertHiddenRows();\n\n"
+            "  void RecordMousePressedInTab();",
+        )
+        # Private member: the persistent set of hidden tab-row handles.
+        edit(
+            vts_view_h,
+            "  bool is_collapsed_ = false;",
+            "  bool is_collapsed_ = false;\n\n"
+            "  // XPLORER: handles of tab rows hidden from the strip. Kept so the\n"
+            "  // hidden state can be re-asserted after the insert animation, which\n"
+            "  // would otherwise force a freshly-inserted row back to visible.\n"
+            "  base::flat_set<tabs::TabHandle> hidden_rows_;",
+        )
+    vts_view_cc = (src / "chrome/browser/ui/views/tabs/vertical/"
+                   "vertical_tab_strip_view.cc")
+    if "VerticalTabStripView::SetTabRowVisible" not in vts_view_cc.read_text():
+        edit(
+            vts_view_cc,
+            "BEGIN_METADATA(VerticalTabStripView)",
+            "void VerticalTabStripView::SetTabRowVisible(\n"
+            "    const tabs::TabHandle& handle,\n"
+            "    bool visible) {\n"
+            "  // Track the hidden state so it can be re-asserted after the insert\n"
+            "  // animation (see ReassertHiddenRows / the unpinned container's\n"
+            "  // OnAnimationEnded).\n"
+            "  if (visible) {\n"
+            "    hidden_rows_.erase(handle);\n"
+            "  } else {\n"
+            "    hidden_rows_.insert(handle);\n"
+            "  }\n"
+            "  if (!collection_node_) {\n"
+            "    return;\n"
+            "  }\n"
+            "  TabCollectionNode* node = collection_node_->GetNodeForHandle(handle);\n"
+            "  if (!node || !node->view()) {\n"
+            "    return;\n"
+            "  }\n"
+            "  node->view()->SetVisible(visible);\n"
+            "  InvalidateLayout();\n"
+            "}\n\n"
+            "void VerticalTabStripView::ReassertHiddenRows() {\n"
+            "  if (hidden_rows_.empty() || !collection_node_) {\n"
+            "    return;\n"
+            "  }\n"
+            "  // Re-apply SetVisible(false) for every still-hidden row, dropping\n"
+            "  // handles whose node/view has gone away. The next\n"
+            "  // CalculateProposedLayout then reads GetVisible()==false and the row\n"
+            "  // stays hidden.\n"
+            "  for (auto it = hidden_rows_.begin(); it != hidden_rows_.end();) {\n"
+            "    TabCollectionNode* node = collection_node_->GetNodeForHandle(*it);\n"
+            "    if (!node || !node->view()) {\n"
+            "      it = hidden_rows_.erase(it);\n"
+            "      continue;\n"
+            "    }\n"
+            "    node->view()->SetVisible(false);\n"
+            "    // XPLORER: a regroup reparents the row into a VerticalTabGroupView\n"
+            "    // and leaves a stale opacity layer from the move-fade; undo it so\n"
+            "    // the row isn't a transparent ghost when re-shown by a later layout.\n"
+            "    if (node->view()->layer()) {\n"
+            "      node->view()->layer()->SetOpacity(1.0f);\n"
+            "    }\n"
+            "    ++it;\n"
+            "  }\n"
+            "}\n\n"
+            "BEGIN_METADATA(VerticalTabStripView)",
+        )
+
+    # XPLORER: re-assert hidden bookmark-tab rows at the relayout boundary.
+    # The unpinned container is a TabCollectionAnimatingLayoutManager::Delegate;
+    # overriding OnAnimationEnded() lets us re-apply SetVisible(false) right
+    # after the insert animation ends (mirrors VerticalTabGroupView, which
+    # re-asserts collapse there). Access the strip via the existing
+    # GetVerticalTabStripView() ancestry helper — no new member, no xplorer dep.
+    vutc_view_h = (src / "chrome/browser/ui/views/tabs/vertical/"
+                   "vertical_unpinned_tab_container_view.h")
+    if "OnAnimationEnded" not in vutc_view_h.read_text():
+        edit(
+            vutc_view_h,
+            "  bool ShouldAnimateOpacityForAddAndRemove(\n"
+            "      const views::View& child_view) const override;",
+            "  bool ShouldAnimateOpacityForAddAndRemove(\n"
+            "      const views::View& child_view) const override;\n"
+            "  // XPLORER: re-assert hidden bookmark-tab rows once the insert/move\n"
+            "  // animation settles, so the row stays hidden from the strip.\n"
+            "  void OnAnimationEnded() override;",
+        )
+    vutc_view_cc = (src / "chrome/browser/ui/views/tabs/vertical/"
+                    "vertical_unpinned_tab_container_view.cc")
+    vutc_cc_text = vutc_view_cc.read_text()
+    if "VerticalUnpinnedTabContainerView::OnAnimationEnded" not in vutc_cc_text:
+        edit(
+            vutc_view_cc,
+            '#include "chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_controller.h"',
+            '#include "chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_controller.h"\n'
+            '#include "chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_utils.h"  // XPLORER\n'
+            '#include "chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_view.h"  // XPLORER',
+        )
+        edit(
+            vutc_view_cc,
+            "BEGIN_METADATA(VerticalUnpinnedTabContainerView)",
+            "// XPLORER: re-apply the hidden state of bookmark-tab rows after the\n"
+            "// animating layout manager finishes. The insert animation forces a\n"
+            "// freshly-added row back to visible for its duration; re-asserting\n"
+            "// here makes the hidden state durable (the next layout reads\n"
+            "// GetVisible()==false and the row persists hidden).\n"
+            "void VerticalUnpinnedTabContainerView::OnAnimationEnded() {\n"
+            "  if (VerticalTabStripView* strip = GetVerticalTabStripView(this)) {\n"
+            "    strip->ReassertHiddenRows();\n"
+            "  }\n"
+            "}\n\n"
+            "BEGIN_METADATA(VerticalUnpinnedTabContainerView)",
+        )
+
+    # XPLORER: re-assert hidden rows at the GROUP-view relayout boundary too.
+    # When the grouper regroups a hidden scheduled-task / bookmark row, the row is
+    # reparented INTO a VerticalTabGroupView: DetachChildView force-shows it
+    # (SetVisible(true)) and the reparent move-fade leaves a stale opacity layer.
+    # The unpinned container's OnAnimationEnded never fires for that intra-group
+    # move, so the row would otherwise stay half-visible with transparent title
+    # text. Re-asserting from the group view's own OnAnimationEnded re-hides it.
+    # The group-view .cc already includes vertical_tab_strip_utils.h (for
+    # GetVerticalTabStripView) + vertical_tab_strip_view.h; add them only if a
+    # future upstream drops them.
+    vtg_view_h = (src / "chrome/browser/ui/views/tabs/vertical/"
+                  "vertical_tab_group_view.h")
+    if "void OnAnimationEnded() override;" not in vtg_view_h.read_text():
+        sys.exit("ANCHOR NOT FOUND: VerticalTabGroupView::OnAnimationEnded "
+                 "override decl missing — upstream moved; update apply_integration.py")
+    vtg_view_cc = (src / "chrome/browser/ui/views/tabs/vertical/"
+                   "vertical_tab_group_view.cc")
+    vtg_cc_text = vtg_view_cc.read_text()
+    if ('#include "chrome/browser/ui/views/tabs/vertical/'
+            'vertical_tab_strip_utils.h"') not in vtg_cc_text:
+        edit(
+            vtg_view_cc,
+            '#include "chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_controller.h"',
+            '#include "chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_controller.h"\n'
+            '#include "chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_utils.h"  // XPLORER',
+        )
+    if ('#include "chrome/browser/ui/views/tabs/vertical/'
+            'vertical_tab_strip_view.h"') not in vtg_cc_text:
+        edit(
+            vtg_view_cc,
+            '#include "chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_utils.h"',
+            '#include "chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_utils.h"\n'
+            '#include "chrome/browser/ui/views/tabs/vertical/vertical_tab_strip_view.h"  // XPLORER',
+        )
+    if "strip->ReassertHiddenRows();" not in vtg_cc_text:
+        edit(
+            vtg_view_cc,
+            "void VerticalTabGroupView::OnAnimationEnded() {\n"
+            "  // For collapsed tab groups update child visibility only once animations have\n"
+            "  // completed. This allows tabs to remain visible as the group animates closed.\n"
+            "  if (tab_group_visual_data_.is_collapsed()) {\n"
+            "    UpdateChildVisibilityForCollapseState(true);\n"
+            "  }\n"
+            "}",
+            "void VerticalTabGroupView::OnAnimationEnded() {\n"
+            "  // XPLORER: a scheduled-task / bookmark row reparented INTO this group is\n"
+            "  // force-shown by DetachChildView and given an opacity layer by the reparent\n"
+            "  // move-fade; re-assert its hidden state (the unpinned container's\n"
+            "  // OnAnimationEnded never fires for an intra-group move).\n"
+            "  if (VerticalTabStripView* strip = GetVerticalTabStripView(this)) {\n"
+            "    strip->ReassertHiddenRows();\n"
+            "  }\n"
+            "  // For collapsed tab groups update child visibility only once animations have\n"
+            "  // completed. This allows tabs to remain visible as the group animates closed.\n"
+            "  if (tab_group_visual_data_.is_collapsed()) {\n"
+            "    UpdateChildVisibilityForCollapseState(true);\n"
+            "  }\n"
+            "}",
+        )
+
+    # XPLORER: collapse the layout slot of a hidden tab row. CalculateProposedLayout
+    # marks an invisible child as not-painted but still adds bounds.height() to the
+    # running height, leaving a ~30px gap where an Arc bookmark tab's row was. Skip
+    # invisible children entirely so the hidden row takes zero space.
+    if "XPLORER: hidden rows take zero space" not in vutc_cc_text:
+        edit(
+            vutc_view_cc,
+            "  for (auto* child : children) {\n"
+            "    // The leading inset should not be applied for tab groups when the tab strip",
+            "  for (auto* child : children) {\n"
+            "    // XPLORER: hidden rows take zero space (Arc bookmark tabs are hidden\n"
+            "    // from the strip; the sidebar bookmark row is the affordance).\n"
+            "    if (!child->GetVisible()) {\n"
+            "      layouts.child_layouts.emplace_back(child, false, gfx::Rect());\n"
+            "      continue;\n"
+            "    }\n"
+            "    // The leading inset should not be applied for tab groups when the tab strip",
+        )
+
+    # XPLORER: "open chat" button on chat-owned tab-group headers. Each tab
+    # group whose tabs are owned by a "chat:<conv_id>" agent gets a small button
+    # on its header that opens the Grok side panel to that conversation. Mirrors
+    # editor_bubble_button_'s pattern (a header button with a bound callback).
+    # Patches PRISTINE upstream files; NO BUILD.gn dep is added (a grok_companion
+    # dep here would create a GN cycle) — we rely on final-link symbol resolution,
+    # the established fork pattern (cf. grok_native.cc including
+    # grok_companion_util.h with no GN dep).
+    vtgh_h = (src / "chrome/browser/ui/views/tabs/vertical/"
+              "vertical_tab_group_header_view.h")
+    # Forward-declare views::ImageButton alongside the other views fwd decls.
     edit(
-        browser_ui_gn,
-        '      "views/bookmarks/bookmark_bar_view.cc",\n'
-        '      "views/bookmarks/bookmark_bar_view.h",',
-        '      "views/bookmarks/bookmark_bar_view.cc",\n'
-        '      "views/bookmarks/bookmark_bar_view.h",\n'
-        '      "views/xplorer/xplorer_toolbar_view.cc",  # XPLORER\n'
-        '      "views/xplorer/xplorer_toolbar_view.h",  # XPLORER\n'
-        '      "views/xplorer/xplorer_toolbar_pill_button.cc",  # XPLORER\n'
-        '      "views/xplorer/xplorer_toolbar_pill_button.h",  # XPLORER\n'
-        '      "views/xplorer/xplorer_toolbar_icons.cc",  # XPLORER\n'
-        '      "views/xplorer/xplorer_toolbar_icons.h",  # XPLORER',
+        vtgh_h,
+        "namespace views {\n"
+        "class LabelButton;\n"
+        "class ImageView;",
+        "namespace views {\n"
+        "class LabelButton;\n"
+        "class ImageButton;  // XPLORER\n"
+        "class ImageView;",
+    )
+    # New member: the open-chat button, next to editor_bubble_button_.
+    edit(
+        vtgh_h,
+        "  const raw_ptr<views::LabelButton> editor_bubble_button_ = nullptr;",
+        "  const raw_ptr<views::LabelButton> editor_bubble_button_ = nullptr;\n\n"
+        "  // XPLORER: opens the Grok side panel to this group's chat\n"
+        "  // conversation. Only shown for groups whose tabs are owned by a\n"
+        '  // "chat:<conv_id>" agent (visibility toggled in OnDataChanged).\n'
+        "  const raw_ptr<views::ImageButton> open_chat_button_ = nullptr;",
+    )
+    # New private method declaration.
+    edit(
+        vtgh_h,
+        " private:\n"
+        "  void UpdateEditorBubbleButtonVisibility();",
+        " private:\n"
+        "  // XPLORER: open the Grok side panel to this group's owning chat.\n"
+        "  void OnOpenChatPressed();\n"
+        "  void UpdateEditorBubbleButtonVisibility();",
+    )
+
+    vtgh_cc = (src / "chrome/browser/ui/views/tabs/vertical/"
+               "vertical_tab_group_header_view.cc")
+    # Includes (no BUILD.gn dep — final-link resolution, like grok_native.cc).
+    edit(
+        vtgh_cc,
+        '#include "chrome/browser/ui/views/tabs/vertical/'
+        'vertical_tab_group_header_view.h"',
+        '#include "chrome/browser/ui/views/tabs/vertical/'
+        'vertical_tab_group_header_view.h"\n'
+        "\n"
+        "// XPLORER: open-chat button — opens the Grok side panel to a\n"
+        "// chat-owned tab group's conversation. These includes carry no GN dep\n"
+        "// (final-link symbol resolution, the established fork pattern).\n"
+        '#include "base/strings/string_util.h"  // XPLORER\n'
+        '#include "chrome/browser/agent_gateway/tab_ownership.h"  // XPLORER\n'
+        '#include "chrome/browser/grok_companion/grok_companion_util.h"  // XPLORER\n'
+        '#include "chrome/browser/ui/views/frame/browser_view.h"  // XPLORER\n'
+        '#include "components/tabs/public/tab_group.h"  // XPLORER\n'
+        '#include "components/tabs/public/tab_interface.h"  // XPLORER\n'
+        '#include "content/public/browser/web_contents.h"  // XPLORER\n'
+        '#include "ui/views/controls/button/image_button.h"  // XPLORER',
+    )
+    # File-local helper: the owning chat conv_id (or "") for a group, read from
+    # the first tab's TabOwnership. The group title is the chat TOPIC now, so we
+    # must NOT parse the title — read ownership from the tab instead.
+    edit(
+        vtgh_cc,
+        "class VerticalTabGroupHeaderLabel : public views::Label {",
+        "// XPLORER: returns the conv_id of the chat agent that owns |group|'s\n"
+        '// tabs, or "" if the group is not chat-owned (Bookmarks / Scheduled /\n'
+        "// organize / non-chat agent groups). The group title is the human topic\n"
+        "// now, so read ownership from the first tab's TabOwnership rather than\n"
+        "// parsing the title.\n"
+        "std::string GetOwningChatConvId(const TabGroup& group) {\n"
+        "  if (tabs::TabInterface* first = group.GetFirstTab()) {\n"
+        "    if (content::WebContents* wc = first->GetContents()) {\n"
+        "      if (agent_gateway::TabOwnership* own =\n"
+        "              agent_gateway::TabOwnership::Get(wc)) {\n"
+        '        if (base::StartsWith(own->owner, "chat:")) {\n'
+        '          return own->owner.substr(5);  // strip "chat:"\n'
+        "        }\n"
+        "      }\n"
+        "    }\n"
+        "  }\n"
+        "  return std::string();\n"
+        "}\n"
+        "\n"
+        "class VerticalTabGroupHeaderLabel : public views::Label {",
+    )
+    # Constructor init-list: AddChildView the open-chat ImageButton next to the
+    # editor button (mirrors editor_bubble_button_'s bound-callback init).
+    edit(
+        vtgh_cc,
+        "      editor_bubble_button_(AddChildView(std::make_unique<views::LabelButton>(\n"
+        "          base::BindRepeating(&VerticalTabGroupHeaderView::ShowEditorBubble,\n"
+        "                              base::Unretained(this))))),\n"
+        "      collapse_icon_(AddChildView(std::make_unique<views::ImageView>())),",
+        "      editor_bubble_button_(AddChildView(std::make_unique<views::LabelButton>(\n"
+        "          base::BindRepeating(&VerticalTabGroupHeaderView::ShowEditorBubble,\n"
+        "                              base::Unretained(this))))),\n"
+        "      open_chat_button_(AddChildView(std::make_unique<views::ImageButton>(\n"
+        "          base::BindRepeating(&VerticalTabGroupHeaderView::OnOpenChatPressed,\n"
+        "                              base::Unretained(this))))),  // XPLORER\n"
+        "      collapse_icon_(AddChildView(std::make_unique<views::ImageView>())),",
+    )
+    # Constructor body: configure the open-chat button (hidden until OnDataChanged
+    # finds a chat owner). Spliced right after ConfigureEditorBubbleButton().
+    edit(
+        vtgh_cc,
+        "  ConfigureEditorBubbleButton(editor_bubble_button_);",
+        "  ConfigureEditorBubbleButton(editor_bubble_button_);\n"
+        "  // XPLORER: open-chat button — hidden unless this is a chat-owned group.\n"
+        '  open_chat_button_->SetTooltipText(u"Open chat");\n'
+        '  open_chat_button_->GetViewAccessibility().SetName(u"Open chat");\n'
+        "  open_chat_button_->SetImageHorizontalAlignment(\n"
+        "      views::ImageButton::ALIGN_CENTER);\n"
+        "  open_chat_button_->SetImageVerticalAlignment(\n"
+        "      views::ImageButton::ALIGN_MIDDLE);\n"
+        "  open_chat_button_->SetVisible(false);\n"
+        "  open_chat_button_->SetProperty(\n"
+        "      views::kFlexBehaviorKey,\n"
+        "      views::FlexSpecification(views::MinimumFlexSizeRule::kPreferred,\n"
+        "                               views::MaximumFlexSizeRule::kPreferred));",
+    )
+    # OnDataChanged: toggle visibility (chat-owned only) right after SetText.
+    edit(
+        vtgh_cc,
+        "  group_header_label_->SetText(tab_group_visual_data_.title());",
+        "  group_header_label_->SetText(tab_group_visual_data_.title());\n"
+        "\n"
+        "  // XPLORER: show the open-chat button only for chat-owned tab groups.\n"
+        "  if (open_chat_button_) {\n"
+        "    open_chat_button_->SetVisible(\n"
+        "        !GetOwningChatConvId(delegate_->GetTabGroup()).empty());\n"
+        "  }",
+    )
+    # OnDataChanged: tint the Grok icon like the header (inside the color block).
+    edit(
+        vtgh_cc,
+        "    // Update editor bubble button.\n"
+        "    UpdateEditorButtonColors(editor_bubble_button_, foreground_color);",
+        "    // Update editor bubble button.\n"
+        "    UpdateEditorButtonColors(editor_bubble_button_, foreground_color);\n"
+        "\n"
+        "    // XPLORER: tint the open-chat button's Grok icon to match the header.\n"
+        "    open_chat_button_->SetImageModel(\n"
+        "        views::Button::STATE_NORMAL,\n"
+        "        ui::ImageModel::FromVectorIcon(kGrokIcon, foreground_color,\n"
+        "                                       kIconSize));",
+    )
+    # OnOpenChatPressed: open the Grok side panel to the owning conversation.
+    edit(
+        vtgh_cc,
+        "  editor_bubble_tracker_.Opened(delegate_->ShowGroupEditorBubble(\n"
+        "      /*stop_context_menu_propagation=*/false));\n"
+        "}\n"
+        "\n"
+        "BEGIN_METADATA(VerticalTabGroupHeaderView)",
+        "  editor_bubble_tracker_.Opened(delegate_->ShowGroupEditorBubble(\n"
+        "      /*stop_context_menu_propagation=*/false));\n"
+        "}\n"
+        "\n"
+        "void VerticalTabGroupHeaderView::OnOpenChatPressed() {\n"
+        "  // XPLORER: open the Grok side panel to this group's chat conversation.\n"
+        "  const std::string conv = GetOwningChatConvId(delegate_->GetTabGroup());\n"
+        "  if (conv.empty()) {\n"
+        "    return;\n"
+        "  }\n"
+        "  views::Widget* widget = GetWidget();\n"
+        "  if (!widget) {\n"
+        "    return;\n"
+        "  }\n"
+        "  BrowserView* browser_view =\n"
+        "      BrowserView::GetBrowserViewForNativeWindow(widget->GetNativeWindow());\n"
+        "  if (browser_view && browser_view->browser()) {\n"
+        "    grok_companion::OpenGrokSidePanelAt(browser_view->browser(),\n"
+        '                                        "/?conv=" + conv);\n'
+        "  }\n"
+        "}\n"
+        "\n"
+        "BEGIN_METADATA(VerticalTabGroupHeaderView)",
+    )
+
+    # === XPLORER: bookmarks-settings gear button (sibling of open_chat_button_).
+    # A second header button — a gear that opens the companion settings page to
+    # the Bookmarks pane (/settings#bookmarks). Shown only on the native
+    # "Bookmarks" group, identified by its first tab's bookmark_node_id (the
+    # semantic marker, same spirit as open_chat_button_'s "chat:" owner check).
+    # New .h member, declared AFTER open_chat_button_ so the ctor init order
+    # (-Wreorder) stays: editor, open_chat, open_bookmarks_settings, collapse.
+    edit(
+        vtgh_h,
+        "  const raw_ptr<views::ImageButton> open_chat_button_ = nullptr;",
+        "  const raw_ptr<views::ImageButton> open_chat_button_ = nullptr;\n\n"
+        "  // XPLORER: opens the companion settings page to the Bookmarks pane.\n"
+        "  // Only shown for the native Bookmarks group (toggled in OnDataChanged).\n"
+        "  const raw_ptr<views::ImageButton> open_bookmarks_settings_button_ =\n"
+        "      nullptr;",
+    )
+    # New private method declaration.
+    edit(
+        vtgh_h,
+        "  void OnOpenChatPressed();\n",
+        "  void OnOpenChatPressed();\n"
+        "  // XPLORER: open the companion settings page to the Bookmarks pane.\n"
+        "  void OnManageBookmarksPressed();\n",
+    )
+    # Includes: kSettingsIcon + OpenXplorerSettings (no GN dep — final-link, like
+    # the open-chat button's grok_companion include above).
+    edit(
+        vtgh_cc,
+        '#include "ui/views/controls/button/image_button.h"  // XPLORER',
+        '#include "ui/views/controls/button/image_button.h"  // XPLORER\n'
+        '#include "chrome/browser/ui/views/xplorer/xplorer_settings_nav.h"  // XPLORER\n'
+        '#include "components/vector_icons/vector_icons.h"  // XPLORER',
+    )
+    # File-local helper: is this the native Bookmarks group? Match the grouper's
+    # title format ("Bookmarks (N)" from GroupTitle()). Title-based on purpose:
+    # bookmark tabs may be UNLOADED (no WebContents/TabOwnership), so reading the
+    # first tab's bookmark_node_id is unreliable; the group title is always set
+    # by the time OnDataChanged runs.
+    edit(
+        vtgh_cc,
+        "class VerticalTabGroupHeaderLabel : public views::Label {",
+        "// XPLORER: true if |title| is the native Bookmarks group's title. The\n"
+        '// grouper names it "Bookmarks (N)" via GroupTitle(); match that prefix.\n'
+        "bool IsBookmarksGroup(const std::u16string& title) {\n"
+        '  return base::StartsWith(title, u"Bookmarks (",\n'
+        "                          base::CompareCase::SENSITIVE);\n"
+        "}\n"
+        "\n"
+        "class VerticalTabGroupHeaderLabel : public views::Label {",
+    )
+    # Constructor init-list: AddChildView the gear button right after the
+    # open-chat button (matches the .h declaration order).
+    edit(
+        vtgh_cc,
+        "                              base::Unretained(this))))),  // XPLORER\n"
+        "      collapse_icon_(AddChildView(std::make_unique<views::ImageView>())),",
+        "                              base::Unretained(this))))),  // XPLORER\n"
+        "      open_bookmarks_settings_button_(\n"
+        "          AddChildView(std::make_unique<views::ImageButton>(\n"
+        "              base::BindRepeating(\n"
+        "                  &VerticalTabGroupHeaderView::OnManageBookmarksPressed,\n"
+        "                  base::Unretained(this))))),  // XPLORER\n"
+        "      collapse_icon_(AddChildView(std::make_unique<views::ImageView>())),",
+    )
+    # Constructor body: configure the gear button (hidden until OnDataChanged
+    # finds the Bookmarks group). Spliced after the open-chat button's config.
+    edit(
+        vtgh_cc,
+        "  open_chat_button_->SetProperty(\n"
+        "      views::kFlexBehaviorKey,\n"
+        "      views::FlexSpecification(views::MinimumFlexSizeRule::kPreferred,\n"
+        "                               views::MaximumFlexSizeRule::kPreferred));",
+        "  open_chat_button_->SetProperty(\n"
+        "      views::kFlexBehaviorKey,\n"
+        "      views::FlexSpecification(views::MinimumFlexSizeRule::kPreferred,\n"
+        "                               views::MaximumFlexSizeRule::kPreferred));\n"
+        "  // XPLORER: bookmarks-settings gear — hidden unless this is Bookmarks.\n"
+        '  open_bookmarks_settings_button_->SetTooltipText(u"Manage bookmarks");\n'
+        "  open_bookmarks_settings_button_->GetViewAccessibility().SetName(\n"
+        '      u"Manage bookmarks");\n'
+        "  open_bookmarks_settings_button_->SetImageHorizontalAlignment(\n"
+        "      views::ImageButton::ALIGN_CENTER);\n"
+        "  open_bookmarks_settings_button_->SetImageVerticalAlignment(\n"
+        "      views::ImageButton::ALIGN_MIDDLE);\n"
+        "  open_bookmarks_settings_button_->SetVisible(false);\n"
+        "  open_bookmarks_settings_button_->SetProperty(\n"
+        "      views::kFlexBehaviorKey,\n"
+        "      views::FlexSpecification(views::MinimumFlexSizeRule::kPreferred,\n"
+        "                               views::MaximumFlexSizeRule::kPreferred));",
+    )
+    # OnDataChanged: toggle the gear's visibility (native Bookmarks group only).
+    edit(
+        vtgh_cc,
+        "  if (open_chat_button_) {\n"
+        "    open_chat_button_->SetVisible(\n"
+        "        !GetOwningChatConvId(delegate_->GetTabGroup()).empty());\n"
+        "  }",
+        "  if (open_chat_button_) {\n"
+        "    open_chat_button_->SetVisible(\n"
+        "        !GetOwningChatConvId(delegate_->GetTabGroup()).empty());\n"
+        "  }\n"
+        "  // XPLORER: show the gear only on the native Bookmarks group.\n"
+        "  if (open_bookmarks_settings_button_) {\n"
+        "    open_bookmarks_settings_button_->SetVisible(\n"
+        "        IsBookmarksGroup(tab_group_visual_data_.title()));\n"
+        "  }",
+    )
+    # OnDataChanged: tint the gear icon to match the header (in the color block).
+    edit(
+        vtgh_cc,
+        "    open_chat_button_->SetImageModel(\n"
+        "        views::Button::STATE_NORMAL,\n"
+        "        ui::ImageModel::FromVectorIcon(kGrokIcon, foreground_color,\n"
+        "                                       kIconSize));",
+        "    open_chat_button_->SetImageModel(\n"
+        "        views::Button::STATE_NORMAL,\n"
+        "        ui::ImageModel::FromVectorIcon(kGrokIcon, foreground_color,\n"
+        "                                       kIconSize));\n"
+        "    open_bookmarks_settings_button_->SetImageModel(\n"
+        "        views::Button::STATE_NORMAL,\n"
+        "        ui::ImageModel::FromVectorIcon(vector_icons::kSettingsIcon,\n"
+        "                                       foreground_color, kIconSize));",
+    )
+    # OnManageBookmarksPressed: open the settings page to the Bookmarks pane.
+    edit(
+        vtgh_cc,
+        "BEGIN_METADATA(VerticalTabGroupHeaderView)",
+        "void VerticalTabGroupHeaderView::OnManageBookmarksPressed() {\n"
+        "  // XPLORER: open the companion settings page to the Bookmarks pane.\n"
+        "  if (!IsBookmarksGroup(tab_group_visual_data_.title())) {\n"
+        "    return;\n"
+        "  }\n"
+        "  views::Widget* widget = GetWidget();\n"
+        "  if (!widget) {\n"
+        "    return;\n"
+        "  }\n"
+        "  BrowserView* browser_view =\n"
+        "      BrowserView::GetBrowserViewForNativeWindow(widget->GetNativeWindow());\n"
+        "  if (browser_view && browser_view->browser()) {\n"
+        "    xplorer::OpenXplorerSettings(browser_view->browser(), \"bookmarks\",\n"
+        "                                 /*in_new_tab=*/true);\n"
+        "  }\n"
+        "}\n"
+        "\n"
+        "BEGIN_METADATA(VerticalTabGroupHeaderView)",
     )
 
 
@@ -205,6 +1062,20 @@ def main(src: Path):
         '#include "chrome/browser/chrome_browser_main.h"',
         f'\n#include "chrome/browser/agent_gateway/agent_gateway.h"'
         f"  {MARKER}\n",
+    )
+    # 1b. Cleanly shut the gateway down in PostMainMessageLoopRun (after the main
+    # loop quits, before thread teardown). The gateway is a leaked raw global
+    # whose dtor never runs, so without this the AgentGateway server thread / its
+    # net::HttpServer + listening socket / the Scheduler poll timer are never
+    # torn down -> CompleteShutdown hangs and a zombie keeps port 9334 bound.
+    # Anchor on the first Shutdown() in this method (UpgradeDetector), splicing
+    # ours right after it — still well before browser_process_->StartTearDown().
+    edit(
+        main_cc,
+        "  UpgradeDetector::GetInstance()->Shutdown();",
+        f"\n\n  {MARKER}: deterministically stop the agent gateway server thread.\n"
+        "  if (auto* g = agent_gateway::AgentGateway::GetInstance())\n"
+        "    g->Shutdown();\n",
     )
 
     # 2. Link the component into chrome/browser.
@@ -298,6 +1169,12 @@ def main(src: Path):
         b = b.replace("COMPANY_FULLNAME=The Chromium Authors",
                       "COMPANY_FULLNAME=Xplorer")
         b = b.replace("COMPANY_SHORTNAME=Chromium", "COMPANY_SHORTNAME=Xplorer")
+        # Installer .exe file properties (setup.exe / mini_installer.exe
+        # ProductName + FileDescription) — read "Chromium Installer" otherwise.
+        b = b.replace("PRODUCT_INSTALLER_FULLNAME=Chromium Installer",
+                      "PRODUCT_INSTALLER_FULLNAME=Xplorer Installer")
+        b = b.replace("PRODUCT_INSTALLER_SHORTNAME=Chromium Installer",
+                      "PRODUCT_INSTALLER_SHORTNAME=Xplorer Installer")
         branding.write_text(b)
         print(f"  edited: {branding}")
 
@@ -316,23 +1193,183 @@ def main(src: Path):
         app_info.write_text(ai)
         print(f"  edited: {app_info}")
 
+    # XPLORER: Finder/Dock DISPLAY name "Xplor". CFBundleDisplayName is the name
+    # the Finder/Dock surface; pin it to the literal "Xplor". CFBundleName stays
+    # ${CHROMIUM_SHORT_NAME} (= Xplorer) and the on-disk bundle remains
+    # "Xplorer.app", so bundle identity / Sparkle updates are untouched.
+    ai = app_info.read_text()
+    if "<string>Xplor</string>" not in ai:
+        ai = ai.replace(
+            "\t<key>CFBundleDisplayName</key>\n"
+            "\t<string>${EXECUTABLE_NAME}</string>\n",
+            "\t<key>CFBundleDisplayName</key>\n"
+            "\t<string>Xplor</string>\n")
+        app_info.write_text(ai)
+        print(f"  set CFBundleDisplayName=Xplor: {app_info}")
+
+    # XPLORER: the macOS app-menu BOLD title and the auto "About <X>" item come
+    # from CFBundleName (NOT CFBundleDisplayName or the grit product strings), so
+    # pin CFBundleName to "Xplor" too for a fully-branded menu. Display-only: the
+    # on-disk bundle ("Xplorer.app"), CFBundleIdentifier (org.xplorer.Xplorer),
+    # the executable + framework/helper names (all from PRODUCT_FULLNAME), the
+    # OSCrypt keychain service ("Chromium Safe Storage", a compile constant), and
+    # Sparkle's identifier/version compare are all INDEPENDENT of CFBundleName, so
+    # bundle identity / updates / keychain are untouched.
+    ai = app_info.read_text()
+    if "\t<key>CFBundleName</key>\n\t<string>${CHROMIUM_SHORT_NAME}</string>\n" in ai:
+        ai = ai.replace(
+            "\t<key>CFBundleName</key>\n"
+            "\t<string>${CHROMIUM_SHORT_NAME}</string>\n",
+            "\t<key>CFBundleName</key>\n"
+            "\t<string>Xplor</string>\n")
+        app_info.write_text(ai)
+        print(f"  set CFBundleName=Xplor: {app_info}")
+
+    # XPLORER: Sparkle 2.x auto-update keys. tweak_info_plist passes unknown
+    # keys through to the built Info.plist unchanged, so writing them into the
+    # template here is sufficient. SUFeedURL is the appcast — served from
+    # xplor.sh (Cloudflare Worker, no-cache) so update notifications propagate
+    # INSTANTLY (the legacy GitHub Pages feed had a 10-min cache that delayed +
+    # confused update checks). The Pages feed stays alive for <=0.8.9 installs
+    # that shipped pointing at it. SUPublicEDKey is the EdDSA public key the
+    # updater verifies signatures against, and the AutomaticChecks/
+    # ScheduledCheckInterval pair makes Sparkle self-check daily. NOTE:
+    # deliberately no SUEnableInstallerLauncherService — the app is not
+    # sandboxed, so the launcher XPC service must NOT be enabled.
+    ai = app_info.read_text()
+    if "SUFeedURL" not in ai:
+        su_keys = (
+            "\t<key>SUFeedURL</key>\n"
+            "\t<string>https://xplor.sh/appcast.xml</string>\n"
+            "\t<key>SUPublicEDKey</key>\n"
+            "\t<string>1dT5/+AbAMKH6F1IrtejPfrplH9JVKDqMLGfhzQhaiI=</string>\n"
+            "\t<key>SUEnableAutomaticChecks</key>\n"
+            "\t<true/>\n"
+            "\t<key>SUScheduledCheckInterval</key>\n"
+            "\t<integer>86400</integer>\n"
+        )
+        ai = ai.replace("</dict>\n</plist>", su_keys + "</dict>\n</plist>")
+        app_info.write_text(ai)
+        print(f"  added Sparkle keys: {app_info}")
+
+    # XPLORER: wire the Sparkle auto-updater into browser startup. Add the
+    # include next to app_controller_mac.h, and kick off the updater right after
+    # the controller marks startup complete in -applicationDidFinishLaunching:.
+    app_controller = src / "chrome/browser/app_controller_mac.mm"
+    t = app_controller.read_text()
+    if "XplorerStartSparkleUpdater" not in t:
+        t = t.replace(
+            '#import "chrome/browser/app_controller_mac.h"\n',
+            '#import "chrome/browser/app_controller_mac.h"\n'
+            '#import "chrome/browser/xplorer_sparkle_updater.h"\n',
+        )
+        t = t.replace(
+            "  _startupComplete = YES;\n",
+            "  _startupComplete = YES;\n"
+            "  XplorerStartSparkleUpdater();  // XPLORER: Sparkle auto-update\n",
+        )
+        app_controller.write_text(t)
+        print(f"  edited: {app_controller}")
+
+    # XPLORER: LINK Sparkle.framework via a dedicated source_set (runtime-loading
+    # via NSBundle fails under the hardened runtime — [NSBundle load] returns NO;
+    # linking emits the LC_LOAD_DYLIB + rpath at link time, the way Vivaldi/Brave
+    # embed Sparkle). The glue lives in its OWN source_set so the vendored
+    # framework's -F search path (framework_dirs) is applied ONLY to this one .mm,
+    # NOT to all ~3000 files of static_library("browser") (a target-level
+    # framework_dirs would change every file's compile command and force a full
+    # chrome/browser rebuild). `frameworks`/`framework_dirs` still propagate
+    # across the static-library boundary into the Xplorer Framework dylib (the
+    # final link), so xplorer_sparkle_updater.mm gets <Sparkle/Sparkle.h> at
+    # compile time and the binary gets -framework Sparkle (LC_LOAD_DYLIB
+    # @rpath/Sparkle.framework/Versions/B/Sparkle) at link time. ARC is on by
+    # default (default_compiler_configs); Sparkle 2.9.3 headers are -Werror-clean.
+    # Injected into the existing standalone is_mac block alongside the other mac
+    # source_sets (app_controller_mac etc.) that static_library("browser") deps.
+    if 'source_set("xplorer_sparkle")' not in browser_gn.read_text():
+        edit(
+            browser_gn,
+            'if (is_mac) {\n'
+            '  source_set("chrome_browser_main_mac") {',
+            'if (is_mac) {\n'
+            '  # XPLORER: Sparkle auto-updater glue (linked, not runtime-loaded).\n'
+            '  source_set("xplorer_sparkle") {\n'
+            '    sources = [\n'
+            '      "xplorer_sparkle_updater.h",\n'
+            '      "xplorer_sparkle_updater.mm",\n'
+            '    ]\n'
+            '    frameworks = [ "Sparkle.framework" ]\n'
+            '    framework_dirs = [ "//third_party/sparkle" ]\n'
+            '  }\n\n'
+            '  source_set("chrome_browser_main_mac") {',
+        )
+    # Pull the source_set into static_library("browser") on mac (next to the other
+    # mac source_set deps). This carries Sparkle through to the final framework
+    # link without putting the .mm in browser's own sources list.
+    if '":xplorer_sparkle",' not in browser_gn.read_text():
+        edit(
+            browser_gn,
+            '      ":app_controller_mac",\n',
+            '      ":app_controller_mac",\n'
+            '      ":xplorer_sparkle",  # XPLORER: linked Sparkle auto-updater\n',
+        )
+
+    # XPLORER: rpath so the linked Sparkle.framework resolves at runtime.
+    # Chromium emits NO LC_RPATH on the Xplorer Framework binary (it references
+    # sibling dylibs via @executable_path/... directly). Sparkle's dylib id is
+    # @rpath/Sparkle.framework/Versions/B/Sparkle, so the loading binary (this
+    # framework, which links //chrome/browser and thus carries the Sparkle
+    # LC_LOAD_DYLIB) needs an rpath that resolves @rpath to Contents/Frameworks,
+    # where build.sh / release_arch.sh stage Sparkle.framework. The chrome_app
+    # executable lives at Contents/MacOS/, so @executable_path/../Frameworks ==
+    # Contents/Frameworks. Added to mac_framework_bundle("chrome_framework")'s
+    # ldflags (forwarded to its internal shared_library — the final link target).
+    chrome_gn = src / "chrome/BUILD.gn"
+    if "XPLORER: rpath for the linked Sparkle" not in chrome_gn.read_text():
+        edit(
+            chrome_gn,
+            "    ldflags = [\n"
+            '      "-compatibility_version",\n'
+            "      chrome_dylib_version,\n"
+            '      "-current_version",\n'
+            "      chrome_dylib_version,\n"
+            "    ]\n",
+            "    ldflags = [\n"
+            '      "-compatibility_version",\n'
+            "      chrome_dylib_version,\n"
+            '      "-current_version",\n'
+            "      chrome_dylib_version,\n"
+            "      # XPLORER: rpath for the linked Sparkle.framework\n"
+            "      # (id @rpath/Sparkle.framework/...) -> Contents/Frameworks.\n"
+            "      # @loader_path is RELATIVE TO THIS FRAMEWORK BINARY (same for the\n"
+            "      # browser process AND every helper that loads it), so it resolves\n"
+            "      # for all process types; @executable_path/../Frameworks only works\n"
+            "      # for the main exe (helpers live deeper -> their ../Frameworks is\n"
+            "      # empty -> dlopen crash). Binary is at\n"
+            "      # Contents/Frameworks/Xplorer Framework.framework/Versions/<V>/, so\n"
+            "      # @loader_path/../../.. == Contents/Frameworks. Keep both.\n"
+            '      "-Wl,-rpath,@loader_path/../../..",\n'
+            '      "-Wl,-rpath,@executable_path/../Frameworks",\n'
+            "    ]\n",
+        )
+
     # The visible app name comes from IDS_PRODUCT_NAME / IDS_SHORT_PRODUCT_NAME
     # in the (non-Google, non-CfT) else branch of chromium_strings.grd.
     grd = src / "chrome/app/chromium_strings.grd"
     g = grd.read_text()
-    if ">\n            Xplorer\n" not in g:
+    if ">\n            Xplor\n" not in g:
         for old in ("Chromium", "XBrowser"):
             g = g.replace(
                 'desc="The Chrome application name" translateable="false">\n'
                 f"            {old}\n",
                 'desc="The Chrome application name" translateable="false">\n'
-                "            Xplorer\n",
+                "            Xplor\n",
             )
             g = g.replace(
                 'desc="The Chrome application short name." translateable="false">\n'
                 f"            {old}\n",
                 'desc="The Chrome application short name." translateable="false">\n'
-                "            Xplorer\n",
+                "            Xplor\n",
             )
         grd.write_text(g)
         print(f"  edited: {grd}")
@@ -343,11 +1380,11 @@ def main(src: Path):
     # macOS accessible title + channel variants (Beta/Dev/Canary), and the
     # ChromeOS / captive-portal layouts.
     g = grd.read_text()
-    if "</ph> - Xplorer" not in g:
-        g = g.replace("</ph> - Chromium", "</ph> - Xplorer")
-        g = g.replace("Chromium - <ph", "Xplorer - <ph")
-        g = g.replace("- Network Sign-in - Chromium", "- Network Sign-in - Xplorer")
-        g = g.replace("Chromium - Network Sign-in", "Xplorer - Network Sign-in")
+    if "</ph> - Xplor" not in g:
+        g = g.replace("</ph> - Chromium", "</ph> - Xplor")
+        g = g.replace("Chromium - <ph", "Xplor - <ph")
+        g = g.replace("- Network Sign-in - Chromium", "- Network Sign-in - Xplor")
+        g = g.replace("Chromium - Network Sign-in", "Xplor - Network Sign-in")
         grd.write_text(g)
         print(f"  edited (title formats): {grd}")
 
@@ -361,7 +1398,7 @@ def main(src: Path):
     g = grd.read_text()
     if g.count("Chromium") > g.count("Chromium Authors"):
         g = g.replace("Chromium Authors", "\x00AUTH\x00")
-        g = g.replace("Chromium", "Xplorer")
+        g = g.replace("Chromium", "Xplor")
         g = g.replace("\x00AUTH\x00", "Chromium Authors")
         grd.write_text(g)
         print(f"  edited (broad app-name rebrand): {grd}")
@@ -876,22 +1913,22 @@ def main(src: Path):
     # --- About page: "About Xplorer" + no failed-update error -------------
     grdp = src / "chrome/app/settings_chromium_strings.grdp"
     sg = grdp.read_text()
-    if "About Xplorer" not in sg:
+    if "About Xplor" not in sg:
         sg = sg.replace(
             'desc="Menu title for the About Chromium page.">\n'
             "        About Chromium\n",
             'desc="Menu title for the About Chromium page.">\n'
-            "        About Xplorer\n")
+            "        About Xplor\n")
         sg = sg.replace(
             'desc="Text of the button which takes the user to the Chrome help'
             ' page.">\n        Get help with Chromium\n',
             'desc="Text of the button which takes the user to the Chrome help'
-            ' page.">\n        Get help with Xplorer\n')
+            ' page.">\n        Get help with Xplor\n')
         sg = sg.replace(
             'desc="Status label: Already up to date (Chromium)">\n'
             "      Chromium is up to date\n",
             'desc="Status label: Already up to date (Chromium)">\n'
-            "      Xplorer is up to date\n")
+            "      Xplor is up to date\n")
         grdp.write_text(sg)
         print(f"  edited: {grdp}")
 
@@ -900,23 +1937,82 @@ def main(src: Path):
     # (Developer Build) ..."). Prepend the Xplorer product version so users see
     # OUR version first. NOTE: bump XPLORER_VERSION here per release (or wire it
     # to the release version later).
-    XPLORER_VERSION = "0.8.4"
+    XPLORER_VERSION = "0.8.10"
     ss = src / "chrome/app/settings_strings.grdp"
     sst = ss.read_text()
-    _ver_marker = "Xplorer " + XPLORER_VERSION + " · Chromium"
+    _ver_marker = "Xplor " + XPLORER_VERSION + " · Chromium"
     if _ver_marker not in sst:
         # Bump-safe: matches a fresh checkout ("Version <ph>") OR an earlier
         # patched version ("Xplorer 0.6.1 · Chromium <ph>") and rewrites it to
         # the current version. (A plain string anchor breaks on version bumps
         # because the prior patch already consumed "Version <ph>".)
         sst, _n = re.subn(
-            r'(?:Version|Xplorer [0-9][0-9.]* · Chromium) '
+            r'(?:Version|Xplor [0-9][0-9.]* · Chromium) '
             r'(<ph name="PRODUCT_VERSION">)',
             _ver_marker + r" \1",
             sst, count=1)
         if _n:
             ss.write_text(sst)
             print(f"  edited (about version -> Xplorer {XPLORER_VERSION}): {ss}")
+
+    # --- chrome/VERSION: monotonic PATCH so the Windows installer treats each
+    # release as an UPGRADE. Upstream PATCH never changes (every build is
+    # 151.0.7897.0), so setup.exe no-op'd a reinstall ("Higher version already
+    # installed" / same-version repair) -> the installer appeared to do nothing.
+    # Map XPLORER_VERSION "MAJ.MIN.PAT" -> PATCH = MIN*100 + PAT (0.8.6 -> 806),
+    # well under the 16-bit VERSIONINFO / mac patch_hi-lo ceiling (65535).
+    # chrome/VERSION is upstream (reverted by `git checkout -- .` each apply), so
+    # the rewrite must live here, re-derived every apply.
+    _xv = XPLORER_VERSION.split(".")
+    _xpatch = int(_xv[1]) * 100 + int(_xv[2])
+    version_file = src / "chrome/VERSION"
+    vf = version_file.read_text()
+    vf2 = re.sub(r"(?m)^PATCH=\d+$", f"PATCH={_xpatch}", vf)
+    if vf2 != vf:
+        version_file.write_text(vf2)
+        print(f"  edited (chrome/VERSION PATCH -> {_xpatch}): {version_file}")
+
+    # --- Windows install identity: "Chromium" -> "Xplorer" -------------------
+    # Source of truth (chrome/install_static) for the install dir
+    # (%LOCALAPPDATA%\<name>\Application), user-data dir, Software\<name> registry
+    # root, Uninstall key, AppUserModelId, Default-Programs name, file-assoc
+    # ProgIDs, and the elevation/tracing service NAMES. Without this, Xplorer
+    # installed AS "Chromium" -> collided with real Chromium + shared its updater
+    # identity (so reinstalls/updates targeted the same "Chromium"). install_static
+    # is Windows-only (is_win in BUILD.gn) -> NEVER compiled on mac/linux, so a
+    # malformed edit here is caught only by the Windows build, not the Mac pre-build.
+    imh = src / "chrome/install_static/chromium_install_modes.h"
+    t = imh.read_text()
+    if 'kProductPathName[] = L"Xplorer"' not in t:
+        t = t.replace('kProductPathName[] = L"Chromium";',
+                      'kProductPathName[] = L"Xplorer";')
+        t = t.replace('.base_app_name = L"Chromium",',
+                      '.base_app_name = L"Xplorer",')
+        t = t.replace('.base_app_id = L"Chromium",',
+                      '.base_app_id = L"Xplorer",')
+        t = t.replace('.browser_prog_id_prefix = L"ChromiumHTM",',
+                      '.browser_prog_id_prefix = L"XplorerHTM",')
+        t = t.replace('L"Chromium HTML Document",',
+                      'L"Xplor HTML Document",')
+        t = t.replace('.pdf_prog_id_prefix = L"ChromiumPDF",',
+                      '.pdf_prog_id_prefix = L"XplorerPDF",')
+        t = t.replace('L"Chromium PDF Document",',
+                      'L"Xplor PDF Document",')
+        # Active Setup GUID (system-level installs) -> fresh unique GUID.
+        t = t.replace('L"{7D2B3E1D-D096-4594-9D8F-A6667F12E0AC}"',
+                      'L"{63C1B345-8998-4A62-A654-70144D87282D}"')
+        # Toast Activator CLSID -> fresh GUID 36DB671E-DF25-4F65-8C9B-963108D01396
+        # (registered for USER installs too, so it MUST be unique vs Chromium's).
+        t = re.sub(
+            r"\.toast_activator_clsid = \{0x635EFA6F,.*?0x59\}\},",
+            (".toast_activator_clsid = {0x36DB671E,\n"
+             "                                  0xDF25,\n"
+             "                                  0x4F65,\n"
+             "                                  {0x8C, 0x9B, 0x96, 0x31, 0x08, 0xD0, 0x13,\n"
+             "                                   0x96}},"),
+            t, flags=re.DOTALL)
+        imh.write_text(t)
+        print(f"  edited (Windows install identity -> Xplorer): {imh}")
 
     # --- "Get help" links -> Xplorer GitHub (not Google support) -------------
     uc = src / "chrome/common/url_constants.h"
@@ -934,11 +2030,11 @@ def main(src: Path):
     # --- 3-dot menu + macOS menus: "About Chromium" -> "About Xplorer" -------
     cs = src / "chrome/app/chromium_strings.grd"
     cst = cs.read_text()
-    if "About &amp;Xplorer" not in cst:
+    if "About &amp;Xplor" not in cst:
         # All 3 non-"for Testing" IDS_ABOUT bodies (use_titlecase, not-
         # use_titlecase, is_chromeos). The "Google Chrome for Testing" lines
         # are a different string and are intentionally left alone.
-        cst = cst.replace("About &amp;Chromium", "About &amp;Xplorer")
+        cst = cst.replace("About &amp;Chromium", "About &amp;Xplor")
         cs.write_text(cst)
         print(f"  edited (About Xplorer menus): {cs}")
 
@@ -958,7 +2054,7 @@ def main(src: Path):
         "short name, used for the Mac's application menu, activity monitor, "
         "etc. This should be less than 16 characters. Example: Chrome, not "
         'Google Chrome." translateable="false">\n'
-        "          Xplorer\n"
+        "          Xplor\n"
         "        </message>"
     )
     if _app_menu_new not in cst2 and _app_menu_old in cst2:
@@ -968,7 +2064,7 @@ def main(src: Path):
 
     # macOS app menu "About Chromium" (IDS_ABOUT_MAC). Upstream uses a $1
     # substitution of the product name, which is unpatched and would render
-    # "About Chromium". Pin it to a literal "About Xplorer".
+    # "About Chromium". Pin it to a literal "About Xplor".
     gen = src / "chrome/app/generated_resources.grd"
     gent = gen.read_text()
     _about_mac_old = (
@@ -981,10 +2077,10 @@ def main(src: Path):
     _about_mac_new = (
         '<message name="IDS_ABOUT_MAC" desc="The Mac menu item to open the '
         'about box." translateable="false">\n'
-        "          About Xplorer\n"
+        "          About Xplor\n"
         "        </message>"
     )
-    if "About Xplorer" not in gent and _about_mac_old in gent:
+    if "About Xplor" not in gent and _about_mac_old in gent:
         gent = gent.replace(_about_mac_old, _about_mac_new)
         gen.write_text(gent)
         print(f"  edited (About Mac menu): {gen}")
@@ -1075,7 +2171,7 @@ def main(src: Path):
         "              status = VersionUpdater::Status::FAILED;\n"
         "              out_version = latest;\n"
         "              message = base::UTF8ToUTF16(\n"
-        '                  std::string("Xplorer v") + latest +\n'
+        '                  std::string("Xplor v") + latest +\n'
         '                  " is available -- download from "\n'
         '                  "github.com/daniel-farina/xplorer/releases/latest");\n'
         "            }\n"
@@ -1196,8 +2292,10 @@ def main(src: Path):
         acp.write_text(ac)
         print(f"  edited: {acp}")
 
-    # Native browser-chrome Xplorer pill toolbar (scaffold).
-    patch_native_toolbar(src)
+    # Arc-style vertical sidebar: "Tabs" section label + agent tab group.
+    patch_vertical_sidebar(src)
+
+    patch_xplorer_settings_access(src)
 
     # Bundle the Grok companion UI into the Windows installer's version dir
     # (next to chrome.dll) so the gateway's UiDir() resolves it via DIR_MODULE on

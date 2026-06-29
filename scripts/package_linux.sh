@@ -34,7 +34,7 @@ CHROME="$OUT/chrome"
   exit 1
 }
 
-NAME="Xplorer-linux-$ARCH"
+NAME="Xplor-linux-$ARCH"
 DIST="$XPLORER/dist"
 ROOT="$DIST/$NAME"          # staged tree -> tars to $NAME.tar.gz
 UI_SRC="$XPLORER/companion/ui"

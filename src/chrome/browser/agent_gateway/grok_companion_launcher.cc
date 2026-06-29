@@ -6,12 +6,10 @@
 #include "chrome/browser/agent_gateway/grok_native.h"
 #include "chrome/browser/agent_gateway/xplorer_paths.h"
 
-#include "base/base_paths.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
-#include "base/path_service.h"
 #include "base/strings/string_number_conversions.h"
 
 namespace agent_gateway {

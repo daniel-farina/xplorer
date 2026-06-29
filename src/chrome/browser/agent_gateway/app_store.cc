@@ -11,6 +11,7 @@
 #include "base/command_line.h"
 #include "base/files/file_enumerator.h"
 #include "base/files/file_util.h"
+#include "base/synchronization/lock.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/task/thread_pool.h"
 #include "base/time/time.h"
@@ -56,9 +57,42 @@ struct AppRuntimeServer {
 base::NoDestructor<std::set<std::string>> g_active_app_builds;
 base::NoDestructor<std::map<std::string, AppRuntimeServer>> g_app_runtime_servers;
 
+// |g_active_app_builds| is touched from BOTH the gateway server thread (status
+// reads, MarkAppBuilding insert, DELETE erase) AND the ThreadPool worker that
+// runs the grok build (OnAppBuildStreamFinished erase). Guard every access with
+// this lock. Mirrors ActiveRunsLock() in grok_native.cc.
+base::Lock& AppBuildsLock() {
+  static base::NoDestructor<base::Lock> lock;
+  return *lock;
+}
+
 std::string PathOnly(const std::string& path) {
   return base::SplitString(path, "?", base::TRIM_WHITESPACE,
                            base::SPLIT_WANT_NONEMPTY)[0];
+}
+
+// True if the request carries an Origin header from a NON-loopback site — i.e. a
+// real website the user visited fetching this gateway cross-origin. The app
+// endpoints run BEFORE CheckAuth (the /run preview is loaded by browser
+// navigation/iframe, which can't attach a bearer token) and serve files +
+// Access-Control-Allow-Origin: *, so without this guard a visited page could
+// POST /api/apps/import an arbitrary path and read it back via /run/{id}/...
+// cross-origin (local file disclosure). Same-origin UI requests, /run preview
+// navigations/subresource GETs (which don't send Origin), and local non-browser
+// agents (curl, no Origin) are NOT foreign, so this closes the cross-site vector
+// without breaking previews or local tooling.
+bool IsForeignOrigin(const net::HttpServerRequestInfo& info) {
+  auto it = info.headers.find("origin");
+  if (it == info.headers.end() || it->second.empty()) {
+    return false;
+  }
+  GURL origin(it->second);
+  if (!origin.is_valid()) {
+    return true;
+  }
+  const std::string_view host = origin.host();
+  return host != "127.0.0.1" && host != "localhost" && host != "::1" &&
+         host != "[::1]";
 }
 
 void SendBytes(net::HttpServer* server,
@@ -271,9 +305,11 @@ bool IsPathInside(const base::FilePath& root, const base::FilePath& child);
 std::string GuessContentType(const base::FilePath& path);
 
 std::string AppStatus(const base::DictValue& app) {
-  if (const std::string* id = app.FindString("id");
-      id && g_active_app_builds->count(*id))
-    return kStatusBuilding;
+  if (const std::string* id = app.FindString("id")) {
+    base::AutoLock l(AppBuildsLock());
+    if (g_active_app_builds->count(*id))
+      return kStatusBuilding;
+  }
   const std::string* status = app.FindString("status");
   return status ? *status : kStatusIdle;
 }
@@ -332,8 +368,12 @@ void ReconcileRegistryStates(base::DictValue& registry) {
     if (!id || id->empty())
       continue;
     const std::string* status = app.FindString("status");
-    if (status && *status == kStatusBuilding &&
-        !g_active_app_builds->count(*id)) {
+    bool active_build = false;
+    {
+      base::AutoLock l(AppBuildsLock());
+      active_build = g_active_app_builds->count(*id) != 0;
+    }
+    if (status && *status == kStatusBuilding && !active_build) {
       app.Set("status", kStatusIdle);
       changed = true;
     }
@@ -625,7 +665,10 @@ void SetAppField(base::DictValue& app,
 }
 
 void MarkAppBuilding(const std::string& app_id) {
-  g_active_app_builds->insert(app_id);
+  {
+    base::AutoLock l(AppBuildsLock());
+    g_active_app_builds->insert(app_id);
+  }
   base::DictValue registry = LoadRegistry();
   if (base::DictValue* app = FindAppDict(registry, app_id)) {
     SetAppField(*app, "status", kStatusBuilding);
@@ -693,6 +736,12 @@ bool TryHandleAppRunRequest(
   const std::string prefix = "/run/";
   if (!base::StartsWith(path, prefix))
     return false;
+  if (IsForeignOrigin(info)) {
+    base::DictValue err;
+    err.Set("error", "cross-origin requests are not allowed");
+    SendJson(server, connection_id, net::HTTP_FORBIDDEN, std::move(err));
+    return true;
+  }
 
   std::string rest = path.substr(prefix.size());
   if (rest.empty()) {
@@ -746,7 +795,10 @@ void OnAppBuildStreamFinished(const std::string& app_id,
                               const std::string& session_id,
                               const std::string& full_text,
                               const std::string& detail) {
-  g_active_app_builds->erase(app_id);
+  {
+    base::AutoLock l(AppBuildsLock());
+    g_active_app_builds->erase(app_id);
+  }
   base::DictValue registry = LoadRegistry();
   base::DictValue* app = FindAppDict(registry, app_id);
   if (!app)
@@ -785,6 +837,21 @@ void OnAppBuildStreamFinished(const std::string& app_id,
             << " session=" << session_id;
 }
 
+void StopAllAppRuntimeServers() {
+  // Terminate every per-app python http.server child so it does not survive a
+  // browser restart holding its 127.0.0.1 port. Called from
+  // AgentGateway::Shutdown on the main thread. Mirrors StopAllActiveRuns():
+  // base::Process::Terminate(exit_code=0, wait=false) so shutdown does not
+  // block on the children exiting. g_app_runtime_servers has no lock (mutated
+  // only from the gateway server thread, like StopAppRuntimeServer), and this
+  // runs after that thread is being torn down, so no snapshot lock is needed.
+  for (auto& entry : *g_app_runtime_servers) {
+    if (entry.second.process.IsValid())
+      entry.second.process.Terminate(/*exit_code=*/0, /*wait=*/false);
+  }
+  g_app_runtime_servers->clear();
+}
+
 bool TryHandleAppsRequest(
     int connection_id,
     const net::HttpServerRequestInfo& info,
@@ -793,6 +860,17 @@ bool TryHandleAppsRequest(
     scoped_refptr<base::SingleThreadTaskRunner> io_task_runner) {
   const std::string path = PathOnly(info.path);
   const std::string prefix = "/api/apps/";
+
+  // Block cross-origin (foreign-Origin) browser requests to the app endpoints —
+  // these are unauthenticated and import/serve files, so a visited website must
+  // not be able to drive them. Only gate actual app paths so non-app requests
+  // still fall through to other handlers.
+  if (base::StartsWith(path, "/api/apps") && IsForeignOrigin(info)) {
+    base::DictValue err;
+    err.Set("error", "cross-origin requests are not allowed");
+    SendJson(server, connection_id, net::HTTP_FORBIDDEN, std::move(err));
+    return true;
+  }
 
   if (info.method == "POST" && path == "/api/apps/restart-batch") {
     auto body = base::JSONReader::ReadDict(info.data, base::JSON_PARSE_RFC);
@@ -993,7 +1071,7 @@ bool TryHandleAppsRequest(
     base::FilePath app_dir = AppsRootDir().AppendASCII(id);
     base::CreateDirectory(app_dir);
     const std::string readme =
-        "# " + name + "\n\nBuilt with Grok Build in Xplorer.\n";
+        "# " + name + "\n\nBuilt with Grok Build in Xplor.\n";
     base::WriteFile(app_dir.AppendASCII("README.md"), readme);
     const std::string conv_id = CreateAppConversation(id, name);
     base::DictValue app;
@@ -1153,6 +1231,17 @@ bool TryHandleAppsRequest(
     std::string conv_id;
     if (const std::string* cid = app->FindString("conversation_id"))
       conv_id = *cid;
+    // Reject a build/edit while this app's conversation is already streaming a
+    // run: a concurrent grok child would race the registry status + session
+    // store and could orphan an unkillable process. Same 409 guard the chat
+    // message handler uses (ActiveRuns, via IsConversationRunActive). Checked
+    // BEFORE MarkAppBuilding so a double-submit cannot leak the building marker.
+    if (!conv_id.empty() && IsConversationRunActive(conv_id)) {
+      base::DictValue err;
+      err.Set("error", "app is busy (a build is still running)");
+      SendJson(server, connection_id, net::HTTP_CONFLICT, std::move(err));
+      return true;
+    }
     // Intentionally do NOT resume the saved grok session: one-shot `-p`
     // (streaming-json) sessions are not persisted, so `-r <session_id>` fails
     // with "Session does not exist" — which surfaced as "grok build failed" on
@@ -1267,7 +1356,10 @@ bool TryHandleAppsRequest(
       conv_id = *cid;
 
     StopAppRuntimeServer(app_id);
-    g_active_app_builds->erase(app_id);
+    {
+      base::AutoLock l(AppBuildsLock());
+      g_active_app_builds->erase(app_id);
+    }
     base::ListValue* apps = AppsList(registry);
     base::ListValue filtered;
     for (auto& v : *apps) {

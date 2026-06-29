@@ -327,7 +327,7 @@ std::string BuildFabInjectScript() {
       if(action==='renameapp'){
         var ctx=detectAppContext();
         if(!ctx){
-          alert('Not viewing an Xplorer app.');
+          alert('Not viewing an Xplor app.');
           return;
         }
         setBusy(true);
@@ -353,7 +353,7 @@ std::string BuildFabInjectScript() {
       if(action==='copybuilderlink'){
         var ctx=detectAppContext();
         if(!ctx){
-          alert('Not viewing an Xplorer app.');
+          alert('Not viewing an Xplor app.');
           return;
         }
         setBusy(true);
@@ -376,7 +376,7 @@ std::string BuildFabInjectScript() {
       if(action==='shareapp'){
         var ctx=detectAppContext();
         if(!ctx){
-          alert('Not viewing an Xplorer app.');
+          alert('Not viewing an Xplor app.');
           return;
         }
         setBusy(true);
@@ -398,7 +398,7 @@ std::string BuildFabInjectScript() {
       if(action==='modifyapp'){
         var ctx=detectAppContext();
         if(!ctx){
-          alert('Not viewing an Xplorer app.');
+          alert('Not viewing an Xplor app.');
           return;
         }
         var prompt=window.prompt('What should Grok change in this app?','');
@@ -420,7 +420,7 @@ std::string BuildFabInjectScript() {
       if(action==='duplicateapp'){
         var ctx=detectAppContext();
         if(!ctx){
-          alert('Not viewing an Xplorer app.');
+          alert('Not viewing an Xplor app.');
           return;
         }
         setBusy(true);
@@ -444,7 +444,7 @@ std::string BuildFabInjectScript() {
       if(action==='openappbuilder'){
         var ctx=detectAppContext();
         if(!ctx){
-          alert('Not viewing an Xplorer app.');
+          alert('Not viewing an Xplor app.');
           return;
         }
         setBusy(true);
@@ -461,7 +461,7 @@ std::string BuildFabInjectScript() {
       if(action==='exportapp'){
         var ctx=detectAppContext();
         if(!ctx){
-          alert('Not viewing an Xplorer app.');
+          alert('Not viewing an Xplor app.');
           return;
         }
         setBusy(true);

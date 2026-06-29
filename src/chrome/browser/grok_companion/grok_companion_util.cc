@@ -15,7 +15,6 @@
 #include "base/json/json_writer.h"
 #include "base/json/json_reader.h"
 #include "base/no_destructor.h"
-#include "base/path_service.h"
 #include "base/strings/escape.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
@@ -205,6 +204,16 @@ class CompanionWebView : public views::WebView {
   base::WeakPtrFactory<CompanionWebView> weak_factory_{this};
 };
 
+// Weak handle to the most-recently-created side-panel companion WebContents, so
+// OpenGrokSidePanelAt() can navigate the live panel to a specific path after
+// showing it (the SidePanelEntry is registered once with a fixed "/" URL and
+// reuses its view, so re-Show() does not re-navigate on its own). Cleared
+// automatically when the contents is destroyed (raw WeakPtr). UI thread only.
+base::WeakPtr<content::WebContents>& LiveCompanionContents() {
+  static base::NoDestructor<base::WeakPtr<content::WebContents>> contents;
+  return *contents;
+}
+
 std::unique_ptr<views::View> CreateGrokCompanionView(
     BrowserWindowInterface* browser,
     Profile* profile,
@@ -217,23 +226,22 @@ std::unique_ptr<views::View> CreateGrokCompanionView(
   content::NavigationController::LoadURLParams load(url);
   load.transition_type = ui::PAGE_TRANSITION_AUTO_TOPLEVEL;
   contents->GetController().LoadURLWithParams(load);
+  // Track this contents so a subsequent OpenGrokSidePanelAt() can navigate it.
+  LiveCompanionContents() = contents->GetWeakPtr();
   web_view->AttachContents(std::move(contents));
   web_view->SetPreferredSize(
       gfx::Size(SidePanelEntry::kSidePanelDefaultContentWidth, 0));
   return web_view;
 }
 
-// Subscribers (live XplorerToolbarViews) notified when toolbar config changes.
-base::RepeatingClosureList& ToolbarConfigChangedCallbacks() {
+// Subscribers (live AgentTabGroupers) notified when the user-editable bookmark
+// list changes, so open "Bookmarks" group tabs can be reconciled in place.
+base::RepeatingClosureList& BookmarkConfigChangedCallbacks() {
   static base::NoDestructor<base::RepeatingClosureList> list;
   return *list;
 }
 
 }  // namespace
-
-base::FilePath GetXplorerDataDir() {
-  return xplorer_paths::DataDir();
-}
 
 base::FilePath ResolveDataFile(const char* filename) {
   return xplorer_paths::Resolve(filename);
@@ -265,7 +273,11 @@ void MarkWelcomeCompleted() {
 GURL GetStartupHomeURL() {
   if (!HasCompletedWelcome())
     return GetWelcomeURL();
-  return GetDefaultSearchHomeURL();
+  // XPLORER: new tabs / startup / tab-restore always land on /search, regardless
+  // of the Web/Wiki/Build toggle. GetDefaultSearchHomeURL() stays untouched
+  // (shared with OpenGrokSearchPage + the omnibox/NTP chip, which honor the
+  // toggle).
+  return GetSearchURL();
 }
 
 bool IsGrokHomeURL(const GURL& url) {
@@ -303,40 +315,55 @@ void SetSearchHomeMode(const std::string& mode) {
   SaveGrokSettings(settings);
 }
 
-std::vector<base::DictValue> GetToolbarPillConfigs() {
-  std::vector<base::DictValue> pills;
+std::vector<base::DictValue> GetBookmarkConfigs() {
+  std::vector<base::DictValue> bookmarks;
   base::DictValue settings = LoadGrokSettings();
-  const base::DictValue* toolbar = settings.FindDict("toolbar");
-  if (!toolbar)
-    return pills;
-  const base::ListValue* list = toolbar->FindList("pills");
+  const base::ListValue* list = settings.FindList("bookmarks");
   if (!list)
-    return pills;
+    return bookmarks;
   for (const base::Value& entry : *list) {
     if (!entry.is_dict())
       continue;
-    pills.push_back(entry.GetDict().Clone());
+    bookmarks.push_back(entry.GetDict().Clone());
   }
-  return pills;
+  return bookmarks;
 }
 
-void SetToolbarPillConfigs(const std::vector<base::DictValue>& pills) {
+void SetBookmarkConfigs(const std::vector<base::DictValue>& bookmarks) {
   base::DictValue settings = LoadGrokSettings();
   base::ListValue list;
-  for (const base::DictValue& pill : pills)
-    list.Append(pill.Clone());
-  settings.EnsureDict("toolbar")->Set("pills", std::move(list));
+  for (const base::DictValue& bookmark : bookmarks)
+    list.Append(bookmark.Clone());
+  settings.Set("bookmarks", std::move(list));
   SaveGrokSettings(settings);
-  NotifyToolbarConfigChanged();
+  NotifyBookmarkConfigChanged();
 }
 
-base::CallbackListSubscription AddToolbarConfigChangedCallback(
+void RemoveBookmarkConfig(int64_t node_id) {
+  std::vector<base::DictValue> bookmarks = GetBookmarkConfigs();
+  bool removed = false;
+  for (auto it = bookmarks.begin(); it != bookmarks.end();) {
+    int64_t id = 0;
+    const std::string* id_str = it->FindString("id");
+    if (id_str && base::StringToInt64(*id_str, &id) && id == node_id) {
+      it = bookmarks.erase(it);
+      removed = true;
+    } else {
+      ++it;
+    }
+  }
+  if (!removed)
+    return;
+  SetBookmarkConfigs(bookmarks);
+}
+
+base::CallbackListSubscription AddBookmarkConfigChangedCallback(
     base::RepeatingClosure callback) {
-  return ToolbarConfigChangedCallbacks().Add(std::move(callback));
+  return BookmarkConfigChangedCallbacks().Add(std::move(callback));
 }
 
-void NotifyToolbarConfigChanged() {
-  ToolbarConfigChangedCallbacks().Notify();
+void NotifyBookmarkConfigChanged() {
+  BookmarkConfigChangedCallbacks().Notify();
 }
 
 GURL GetDefaultSearchHomeURL() {
@@ -460,6 +487,27 @@ void OpenGrokSidePanel(BrowserWindowInterface* browser) {
   // unlike Toggle() it never closes the panel.
   ui->Show(SidePanelEntry::Key(SidePanelEntry::Id::kSearchCompanion),
            SidePanelOpenTrigger::kToolbarButton);
+}
+
+void OpenGrokSidePanelAt(BrowserWindowInterface* browser,
+                         const std::string& path) {
+  if (!browser)
+    return;
+  // Open (or re-show) the panel first; on a first open this synchronously
+  // creates the CompanionWebView and records its contents in
+  // LiveCompanionContents(). Then navigate that live contents to companion +
+  // |path| — the same LoadURLWithParams pattern OpenGrokSearchPage /
+  // AskGrokAboutPage use — so an already-open panel jumps to the new path too.
+  OpenGrokSidePanel(browser);
+  content::WebContents* contents = LiveCompanionContents().get();
+  if (!contents)
+    return;
+  const GURL dest = GetCompanionURL().Resolve(path);
+  if (!dest.is_valid())
+    return;
+  content::NavigationController::LoadURLParams params(dest);
+  params.transition_type = ui::PAGE_TRANSITION_AUTO_TOPLEVEL;
+  contents->GetController().LoadURLWithParams(params);
 }
 
 }  // namespace grok_companion

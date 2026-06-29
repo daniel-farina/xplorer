@@ -43,7 +43,7 @@ $OutDir = [System.IO.Path]::GetFullPath($OutDir)
 $exe = Join-Path $OutDir "chrome.exe"
 if (-not (Test-Path $exe)) { throw "No chrome.exe at $OutDir - build first." }
 
-$Name = "Xplorer-windows-$Arch"
+$Name = "Xplor-windows-$Arch"
 $Dist = Join-Path $Xplorer "dist"
 New-Item -ItemType Directory -Force -Path $Dist | Out-Null
 

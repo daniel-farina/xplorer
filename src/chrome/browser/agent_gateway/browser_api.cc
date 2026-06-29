@@ -16,6 +16,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/cancelable_task_tracker.h"
+#include "chrome/browser/agent_gateway/tab_ownership.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/history/history_service_factory.h"
 #include "chrome/browser/profiles/profile_manager.h"
@@ -241,6 +242,21 @@ void BrowserApi::CloseTab(const std::string& tab_id, DictCallback callback) {
     std::move(callback).Run(std::move(result));
     return;
   }
+  // A persistent bookmark tab (the xAI "Bookmarks" group) must NOT be closeable
+  // via the API: an agent or scheduled task could otherwise close it, which drops
+  // it from the bookmark config -- the recurring bookmark-config drift was a
+  // scheduled-task agent DELETE'ing bookmark tabs over idle gaps. The user can
+  // still close one via the native tab X (a different, non-API path), which is the
+  // intended closeable behavior; agents manage bookmarks via /api/settings.
+  content::WebContents* wc = model->GetWebContentsAt(index);
+  TabOwnership* own = wc ? TabOwnership::Get(wc) : nullptr;
+  if (own && own->bookmark_node_id != 0) {
+    result.Set("error",
+               "cannot close a bookmark tab via the API; manage bookmarks via "
+               "/api/settings");
+    std::move(callback).Run(std::move(result));
+    return;
+  }
   model->CloseWebContentsAt(index, TabCloseTypes::CLOSE_USER_GESTURE);
   result.Set("ok", true);
   std::move(callback).Run(std::move(result));
@@ -255,7 +271,7 @@ std::string TabCategory(const GURL& url, const std::string& title) {
   if (host == "grokipedia.com")
     return "Wiki";
   if (host == "127.0.0.1" && (url.port() == "9334" || spec.find(":9334") != std::string::npos))
-    return "Xplorer";
+    return "Xplor";
   if (host.find("news") != std::string::npos ||
       host.find("cnn.com") != std::string::npos ||
       host.find("bbc.") != std::string::npos ||
@@ -275,7 +291,7 @@ std::string TabCategory(const GURL& url, const std::string& title) {
 tab_groups::TabGroupColorId ColorForCategory(const std::string& category) {
   if (category == "Grok")
     return tab_groups::TabGroupColorId::kPurple;
-  if (category == "Xplorer")
+  if (category == "Xplor")
     return tab_groups::TabGroupColorId::kBlue;
   if (category == "News")
     return tab_groups::TabGroupColorId::kRed;
@@ -323,6 +339,15 @@ void BrowserApi::OrganizeTabs(DictCallback callback) {
       content::WebContents* wc = model->GetWebContentsAt(i);
       if (!wc)
         continue;
+      // Skip managed tabs (bookmarks / agent-owned / scheduled-task). They belong
+      // to AgentTabGrouper's persistent Bookmarks/Agent/Scheduled groups; letting
+      // organize bucket them by category scatters them out of those groups and the
+      // grouper does not reclaim a tab already in a non-managed group.
+      TabOwnership* own = TabOwnership::Get(wc);
+      if (own && (own->bookmark_node_id != 0 || !own->owner.empty() ||
+                  !own->task_id.empty())) {
+        continue;
+      }
       ++total_tabs;
       const std::string category = TabCategory(
           wc->GetLastCommittedURL(),

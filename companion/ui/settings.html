@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Grok Settings — Xplorer</title>
+  <title>Grok Settings — Xplor</title>
   <link rel="stylesheet" href="/theme.css">
   <script>document.documentElement.setAttribute('data-theme',matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');</script>
   <link rel="stylesheet" href="/toolbar.css">
@@ -14,7 +14,8 @@
   <main class="settings-page settings-shell">
     <nav class="settings-sidebar" aria-label="Settings sections">
       <button type="button" class="settings-nav-btn active" data-pane="general">General</button>
-      <button type="button" class="settings-nav-btn" data-pane="toolbar">Toolbar</button>
+      <button type="button" class="settings-nav-btn" data-pane="bookmarks">Bookmarks</button>
+      <button type="button" class="settings-nav-btn" data-pane="updates">Updates</button>
     </nav>
 
     <div class="settings-main">
@@ -27,7 +28,7 @@
         <section class="settings-card">
           <h2>Home &amp; navigation</h2>
           <label class="settings-field">
-            <span>Default home when Xplorer starts</span>
+            <span>Default home when Xplor starts</span>
             <select id="search-home">
               <option value="build">Grok Build (conversations + apps)</option>
               <option value="web">Grok Web (search → grok.com)</option>
@@ -97,28 +98,55 @@
         <p id="settings-status" class="settings-status" role="status" aria-live="polite"></p>
       </section>
 
-      <section class="settings-pane" data-pane="toolbar" hidden>
+      <section class="settings-pane" data-pane="bookmarks" hidden>
         <header class="settings-head">
-          <h1>Toolbar</h1>
-          <p>Reorder, enable, edit, and add the navigation pills shown in the Xplorer toolbar on every page. Drag order is set with the ▲▼ buttons. Stored under <code>toolbar</code> in <code>~/.xplorer/grok_settings.json</code>.</p>
+          <h1>Bookmarks</h1>
+          <p>The always-open tabs in the native <strong>Bookmarks</strong> group. Add, edit, reorder (▲▼), and remove them; changes apply immediately in Xplor. Stored under <code>bookmarks</code> in <code>~/.xplorer/grok_settings.json</code>.</p>
         </header>
 
         <section class="settings-card">
-          <h2>Pills</h2>
-          <div id="toolbar-editor" class="toolbar-editor"></div>
+          <h2>Bookmarks</h2>
+          <div id="bookmarks-editor" class="toolbar-editor"></div>
           <div class="tb-add-bar">
-            <button type="button" id="toolbar-add-custom" class="settings-btn">+ Add custom pill</button>
-            <select id="toolbar-catalog" class="tb-catalog" aria-label="Add a known service">
-              <option value="">Add from catalog…</option>
-            </select>
+            <button type="button" id="bookmarks-add" class="settings-btn">+ Add bookmark</button>
           </div>
         </section>
 
         <div class="settings-actions">
-          <button type="button" id="toolbar-save" class="settings-btn settings-btn-primary">Save</button>
-          <button type="button" id="toolbar-reset" class="settings-btn">Reset to default</button>
+          <button type="button" id="bookmarks-save" class="settings-btn settings-btn-primary">Save</button>
         </div>
-        <p id="toolbar-status" class="settings-status" role="status" aria-live="polite"></p>
+        <p id="bookmarks-status" class="settings-status" role="status" aria-live="polite"></p>
+      </section>
+
+      <section class="settings-pane" data-pane="updates" hidden>
+        <header class="settings-head">
+          <h1>Updates</h1>
+          <p>Xplor checks for updates automatically and installs them in the background. Turn that off or check on demand here.</p>
+        </header>
+
+        <section class="settings-card">
+          <h2>Automatic updates</h2>
+          <label class="settings-field settings-field-check">
+            <input type="checkbox" id="updates-auto-check">
+            <span>Automatically check for updates</span>
+          </label>
+          <p class="settings-hint">When on, Xplor checks once a day and lets you know when a new version is available.</p>
+        </section>
+
+        <section class="settings-card">
+          <h2>Check now</h2>
+          <button type="button" id="updates-check-btn" class="settings-btn settings-btn-primary">Check for updates now</button>
+          <p class="settings-hint">Runs an immediate check; Xplor shows a dialog if an update is available.</p>
+        </section>
+
+        <section class="settings-card settings-readonly">
+          <h2>Version</h2>
+          <dl class="settings-dl">
+            <dt>Current version</dt><dd id="updates-version">—</dd>
+          </dl>
+        </section>
+
+        <p id="updates-status" class="settings-status" role="status" aria-live="polite"></p>
       </section>
     </div>
   </main>
