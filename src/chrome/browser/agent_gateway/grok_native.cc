@@ -55,6 +55,9 @@
 #include "chrome/browser/agent_gateway/focus_arbiter.h"
 #include "chrome/browser/agent_gateway/scheduler.h"
 #include "chrome/browser/agent_gateway/update_checker.h"
+#if BUILDFLAG(IS_MAC)
+#include "chrome/browser/xplorer_sparkle_updater.h"  // XPLORER: update controls
+#endif
 #include "chrome/browser/agent_gateway/xplorer_paths.h"
 #include "chrome/browser/grok_companion/grok_companion_util.h"
 #include "chrome/browser/agent_gateway/tab_screenshot.h"
@@ -3023,6 +3026,60 @@ bool GrokNative::TryHandleRequest(
              UpdateChecker::Get()->Restart());
     return true;
   }
+
+#if BUILDFLAG(IS_MAC)
+  // macOS Sparkle update controls (companion Settings "Updates" pane). Sparkle
+  // is main-thread-affine, so every call hops to the UI thread and replies from
+  // there via ReplyJsonOnIO. These exist only on macOS; the pane treats a 404 on
+  // other platforms as "managed by the platform updater".
+  if (info.method == "GET" && path == "/api/update/sparkle") {
+    content::GetUIThreadTaskRunner({})->PostTask(
+        FROM_HERE,
+        base::BindOnce(
+            [](net::HttpServer* srv,
+               scoped_refptr<base::SingleThreadTaskRunner> io, int cid) {
+              base::DictValue d;
+              d.Set("available", XplorerSparkleAvailable());
+              d.Set("auto_check", XplorerSparkleAutoCheckEnabled());
+              d.Set("current_version", XplorerSparkleCurrentVersion());
+              ReplyJsonOnIO(srv, io, cid, std::move(d));
+            },
+            server, io_task_runner, connection_id));
+    return true;
+  }
+  if (info.method == "POST" && path == "/api/update/sparkle/auto-check") {
+    auto body = base::JSONReader::ReadDict(info.data, base::JSON_PARSE_RFC);
+    const bool enabled = body ? body->FindBool("enabled").value_or(true) : true;
+    content::GetUIThreadTaskRunner({})->PostTask(
+        FROM_HERE,
+        base::BindOnce(
+            [](net::HttpServer* srv,
+               scoped_refptr<base::SingleThreadTaskRunner> io, int cid,
+               bool enabled) {
+              XplorerSparkleSetAutoCheck(enabled);
+              base::DictValue d;
+              d.Set("ok", true);
+              d.Set("auto_check", XplorerSparkleAutoCheckEnabled());
+              ReplyJsonOnIO(srv, io, cid, std::move(d));
+            },
+            server, io_task_runner, connection_id, enabled));
+    return true;
+  }
+  if (info.method == "POST" && path == "/api/update/sparkle/check") {
+    content::GetUIThreadTaskRunner({})->PostTask(
+        FROM_HERE,
+        base::BindOnce(
+            [](net::HttpServer* srv,
+               scoped_refptr<base::SingleThreadTaskRunner> io, int cid) {
+              XplorerSparkleCheckNow();
+              base::DictValue d;
+              d.Set("ok", true);
+              ReplyJsonOnIO(srv, io, cid, std::move(d));
+            },
+            server, io_task_runner, connection_id));
+    return true;
+  }
+#endif  // BUILDFLAG(IS_MAC)
 
   if (info.method == "GET" && path == "/api/logs") {
     const std::map<std::string, std::string> params = QueryParams(info.path);

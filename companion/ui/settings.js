@@ -293,4 +293,73 @@ document.getElementById('bookmarks-save')?.addEventListener('click', async () =>
 
 loadBookmarksEditor();
 
+// --------------------------------------------------------------------------
+// Updates pane. Driven by the macOS Sparkle bridge endpoints
+// (/api/update/sparkle*). Those exist on macOS only; on other platforms the
+// GET 404s (or reports unavailable) and we present a graceful read-only note.
+// --------------------------------------------------------------------------
+const updatesAutoCheck = document.getElementById('updates-auto-check');
+const updatesCheckBtn = document.getElementById('updates-check-btn');
+const updatesVersion = document.getElementById('updates-version');
+const updatesStatusEl = document.getElementById('updates-status');
+
+function setUpdatesStatus(msg, kind = '') {
+  if (!updatesStatusEl) return;
+  updatesStatusEl.textContent = msg;
+  updatesStatusEl.className = 'settings-status' + (kind ? ` ${kind}` : '');
+}
+
+async function loadUpdates() {
+  try {
+    const res = await fetch('/api/update/sparkle');
+    if (!res.ok) throw new Error('unavailable');
+    const d = await res.json();
+    if (!d.available) throw new Error('unavailable');
+    if (updatesAutoCheck) updatesAutoCheck.checked = !!d.auto_check;
+    if (updatesVersion) updatesVersion.textContent = d.current_version || '—';
+  } catch {
+    // Not macOS, or the updater hasn't started — degrade gracefully.
+    if (updatesAutoCheck) updatesAutoCheck.disabled = true;
+    if (updatesCheckBtn) updatesCheckBtn.disabled = true;
+    setUpdatesStatus('Updates are managed by your platform’s installer on this system.');
+  }
+}
+
+updatesAutoCheck?.addEventListener('change', async () => {
+  setUpdatesStatus('Saving…');
+  try {
+    const res = await fetch('/api/update/sparkle/auto-check', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled: updatesAutoCheck.checked }),
+    });
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.error || res.statusText);
+    updatesAutoCheck.checked = !!d.auto_check;
+    setUpdatesStatus(
+      updatesAutoCheck.checked
+        ? 'Automatic update checks are on.'
+        : 'Automatic update checks are off.',
+      'ok',
+    );
+    setTimeout(() => setUpdatesStatus(''), 2500);
+  } catch (e) {
+    setUpdatesStatus(e.message, 'err');
+  }
+});
+
+updatesCheckBtn?.addEventListener('click', async () => {
+  setUpdatesStatus('Checking for updates…');
+  try {
+    const res = await fetch('/api/update/sparkle/check', { method: 'POST' });
+    if (!res.ok) throw new Error(res.statusText);
+    setUpdatesStatus('Checking — Xplor will show a dialog if an update is available.', 'ok');
+    setTimeout(() => setUpdatesStatus(''), 4000);
+  } catch (e) {
+    setUpdatesStatus(e.message, 'err');
+  }
+});
+
+loadUpdates();
+
 init().catch((e) => setStatus(e.message, 'err'));

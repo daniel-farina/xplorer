@@ -43,3 +43,35 @@ void XplorerStartSparkleUpdater() {
     [appMenu insertItem:it atIndex:1];
   }
 }
+
+bool XplorerSparkleAvailable() {
+  return g_updater != nil;
+}
+
+bool XplorerSparkleAutoCheckEnabled() {
+  if (!g_updater) {
+    return false;
+  }
+  return g_updater.updater.automaticallyChecksForUpdates ? true : false;
+}
+
+void XplorerSparkleSetAutoCheck(bool enabled) {
+  if (!g_updater) {
+    return;
+  }
+  g_updater.updater.automaticallyChecksForUpdates = enabled ? YES : NO;
+}
+
+void XplorerSparkleCheckNow() {
+  if (!g_updater) {
+    return;
+  }
+  // Same entry point as the menu item; shows Sparkle's native update dialog.
+  [g_updater checkForUpdates:nil];
+}
+
+std::string XplorerSparkleCurrentVersion() {
+  NSString* v = [[NSBundle mainBundle]
+      objectForInfoDictionaryKey:@"CFBundleShortVersionString"];
+  return v ? std::string(v.UTF8String) : std::string();
+}

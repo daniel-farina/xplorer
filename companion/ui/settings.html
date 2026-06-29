@@ -15,6 +15,7 @@
     <nav class="settings-sidebar" aria-label="Settings sections">
       <button type="button" class="settings-nav-btn active" data-pane="general">General</button>
       <button type="button" class="settings-nav-btn" data-pane="bookmarks">Bookmarks</button>
+      <button type="button" class="settings-nav-btn" data-pane="updates">Updates</button>
     </nav>
 
     <div class="settings-main">
@@ -115,6 +116,37 @@
           <button type="button" id="bookmarks-save" class="settings-btn settings-btn-primary">Save</button>
         </div>
         <p id="bookmarks-status" class="settings-status" role="status" aria-live="polite"></p>
+      </section>
+
+      <section class="settings-pane" data-pane="updates" hidden>
+        <header class="settings-head">
+          <h1>Updates</h1>
+          <p>Xplor checks for updates automatically and installs them in the background. Turn that off or check on demand here.</p>
+        </header>
+
+        <section class="settings-card">
+          <h2>Automatic updates</h2>
+          <label class="settings-field settings-field-check">
+            <input type="checkbox" id="updates-auto-check">
+            <span>Automatically check for updates</span>
+          </label>
+          <p class="settings-hint">When on, Xplor checks once a day and lets you know when a new version is available.</p>
+        </section>
+
+        <section class="settings-card">
+          <h2>Check now</h2>
+          <button type="button" id="updates-check-btn" class="settings-btn settings-btn-primary">Check for updates now</button>
+          <p class="settings-hint">Runs an immediate check; Xplor shows a dialog if an update is available.</p>
+        </section>
+
+        <section class="settings-card settings-readonly">
+          <h2>Version</h2>
+          <dl class="settings-dl">
+            <dt>Current version</dt><dd id="updates-version">—</dd>
+          </dl>
+        </section>
+
+        <p id="updates-status" class="settings-status" role="status" aria-live="polite"></p>
       </section>
     </div>
   </main>
