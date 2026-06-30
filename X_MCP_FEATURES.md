@@ -2,6 +2,17 @@
 
 **Branch:** `feat/x-mcp-integration` (off master @ ceb9cfa) · **Started:** 2026-06-30 · autonomous build loop
 
+## ⛔ DECISION (2026-06-30): NOT SHIPPING THE X FEATURES — SUPERSEDES EVERYTHING BELOW
+SuperGrok's Grok has **built-in real-time X access** (`x_keyword_search` / `x_semantic_search`). Proven:
+a `grok -m grok-build` run returned **real X posts** (real @handles + x.com links, e.g. @MarioNawfal) with
+**no X API / OAuth / MCP** — its own reasoning said "I must use my built-in tools: x_keyword_search…".
+So this entire X-MCP integration (mock, OAuth/`x_oauth.py`, the X API path, the search `x` mode, the
+briefing) is **redundant** for a Grok user — ad-hoc X intelligence already works by just asking Grok in
+the sidebar. Per the user, **the X features are NOT shipped**. KEEPING the **grok provisioner** (useful for
+distributed grok config; clean it to xplorer-only before any merge). This branch is a **record, NOT merged
+to master**; master + the rest of the browser work are unaffected. Build resources (droplet, poller, NUC
+schtask) torn down. Everything below is the (now-superseded) build log.
+
 ## Vision
 Weave X's real-time social layer (X MCP: full-archive search, trends, news, the social graph,
 bookmarks, Articles) into Xplor's agentic browser via Grok Build — a real-time-aware default
