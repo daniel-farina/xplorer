@@ -847,3 +847,22 @@ html[data-theme="dark"] .markdown .hl-num { color: #fbbf24; }
   border-radius: 10px;
   border: 1px solid var(--border);
 }
+/* --- X Live module (the "On 𝕏 right now" snapshot) --- */
+.x-panel { margin-top: 22px; width: 100%; max-width: 720px; text-align: left; }
+.x-panel-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 10px; }
+.x-panel-title { font-weight: 700; font-size: 15px; }
+.x-panel-status { font-size: 12px; color: var(--text-dim, #8a8a8a); }
+.x-answer { font-size: 14px; line-height: 1.55; margin-bottom: 14px; }
+.x-posts { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
+.x-post { display: block; padding: 10px 12px; border: 1px solid var(--border, #2a2a2a);
+  border-radius: 12px; background: var(--surface, #161616); text-decoration: none; color: inherit; }
+.x-post:hover { border-color: var(--accent, #1d9bf0); }
+.x-post-head { display: flex; gap: 6px; align-items: baseline; margin-bottom: 3px; }
+.x-post-author { font-weight: 600; }
+.x-post-name { font-size: 12px; color: var(--text-dim, #8a8a8a); }
+.x-post-text { font-size: 13px; line-height: 1.4; }
+.x-post-meta { font-size: 11px; color: var(--text-dim, #8a8a8a); margin-top: 5px; }
+.x-trends { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.x-trends-label { font-size: 12px; color: var(--text-dim, #8a8a8a); margin-right: 4px; }
+.x-trend { font-size: 12px; padding: 3px 9px; border-radius: 999px;
+  background: var(--surface, #161616); border: 1px solid var(--border, #2a2a2a); }

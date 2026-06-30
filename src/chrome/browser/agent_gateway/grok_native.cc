@@ -1041,6 +1041,21 @@ const char* SearchPromptForMode(const std::string& mode, bool has_image) {
     return "Generate an image for this prompt. Return a brief caption then "
            "any image URLs produced.";
   }
+  if (mode == "x") {
+    // Real-time X (Twitter) snapshot. Grok MUST use the X MCP tools
+    // (x_search_posts / x_trends / x_news) — these come from the configured X
+    // MCP server (mock until live credentials are set). Returns a small JSON
+    // the /search page renders as the "On X right now" module.
+    return "You are Xplor's real-time X analyst. Use your X tools "
+           "(x_search_posts, then x_trends) to find what is happening on X "
+           "RIGHT NOW about the query. Write a 2-3 sentence live take naming the "
+           "current sentiment, then output ONLY a ```json block:\n"
+           "{\"answer\":\"...\",\"posts\":[{\"author\":\"@handle\",\"name\":"
+           "\"...\",\"text\":\"...\",\"url\":\"https://x.com/...\",\"likes\":0,"
+           "\"reposts\":0}],\"trends\":[\"...\"]}\n"
+           "Include the top 5 posts by engagement and up to 6 trends. ALWAYS "
+           "call the X tools first; never invent posts.";
+  }
   return "You are Grok Search for Xplor. Use web search. Give a concise "
          "formatted answer with citations, then ONLY ```json:\n"
          "{\"links\":[{\"title\":\"...\",\"url\":\"https://...\","

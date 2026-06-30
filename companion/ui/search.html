@@ -27,12 +27,22 @@
       </div>
       <nav id="search-modes" class="search-modes" aria-label="Search mode">
         <button type="button" class="search-mode active" data-mode="web">Web</button>
+        <button type="button" class="search-mode" data-mode="x">𝕏 Live</button>
         <button type="button" class="search-mode" data-mode="imagine">Imagine</button>
       </nav>
       <form id="search-form" class="search-box">
         <input id="q" type="search" placeholder="Search with Grok…" autocomplete="off" autofocus>
         <button type="submit">Search</button>
       </form>
+      <section id="x-panel" class="x-panel" hidden aria-live="polite">
+        <div class="x-panel-head">
+          <span class="x-panel-title">On 𝕏 right now</span>
+          <span id="x-panel-status" class="x-panel-status"></span>
+        </div>
+        <div id="x-answer" class="x-answer markdown"></div>
+        <div id="x-posts" class="x-posts"></div>
+        <div id="x-trends" class="x-trends"></div>
+      </section>
     </section>
   </main>
   <script src="/toolbar.js"></script>
