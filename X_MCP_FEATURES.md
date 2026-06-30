@@ -29,6 +29,13 @@ testable WITHOUT live X creds (the real X MCP path is credential-gated; the user
       `grok mcp doctor x-mock` = healthy, 6 tools discovered. (No `/api/x/*` gateway endpoints needed —
       features use the existing grok-CLI invocation + the X MCP in config; that's the elegant path.)
 - [ ] P0.4 MCP test hooks — extend the xplorer MCP / gateway to drive+verify every X feature headlessly.
+- [ ] P0.5 **Real data path (PRIMARY)** — Settings → X integration: store Xplor's X dev-app
+      CLIENT_ID/SECRET + per-user OAuth login (localhost:8080/callback) → enable `xapi` (live X data).
+      `x-mock` becomes the OFFLINE / not-connected FALLBACK + dev test harness, NOT the primary source.
+      Auto-select: use `xapi` when configured+authed, else fall back to `x-mock`.
+      BLOCKER (owner, one-time, can't automate): create Xplor's X dev app at developer.x.com (OAuth2,
+      redirect localhost:8080/callback, Production env) → paste CLIENT_ID/SECRET. Real data is the goal;
+      the mock only ensures features still work when a user hasn't connected X / is offline.
 
 ### Phase 1 — Default search page
 - [ ] P1.1 "On X right now" module (web + live X blend).
