@@ -1054,14 +1054,17 @@ def main(src: Path):
     edit(
         main_cc,
         'TRACE_EVENT0("startup", "ChromeBrowserMainParts::PostBrowserStart");',
-        f"\n  {MARKER}: start the AI-native agent gateway (HTTP 9334).\n"
+        f"\n  {MARKER}: provision the grok CLI config (+ X MCP servers) on first run\n"
+        f"  {MARKER}: so the browser works on machines without ~/.grok set up, then\n"
+        f"  {MARKER}: start the AI-native agent gateway (HTTP 9334).\n"
+        "  agent_gateway::ProvisionGrok();\n"
         "  agent_gateway::AgentGateway::Start(0);\n",
     )
     edit(
         main_cc,
         '#include "chrome/browser/chrome_browser_main.h"',
-        f'\n#include "chrome/browser/agent_gateway/agent_gateway.h"'
-        f"  {MARKER}\n",
+        f'\n#include "chrome/browser/agent_gateway/agent_gateway.h"  {MARKER}'
+        f'\n#include "chrome/browser/agent_gateway/grok_provisioner.h"  {MARKER}\n',
     )
     # 1b. Cleanly shut the gateway down in PostMainMessageLoopRun (after the main
     # loop quits, before thread teardown). The gateway is a leaked raw global

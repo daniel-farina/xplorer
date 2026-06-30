@@ -16,6 +16,8 @@ source_set("agent_gateway") {
     "grok_companion_launcher.h",
     "grok_native.cc",
     "grok_native.h",
+    "grok_provisioner.cc",
+    "grok_provisioner.h",
     "scheduler.cc",
     "scheduler.h",
     "tab_ownership.cc",
