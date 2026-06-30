@@ -21,8 +21,12 @@ testable WITHOUT live X creds (the real X MCP path is credential-gated; the user
 
 ## Phases & features
 ### Phase 0 — Foundation
-- [ ] P0.1 **Grok config bootstrap** — app ensures grok CLI + writes `~/.grok/config.toml` on first
-      run (provisioner), incl. the `xplorer` MCP + X MCP (`xapi` disabled-until-creds, `x-docs` on).
+- [x] P0.1 **Grok config bootstrap** — DONE + **macOS-tested**. `agent_gateway/grok_provisioner.{cc,h}`
+      `ProvisionGrok()` writes `~/.grok/config.toml` (xplorer+x-mock+x-docs+xapi) if missing, else appends
+      only the missing Xplor blocks (never clobbers); hooked into PostBrowserStart (before gateway Start).
+      `release_arch.sh` bundles `sdk/*.py` → `Contents/Resources/sdk`. Test: removed config → launched →
+      recreated in ~4s with all 4 MCP servers pointing at the SDK; user config restored.
+      GAP: grok CLI BINARY ensure is still best-effort (config done; binary = bundle/install/download TBD).
 - [x] P0.2 Canonical grok config template (`sdk/grok_config.template.toml`) — source of truth for the
       provisioner; wired `x-mock`+`x-docs` into dev `~/.grok/config.toml`; `grok mcp list` sees all.
 - [x] P0.3 Mock X MCP layer (`sdk/mock_x_mcp.py`, 6 X tools, fixtures) — credential-free testing;
@@ -95,3 +99,9 @@ testable WITHOUT live X creds (the real X MCP path is credential-gated; the user
   x_search_posts, trends via x_trends, a what-matters summary), produced in a background run (no focus steal).
   P2.1 social-graph research works through the same sidebar-chat + X-MCP path. Shipped so far: P0 foundation,
   P1 search module, P2.1, P3.1 — all macOS-tested. NEXT: P0.1 grok provisioner (distributed config, rebuild).
+- 2026-06-30: P0.1 provisioner macOS-TESTED ✓. grok_provisioner.{cc,h} + PostBrowserStart hook + sdk/ bundling
+  (release_arch.sh) + rebuilt. Test: rm ~/.grok/config.toml → launch dev → recreated in ~4s with all 4 MCP
+  servers pointing at the SDK; user config restored. Distributed-machine grok config = DONE.
+  macOS phase ~complete (P0, P0.1, P1, P2.1, P3.1 all tested). NEXT: P3.2 topic radar (quick), then the
+  cross-platform (Linux/Windows) build+test pass — the C++ (provisioner + x-mode) is portable. Live X data
+  still awaiting the user's X Bearer token (xapi flips on then; mock works meanwhile).
