@@ -1,0 +1,46 @@
+# Xplor — default grok CLI config written by the first-run provisioner on machines
+# that don't already have ~/.grok/config.toml. The provisioner replaces {{SDK_DIR}}
+# with the absolute path to Xplor's bundled sdk/ directory. If a config already
+# exists, the provisioner only APPENDS any missing [mcp_servers.*] blocks below —
+# it never clobbers user edits. See X_MCP_FEATURES.md.
+
+[cli]
+installer = "internal"
+auto_update = false
+
+[ui]
+permission_mode = "always-approve"
+
+[features]
+codebase_indexing = true
+
+# Xplor's own browser-control MCP (tabs, navigation, bookmarks, screenshots, themes).
+[mcp_servers.xplorer]
+command = "python3"
+args = ["{{SDK_DIR}}/xplorer_mcp.py"]
+enabled = true
+
+# Mock X data — credential-free, so the X features work out of the box for testing
+# and demos. Superseded by [mcp_servers.xapi] once real X credentials are set.
+[mcp_servers.x-mock]
+command = "python3"
+args = ["{{SDK_DIR}}/mock_x_mcp.py"]
+enabled = true
+
+# Real X API documentation MCP (no credentials needed).
+[mcp_servers.x-docs]
+url = "https://docs.x.com/mcp"
+enabled = true
+
+# Real X API (live data) via the xurl bridge. Disabled until the user adds an
+# X dev-app CLIENT_ID/CLIENT_SECRET (Settings -> X integration writes the env block).
+[mcp_servers.xapi]
+command = "npx"
+args = ["-y", "@xdevplatform/xurl", "mcp", "https://api.x.com/mcp"]
+enabled = false
+# [mcp_servers.xapi.env]
+# CLIENT_ID = ""
+# CLIENT_SECRET = ""
+
+[models]
+default = "grok-composer-2.5-fast"

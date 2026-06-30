@@ -23,9 +23,12 @@ testable WITHOUT live X creds (the real X MCP path is credential-gated; the user
 ### Phase 0 — Foundation
 - [ ] P0.1 **Grok config bootstrap** — app ensures grok CLI + writes `~/.grok/config.toml` on first
       run (provisioner), incl. the `xplorer` MCP + X MCP (`xapi` disabled-until-creds, `x-docs` on).
-- [ ] P0.2 Canonical grok config template (one source of truth: dev config + the bootstrap default).
-- [ ] P0.3 Gateway `/api/x/*` family — proxy Grok+X MCP; **mock mode** for credential-free testing.
-- [ ] P0.4 MCP test hooks — gateway endpoints to drive/verify every feature headlessly.
+- [x] P0.2 Canonical grok config template (`sdk/grok_config.template.toml`) — source of truth for the
+      provisioner; wired `x-mock`+`x-docs` into dev `~/.grok/config.toml`; `grok mcp list` sees all.
+- [x] P0.3 Mock X MCP layer (`sdk/mock_x_mcp.py`, 6 X tools, fixtures) — credential-free testing;
+      `grok mcp doctor x-mock` = healthy, 6 tools discovered. (No `/api/x/*` gateway endpoints needed —
+      features use the existing grok-CLI invocation + the X MCP in config; that's the elegant path.)
+- [ ] P0.4 MCP test hooks — extend the xplorer MCP / gateway to drive+verify every X feature headlessly.
 
 ### Phase 1 — Default search page
 - [ ] P1.1 "On X right now" module (web + live X blend).
@@ -49,3 +52,10 @@ testable WITHOUT live X creds (the real X MCP path is credential-gated; the user
 
 ## Status log
 - 2026-06-30: branch created; tracker written; parallel codebase-mapping launched.
+- 2026-06-30: map done (`X_MCP_MAP.md`) — KEY: most of the integration is NO-REBUILD (grok CLI is
+  config-driven; `/search` + side panel are companion UI served live; scheduler runs any grok prompt).
+  Only the provisioner (P0.1) + bookmark C++ need a build. Search page = `companion/ui/search.{html,js,css}`,
+  served via gateway `GET /search`; `/api/search` + `/api/search/stream` already routed (unused by /search).
+- 2026-06-30: P0.2 + P0.3 DONE + verified. Built `sdk/mock_x_mcp.py` (6 X tools, query-aware fixtures) +
+  `sdk/grok_config.template.toml`; wired `x-mock`/`x-docs`/`xapi`(disabled) into dev `~/.grok/config.toml`.
+  `grok mcp doctor`: x-mock healthy (6 tools), x-docs reachable. Foundation works end-to-end.
