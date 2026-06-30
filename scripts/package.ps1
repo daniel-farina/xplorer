@@ -88,6 +88,11 @@ try {
   # the lingering code isn't mistaken for a script failure by callers/CI.
   $global:LASTEXITCODE = 0
 
+  # Bundle the MCP servers (sdk\*.py) beside the exe so the grok provisioner finds
+  # them (SdkDir() checks DIR_MODULE\sdk and <exe_dir>\sdk on Windows).
+  New-Item -ItemType Directory -Force -Path (Join-Path $Root "sdk") | Out-Null
+  Copy-Item (Join-Path $Xplorer "sdk\*.py") (Join-Path $Root "sdk") -Force -ErrorAction SilentlyContinue
+
   # Fail loudly if a load-bearing runtime file is missing rather than shipping a
   # broken zip (extension-whitelist staging can silently drop new file types).
   $required = @('Xplorer.exe', 'chrome.dll', 'chrome_elf.dll', 'icudtl.dat',
