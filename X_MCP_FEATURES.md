@@ -49,12 +49,17 @@ testable WITHOUT live X creds (the real X MCP path is credential-gated; the user
 - [ ] P1.3 Agentic answer box (web+X answers + act: open tabs / draft).
 
 ### Phase 2 — Research & side panel
-- [ ] P2.1 Social-graph research (high-signal voices + cross-ref web).
-- [ ] P2.2 Entity X-lens (live X on any page's person/company).
+- [x] P2.1 Social-graph research — WORKS via the existing side-panel chat (grok-build + X MCP in config).
+      Validated: a `grok -m grok-build` agent run calls `x_search_posts`/`x_trends` and synthesizes the
+      high-signal voices (proven end-to-end in P1 + P3 tests). No new code — the X tools flow through Grok.
+- [ ] P2.2 Entity X-lens (live X on any page's person/company) — needs a sidebar/overlay surface.
 
 ### Phase 3 — Background & scheduled
-- [ ] P3.1 Morning X briefing (scheduled background digest → tabs, no focus steal).
-- [ ] P3.2 Topic radar (alert on X spikes).
+- [x] P3.1 Morning X briefing — DONE + **macOS-tested**. A scheduled task (`POST /api/schedules`, cron
+      `0 8 * * *`, `run.model=grok-build`) whose prompt makes Grok use the X MCP. Test: created
+      `job_44F28570` + ran it → `last_status: ok`, produced a real Daily X Briefing (top voices via
+      x_search_posts + trends via x_trends + a summary), in the background (FocusArbiter, no focus steal).
+- [ ] P3.2 Topic radar (alert on X spikes) — same mechanism, a saved X-watch prompt (quick follow-on).
 
 ### Phase 4 — Bookmarks & publishing
 - [ ] P4.1 Bookmark bridge (X bookmarks ↔ browser, AI-organized).
@@ -85,3 +90,8 @@ testable WITHOUT live X creds (the real X MCP path is credential-gated; the user
   answer with sentiment. Repo UI served (data-mode=x, #x-panel, renderXSnapshot). Restored the installed app.
   Found the gateway auth for headless DOM tests: `~/.xplorer/gateway.json` {port,token} + `Bearer`.
   NEXT: P3 scheduled X monitors (no-rebuild) + P0.1 provisioner (batch rebuild).
+- 2026-06-30: P3.1 macOS-TESTED ✓ + P2.1 confirmed. Created "𝕏 Morning Briefing" (job_44F28570, daily 8am,
+  grok-build) + ran it → last_status=ok; the run conversation holds a real Daily X Briefing (top voices via
+  x_search_posts, trends via x_trends, a what-matters summary), produced in a background run (no focus steal).
+  P2.1 social-graph research works through the same sidebar-chat + X-MCP path. Shipped so far: P0 foundation,
+  P1 search module, P2.1, P3.1 — all macOS-tested. NEXT: P0.1 grok provisioner (distributed config, rebuild).
