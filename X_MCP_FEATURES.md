@@ -38,7 +38,8 @@ testable WITHOUT live X creds (the real X MCP path is credential-gated; the user
       the mock only ensures features still work when a user hasn't connected X / is offline.
 
 ### Phase 1 — Default search page
-- [ ] P1.1 "On X right now" module (web + live X blend).
+- [~] P1.1 "On X right now" module — CODE DONE (grok `x` search mode + `𝕏 Live` UI + inline
+      streaming panel via `/api/search/stream?mode=x&model=grok-build`). Testing pending the rebuild.
 - [ ] P1.2 "What's the real take" (dissent / primary sources / community notes).
 - [ ] P1.3 Agentic answer box (web+X answers + act: open tabs / draft).
 
@@ -66,3 +67,10 @@ testable WITHOUT live X creds (the real X MCP path is credential-gated; the user
 - 2026-06-30: P0.2 + P0.3 DONE + verified. Built `sdk/mock_x_mcp.py` (6 X tools, query-aware fixtures) +
   `sdk/grok_config.template.toml`; wired `x-mock`/`x-docs`/`xapi`(disabled) into dev `~/.grok/config.toml`.
   `grok mcp doctor`: x-mock healthy (6 tools), x-docs reachable. Foundation works end-to-end.
+- 2026-06-30: VALIDATED the agent path — `grok -m grok-build` actually calls `x_search_posts`+`x_trends`
+  (mock) and uses the results (output matched fixtures exactly). Built `sdk/x_login_test.sh` for the live
+  path; found xurl's OAuth requests too-broad scopes (write/DM/email) so user can't consent → pivoting to
+  an **app-only Bearer token** (read: search/trends/news) which needs no OAuth. Awaiting the Bearer.
+- 2026-06-30: P1 search module CODE DONE + committed (d5edd42): grok `x` search mode + `𝕏 Live` UI panel
+  that streams `/api/search/stream?mode=x` (Grok+X MCP) inline. Incremental rebuild (grok_native.cc) running;
+  will test on macOS via the gateway (launch dev build w/ XPLORER_COMPANION_UI=repo, drive /search) next.
