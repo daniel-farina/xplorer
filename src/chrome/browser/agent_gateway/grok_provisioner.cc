@@ -14,6 +14,14 @@
 namespace agent_gateway {
 namespace {
 
+// The MCP server scripts are Python; the launch command differs by OS — Windows
+// ships "python" (python.org) rather than "python3".
+#if BUILDFLAG(IS_WIN)
+constexpr char kPython[] = "python";
+#else
+constexpr char kPython[] = "python3";
+#endif
+
 base::FilePath HomeDir() {
   base::FilePath home;
   base::PathService::Get(base::DIR_HOME, &home);
@@ -26,16 +34,23 @@ base::FilePath HomeDir() {
 base::FilePath SdkDir() {
   if (const char* env = std::getenv("XPLORER_SDK"); env && *env)
     return base::FilePath::FromUTF8Unsafe(env);
-  base::FilePath exe_dir;
-  if (base::PathService::Get(base::DIR_EXE, &exe_dir)) {
-#if BUILDFLAG(IS_MAC)
-    base::FilePath bundled =
-        exe_dir.DirName().AppendASCII("Resources").AppendASCII("sdk");
-#else
-    base::FilePath bundled = exe_dir.AppendASCII("sdk");
+  base::FilePath dir;
+#if BUILDFLAG(IS_WIN)
+  // Installer layout: ships beside chrome.dll in the versioned dir (DIR_MODULE).
+  if (base::PathService::Get(base::DIR_MODULE, &dir)) {
+    base::FilePath c = dir.AppendASCII("sdk");
+    if (base::DirectoryExists(c))
+      return c;
+  }
 #endif
-    if (base::DirectoryExists(bundled))
-      return bundled;
+  if (base::PathService::Get(base::DIR_EXE, &dir)) {
+#if BUILDFLAG(IS_MAC)
+    base::FilePath c = dir.DirName().AppendASCII("Resources").AppendASCII("sdk");
+#else
+    base::FilePath c = dir.AppendASCII("sdk");
+#endif
+    if (base::DirectoryExists(c))
+      return c;
   }
   base::FilePath dev = HomeDir()
                            .AppendASCII("cli_experiment")
@@ -48,15 +63,15 @@ base::FilePath SdkDir() {
 
 std::string XplorerBlock(const std::string& sdk) {
   return base::StringPrintf(
-      "\n[mcp_servers.xplorer]\ncommand = \"python3\"\n"
+      "\n[mcp_servers.xplorer]\ncommand = \"%s\"\n"
       "args = [\"%s/xplorer_mcp.py\"]\nenabled = true\n",
-      sdk.c_str());
+      kPython, sdk.c_str());
 }
 std::string XMockBlock(const std::string& sdk) {
   return base::StringPrintf(
-      "\n[mcp_servers.x-mock]\ncommand = \"python3\"\n"
+      "\n[mcp_servers.x-mock]\ncommand = \"%s\"\n"
       "args = [\"%s/mock_x_mcp.py\"]\nenabled = true\n",
-      sdk.c_str());
+      kPython, sdk.c_str());
 }
 constexpr char kXDocsBlock[] =
     "\n[mcp_servers.x-docs]\nurl = \"https://docs.x.com/mcp\"\nenabled = true\n";

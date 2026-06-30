@@ -69,8 +69,12 @@ testable WITHOUT live X creds (the real X MCP path is credential-gated; the user
 - [ ] P4.1 Bookmark bridge (X bookmarks ↔ browser, AI-organized).
 - [ ] P4.2 Compose from browsing (tabs/research → X Article draft → publish).
 
-### Cross-platform (per feature)
-- [ ] macOS build + MCP test · [ ] Linux parity + test · [ ] Windows parity + test
+### Cross-platform
+- [x] macOS — all features built + tested (P0, P0.1, P1, P2.1, P3.1).
+- [~] Linux/Windows — code made PORTABLE: provisioner uses `python3`/`python` per-OS (kPython); `SdkDir()`
+      checks DIR_MODULE (win) / Resources (mac) / exe_dir (linux) / dev; `package_linux.sh` + `package.ps1`
+      now bundle `sdk/*.py`. The x-mode + provisioner C++ is OS-agnostic. PENDING: build + test on the
+      Linux droplet + Windows NUC (the X MCP + mock are python/JS, already cross-platform).
 
 ## Status log
 - 2026-06-30: branch created; tracker written; parallel codebase-mapping launched.
