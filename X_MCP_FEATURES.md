@@ -73,8 +73,13 @@ testable WITHOUT live X creds (the real X MCP path is credential-gated; the user
 - [x] macOS — all features built + tested (P0, P0.1, P1, P2.1, P3.1).
 - [~] Linux/Windows — code made PORTABLE: provisioner uses `python3`/`python` per-OS (kPython); `SdkDir()`
       checks DIR_MODULE (win) / Resources (mac) / exe_dir (linux) / dev; `package_linux.sh` + `package.ps1`
-      now bundle `sdk/*.py`. The x-mode + provisioner C++ is OS-agnostic. PENDING: build + test on the
-      Linux droplet + Windows NUC (the X MCP + mock are python/JS, already cross-platform).
+      now bundle `sdk/*.py`. The x-mode + provisioner C++ is OS-agnostic.
+      BUILDS (2026-06-30): Linux droplet (fresh snapshot, same Chromium cd1d42cba1) building — poller
+      `bn0vicf51` watching the apply+build result (the clean cross-platform compile proof). Windows NUC
+      full-apply hit `ANCHOR NOT FOUND` on vtgh.h despite a git-status-clean revert — NOT a code/version
+      issue (mac+NUC are the SAME Chromium cd1d42cba1 and the apply's vtgh.h edits are UNCHANGED from the
+      working 0.8.10 build) → a NUC chromium-src-state problem (revert not reaching truly-pristine base).
+      My macOS rebuilds used `cp` (incremental), so the FULL apply on x-mcp is first exercised here.
 
 ## Status log
 - 2026-06-30: branch created; tracker written; parallel codebase-mapping launched.
