@@ -33,7 +33,13 @@ mode=images` (forced model + no-tools query), renders it as a conversation with 
   text-only until Phase 1). Fine for immediate use.
 - [ ] live click-test in a dev instance (`XPLORER_COMPANION_UI=repo` + test profile).
 
-## Phase 1 — the actual native menu → Grok  (REBUILD, needs go-ahead)
+## Phase 1 — the actual native menu → Grok  ✅ BUILT + macOS-TESTED (commit 320bf31)
+Built out/aether/Xplorer.app (framework Jul 1 12:24; `?imagesearch=1` string in binary). Verified on the
+running build: `/api/screenshot` captures a rendered tab; `mode=images` with NO model auto-selects
+grok-composer-2.5-fast (meta.model confirmed — the ResolveSearchModel fix); full capture→vision returns an
+accurate description. Native Lens hook compiled (2 GrokImageSearchForTab refs). PENDING: user click-test of
+the physical menu; minor polish — the vision answer includes a trailing ```json block from the mode=images
+system prompt (cosmetic).
 - `patches/apply_integration.py`: replace `LensSearchController::OpenLensOverlay*` bodies (chromium
   `chrome/browser/ui/lens/lens_search_controller.cc`) with `grok_companion::GrokImageSearchForTab(...)`
   — covers the toolbar/app-menu "Search this tab with Image Search" + right-click region/image. Mirror
