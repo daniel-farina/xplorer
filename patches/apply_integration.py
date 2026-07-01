@@ -11,6 +11,24 @@ from pathlib import Path
 
 MARKER = "// XPLORER"
 
+# Always write LF. Path.write_text's default newline translation turns every
+# edited file CRLF on Windows; git (attr eol=lf) then sees those files as
+# "clean" while their bytes differ from checkout state, so reverts skip them
+# and stale applied content survives forever (the NUC vtgh.h ANCHOR failure —
+# 137 poisoned files). One hook here covers all 31 write_text call sites.
+_orig_write_text = Path.write_text
+
+
+def _write_text_lf(self, data, encoding=None, errors=None, newline=None):
+    try:
+        return _orig_write_text(self, data, encoding=encoding, errors=errors,
+                                newline="\n" if newline is None else newline)
+    except TypeError:  # Python < 3.10 lacks the newline kwarg — write bytes.
+        return self.write_bytes(data.encode(encoding or "utf-8"))
+
+
+Path.write_text = _write_text_lf
+
 
 def edit(path: Path, anchor: str, insertion: str, before: bool = False):
     text = path.read_text()
