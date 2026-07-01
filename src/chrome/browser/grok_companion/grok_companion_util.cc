@@ -521,10 +521,17 @@ namespace {
 // panel to run the vision search. On cancel/navigate it just cleans up.
 class GrokRegionCapture {
  public:
+  // One drag-select at a time: a rapid second trigger (double-clicked button /
+  // menu while an overlay is up) would stack a second ScreenshotFlow overlay on
+  // the tab. The flag flips back in OnCaptured (select/escape/navigate all land
+  // there).
+  static bool active_;
+
   GrokRegionCapture(BrowserWindowInterface* browser,
                     content::WebContents* web_contents)
       : browser_(browser),
         flow_(std::make_unique<image_editor::ScreenshotFlow>(web_contents)) {
+    active_ = true;
     flow_->Start(base::BindOnce(&GrokRegionCapture::OnCaptured,
                                 base::Unretained(this)));
   }
@@ -533,6 +540,7 @@ class GrokRegionCapture {
 
  private:
   void OnCaptured(const image_editor::ScreenshotCaptureResult& result) {
+    active_ = false;
     if (result.result_code ==
             image_editor::ScreenshotCaptureResultCode::SUCCESS &&
         !result.image.IsEmpty()) {
@@ -550,6 +558,9 @@ class GrokRegionCapture {
   raw_ptr<BrowserWindowInterface> browser_;
   std::unique_ptr<image_editor::ScreenshotFlow> flow_;
 };
+
+// static
+bool GrokRegionCapture::active_ = false;
 }  // namespace
 
 void GrokImageSearchForTab(BrowserWindowInterface* browser) {
@@ -560,6 +571,8 @@ void GrokImageSearchForTab(BrowserWindowInterface* browser) {
   // fall back to a whole-tab capture in the sidebar.
   if (!browser)
     return;
+  if (GrokRegionCapture::active_)
+    return;  // a drag-select overlay is already up; ignore the double-trigger
   tabs::TabInterface* tab = browser->GetActiveTabInterface();
   content::WebContents* wc = tab ? tab->GetContents() : nullptr;
   if (!wc) {

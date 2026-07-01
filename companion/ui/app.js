@@ -657,12 +657,21 @@ function stripJsonBlock(s) {
 // Persist an image-search message server-side so the chat survives a
 // refresh/remote-poll — /api/search/stream doesn't write to the conversation.
 async function persistImageMsg(convId, role, content, image, model) {
-  try {
-    const body = { role, content };
-    if (image) body.image = image;
-    if (model) body.model = model;
-    await api('/api/conversations/' + convId + '/append', { method: 'POST', body: JSON.stringify(body) });
-  } catch (e) { /* best-effort persistence */ }
+  const body = { role, content };
+  if (image) body.image = image;
+  if (model) body.model = model;
+  const payload = JSON.stringify(body);
+  // Retry a couple of times — under a burst (several image searches at once) a
+  // connection can be dropped, and a lost append means the chat vanishes on the
+  // next refresh.
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      await api('/api/conversations/' + convId + '/append', { method: 'POST', body: payload });
+      return;
+    } catch (e) {
+      await new Promise((r) => setTimeout(r, 250 * (attempt + 1)));
+    }
+  }
 }
 
 // Shrink a captured image to a small thumbnail (persisted with the user message

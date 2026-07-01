@@ -55,7 +55,10 @@ namespace agent_gateway {
 namespace {
 AgentGateway* g_instance = nullptr;
 constexpr int kDefaultPort = 9334;
-constexpr int kBacklog = 5;
+// Listen backlog. 5 dropped connections outright when the companion UI + an
+// agent burst >5 simultaneous requests (e.g. several image searches at once —
+// each is a create + appends + a stream); 64 comfortably covers local bursts.
+constexpr int kBacklog = 64;
 
 void ClearLeakedScheduledRunEnv() {
   std::unique_ptr<base::Environment> env = base::Environment::Create();
