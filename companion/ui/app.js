@@ -646,6 +646,14 @@ async function sendMessage(text, { retry = false, convId = activeId } = {}) {
   }
 }
 
+// Strip the trailing ```json {...} block the mode=images system prompt appends —
+// the prose answer above it is what we show; the raw JSON only bloats + (as one
+// long line in a code block) blows out the panel width.
+function stripJsonBlock(s) {
+  const cut = (s || '').split(/```json/i)[0].trim();
+  return cut || (s || '').trim();
+}
+
 // ---- Grok image search: capture the current tab, stream a Grok vision answer.
 // No rebuild — reuses POST /api/screenshot + POST /api/search/stream (mode=images)
 // forced onto grok-composer-2.5-fast (the only vision-capable model). The query is
@@ -708,7 +716,7 @@ async function runImageSearch() {
         image: shot.image,
         image_mime: shot.mime_type || 'image/png',
         model: 'grok-composer-2.5-fast',
-        query: 'Describe exactly what is visible in this screenshot of my browser tab: what the page or app is, its main content, and any notable text or UI. Then add any useful context. Answer directly from the image; do NOT call any tools or web search.',
+        query: 'Describe exactly what is visible in this image: identify the main subject or content and any notable text or UI, then add any useful context. Answer directly from the image; do not call any tools or web search. Reply in plain prose — do NOT output JSON.',
       }),
       signal: st.aborter.signal,
     });
@@ -734,11 +742,12 @@ async function runImageSearch() {
         else if (evt.type === 'error') { throw new Error(evt.message || evt.error || 'image search failed'); }
       }
     }
-    if (reply.trim()) { conv.messages.push({ role: 'assistant', content: reply, model: st.model }); delete streams[convId]; }
+    const clean = stripJsonBlock(reply);
+    if (clean.trim()) { conv.messages.push({ role: 'assistant', content: clean, model: st.model }); delete streams[convId]; }
     else { throw new Error('empty response from Grok'); }
   } catch (e) {
     if (e.name === 'AbortError') {
-      if (reply.trim()) conv.messages.push({ role: 'assistant', content: reply.trim() + '\n\n_(stopped)_', model: st.model });
+      if (reply.trim()) conv.messages.push({ role: 'assistant', content: stripJsonBlock(reply) + '\n\n_(stopped)_', model: st.model });
       delete streams[convId];
     } else {
       st.error = { msg: e.message || 'image search failed', text: '' };
