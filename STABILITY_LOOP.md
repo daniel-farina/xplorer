@@ -50,3 +50,10 @@
   NOT self-provisioned — expected (PR #13 provisioner deliberately excluded from this release; user
   reviews it). Mac arm64 still compiling. NUC unresponsive since repair3 (full-tree checkout heavy or
   ssh-kill mid-run); keep pinging.
+- 20:0x iter4-5: APPLY IDEMPOTENCY root-caused + FIXED (4b905ad): edit() second-chance skip for
+  interleaved insertions; IDS_XPLORER_SETTINGS purely-additive; About-version line rebrand-stable +
+  bumped to 0.8.11. VERIFIED pristine->apply x3 -> byte-identical trees. This was the mac-x64 failure
+  AND the historical NUC rot. Mac release relaunched (full logs). NUC: schtasks won't fire post-reboot
+  (interactive token, result 1) -> spawned via WMI Win32_Process Create (pid 105184) — watcher armed.
+  P5 datapoint: session store healthy (67KB, thumbs avg 4KB — downscale works, no leak). Linux artifact
+  (tar.gz+sha) pulling to dist/v0.8.11/ for the draft release.
