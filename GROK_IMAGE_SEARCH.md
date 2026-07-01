@@ -81,6 +81,16 @@ the specific image bitmap) — acceptable v1.
   so it was client-side only and any refresh/remote-poll — or a 2nd fast search — wiped it. Round-trip
   verified: create → append user+assistant → reload → 2 messages + title persisted.
 
+## Concurrency hardening (2026-07-01) — stress-tested
+Stress suite exposed that a 10+-connection burst DROPPED connections (gateway listen backlog was 5) — a
+lost /append = a chat that vanishes on refresh (the user's "two fast image searches disappear"). Fixes:
+`kBacklog` 5→64 (agent_gateway.cc); `persistImageMsg` retries ×3 with backoff; `GrokRegionCapture::active_`
+guard so a double-trigger can't stack two drag overlays. VERIFIED on the rebuilt app:
+- 12-connection burst (3 creates + 9 appends incl. same-conv): all 200, C1 5/5 + C2 4/4 persisted, creates unique.
+- 3 CONCURRENT vision streams (different images): all OK on grok-composer, each described its own image
+  (no cross-contamination).
+- Append round-trip + one-shot pending-image + /api/region-search previously verified.
+
 ## Files
 - `companion/ui/app.js` (`runImageSearch`, `renderMessages` thumbnail) · `companion/ui/index.html` (#img-search)
 - gateway: `agent_gateway/grok_native.cc` (screenshot 1991, ExtractSearchImage 2741, BuildGrokSearchCommand
