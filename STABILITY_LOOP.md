@@ -15,7 +15,7 @@
       image; 2 fast searches BOTH stream + persist (the "only latest active" fix).
 - [x] P2 (adjusted). Land work: merge feat/grok-image-search (12 commits, user-tested) + PR #13
       (grok provisioner) → master. Then cut `release/0.8.11` from master.
-- [ ] P3. Cross-platform compile+test: macOS (done continuously), Linux droplet (restore snapshot
+- [x] P3. Cross-platform compile+test: ALL 3 GREEN — macOS (done continuously), Linux droplet (restore snapshot
       233520945), Windows NUC (must first fix the tree state — vtgh.h ANCHOR failure = revert not
       reaching pristine; investigate `git status` clean but content differs → try `git checkout -f
       origin/main -- .` or re-fetch).
@@ -70,3 +70,7 @@
   DRAFT release v0.8.11 created (untagged draft, NOT published): 8 assets (mac arm64+x86_64 dmg/zip/sha,
   linux tar.gz+sha). Windows asset appended when the NUC build (started 15:51) completes.
   Remaining: P5 soak/perf for the rest of the window.
+- 21:3x WINDOWS DONE: build_exit=0 (36 min), package_exit=0, Xplor-windows-x64.zip (215MB) pulled,
+  sha VERIFIED (938865da…dec; the .sha file is CRLF so shasum -c needs tolerance — cosmetic).
+  Draft release v0.8.11 now has ALL 10 ASSETS (mac arm64+x86_64 dmg/zip/sha, linux tar.gz+sha,
+  windows zip+sha). draft:true throughout — NOT published. P1-P4 ALL COMPLETE; P5 soak continues.
