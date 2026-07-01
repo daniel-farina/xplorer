@@ -75,6 +75,11 @@ the specific image bitmap) — acceptable v1.
   ScreenshotFlow drag-select as the menu. Endpoint live (200). Both entry points unified.
 - **Output polish**: `stripJsonBlock()` drops any leaked JSON; neutral vision query; `.code-block`
   `max-width:100%` so a long line can't blow out the panel.
+- **Fresh chat + persistence**: image search always opens a NEW conversation (was hijacking the active
+  one), and the exchange is saved via `POST /api/conversations/{id}/append` (user + downscaled thumbnail +
+  assistant answer). Image search renders via `/api/search/stream` (which never writes to the conversation),
+  so it was client-side only and any refresh/remote-poll — or a 2nd fast search — wiped it. Round-trip
+  verified: create → append user+assistant → reload → 2 messages + title persisted.
 
 ## Files
 - `companion/ui/app.js` (`runImageSearch`, `renderMessages` thumbnail) · `companion/ui/index.html` (#img-search)
