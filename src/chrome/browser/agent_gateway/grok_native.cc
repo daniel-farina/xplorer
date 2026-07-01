@@ -3968,6 +3968,72 @@ bool GrokNative::TryHandleRequest(
     return true;
   }
 
+  // POST /api/conversations/{id}/append -> persist a role/content message (+ an
+  // optional data-url thumbnail) WITHOUT running Grok. Image search renders its
+  // vision via /api/search/stream (which doesn't persist to the conversation), so
+  // it saves the exchange here — otherwise the chat is client-side only and
+  // vanishes on the next refresh/remote-poll.
+  if (info.method == "POST" && base::StartsWith(path, "/api/conversations/") &&
+      base::EndsWith(path, "/append")) {
+    const std::string prefix = "/api/conversations/";
+    std::string rest = path.substr(prefix.size());
+    const size_t slash = rest.find('/');
+    std::string conv_id =
+        slash == std::string::npos ? rest : rest.substr(0, slash);
+    auto body = base::JSONReader::ReadDict(info.data, base::JSON_PARSE_RFC);
+    const std::string* role = body ? body->FindString("role") : nullptr;
+    const std::string* content = body ? body->FindString("content") : nullptr;
+    if (!role || !content) {
+      base::DictValue err;
+      err.Set("error", "role and content required");
+      SendJson(server, connection_id, net::HTTP_BAD_REQUEST, std::move(err));
+      return true;
+    }
+    const std::string* img = body ? body->FindString("image") : nullptr;
+    const std::string* mdl = body ? body->FindString("model") : nullptr;
+    base::DictValue data = LoadSessions();
+    base::ListValue* convs = data.FindList("conversations");
+    base::DictValue* conv = nullptr;
+    if (convs) {
+      for (auto& v : *convs) {
+        if (!v.is_dict())
+          continue;
+        const std::string* cid = v.GetDict().FindString("id");
+        if (cid && *cid == conv_id) {
+          conv = &v.GetDict();
+          break;
+        }
+      }
+    }
+    if (!conv) {
+      base::DictValue err;
+      err.Set("error", "conversation not found");
+      SendJson(server, connection_id, net::HTTP_NOT_FOUND, std::move(err));
+      return true;
+    }
+    base::ListValue* msgs = conv->FindList("messages");
+    if (!msgs) {
+      conv->Set("messages", base::ListValue());
+      msgs = conv->FindList("messages");
+    }
+    const bool first = msgs->empty();
+    base::DictValue m;
+    m.Set("role", *role);
+    m.Set("content", *content);
+    if (img && !img->empty())
+      m.Set("image", *img);
+    if (mdl && !mdl->empty())
+      m.Set("model", *mdl);
+    msgs->Append(std::move(m));
+    if (*role == "user" && first)
+      TitleConversationFromFirstMessage(conv, conv_id, *content);
+    SaveSessions(data);
+    base::DictValue out;
+    out.Set("ok", true);
+    SendJson(server, connection_id, net::HTTP_OK, std::move(out));
+    return true;
+  }
+
   if (info.method == "POST" && base::StartsWith(path, "/api/conversations/") &&
       (base::EndsWith(path, "/message") ||
        base::EndsWith(path, "/message/stream"))) {

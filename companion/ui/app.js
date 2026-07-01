@@ -654,6 +654,37 @@ function stripJsonBlock(s) {
   return cut || (s || '').trim();
 }
 
+// Persist an image-search message server-side so the chat survives a
+// refresh/remote-poll — /api/search/stream doesn't write to the conversation.
+async function persistImageMsg(convId, role, content, image, model) {
+  try {
+    const body = { role, content };
+    if (image) body.image = image;
+    if (model) body.model = model;
+    await api('/api/conversations/' + convId + '/append', { method: 'POST', body: JSON.stringify(body) });
+  } catch (e) { /* best-effort persistence */ }
+}
+
+// Shrink a captured image to a small thumbnail (persisted with the user message
+// so the chat doesn't carry megabytes of base64 in the session store).
+function downscaleDataUrl(dataUrl, max = 240) {
+  return new Promise((resolve) => {
+    try {
+      const img = new Image();
+      img.onload = () => {
+        const s = Math.min(1, max / Math.max(img.width, img.height));
+        const w = Math.max(1, Math.round(img.width * s));
+        const h = Math.max(1, Math.round(img.height * s));
+        const c = document.createElement('canvas'); c.width = w; c.height = h;
+        c.getContext('2d').drawImage(img, 0, 0, w, h);
+        try { resolve(c.toDataURL('image/jpeg', 0.7)); } catch { resolve(dataUrl); }
+      };
+      img.onerror = () => resolve(dataUrl);
+      img.src = dataUrl;
+    } catch { resolve(dataUrl); }
+  });
+}
+
 // ---- Grok image search: capture the current tab, stream a Grok vision answer.
 // No rebuild — reuses POST /api/screenshot + POST /api/search/stream (mode=images)
 // forced onto grok-composer-2.5-fast (the only vision-capable model). The query is
@@ -661,17 +692,11 @@ function stripJsonBlock(s) {
 // prompt's "web search for similar images" instruction that grok-composer can't do.
 async function runImageSearch() {
   if (!(await ensureGrokReady())) return;
-  // Reuse the active chat only if it's empty and idle; else start a fresh one.
-  let convId = activeId;
-  const cur = currentConv();
-  if (!convId || isRunning(convId) || (cur?.messages?.length)) {
-    const conv = await api('/api/conversations', { method: 'POST', body: '{}' });
-    conversations.unshift(conv);
-    convId = conv.id;
-    activeId = convId;
-  }
-  const conv = conversations.find((c) => c.id === convId);
-  if (!conv) return;
+  // Image search always opens a FRESH chat — never hijack the current one.
+  const conv = await api('/api/conversations', { method: 'POST', body: '{}' });
+  conversations.unshift(conv);
+  const convId = conv.id;
+  activeId = convId;
   conv.messages = conv.messages || [];
 
   const st = { aborter: new AbortController(), running: true, reply: '', status: 'Capturing this tab…', thinking: '', error: null, model: 'grok-composer-2.5-fast' };
@@ -696,13 +721,13 @@ async function runImageSearch() {
     return;
   }
 
-  conv.messages.push({
-    role: 'user',
-    content: region
-      ? '\u{1F5BC}\u{FE0F} Search this selection with Grok'
-      : '\u{1F5BC}\u{FE0F} Search this tab’s image with Grok' + (shot.title ? ' — ' + shot.title : ''),
-    image: 'data:' + (shot.mime_type || 'image/png') + ';base64,' + shot.image,
-  });
+  const userContent = region
+    ? '\u{1F5BC}\u{FE0F} Search this selection with Grok'
+    : '\u{1F5BC}\u{FE0F} Search this tab’s image with Grok' + (shot.title ? ' — ' + shot.title : '');
+  const thumb = await downscaleDataUrl(
+    'data:' + (shot.mime_type || 'image/png') + ';base64,' + shot.image);
+  conv.messages.push({ role: 'user', content: userContent, image: thumb });
+  persistImageMsg(convId, 'user', userContent, thumb);  // persist so it survives refresh
   st.status = 'Grok is looking at the image…';
   if (convId === activeId) renderMessages(conv);
 
@@ -743,8 +768,11 @@ async function runImageSearch() {
       }
     }
     const clean = stripJsonBlock(reply);
-    if (clean.trim()) { conv.messages.push({ role: 'assistant', content: clean, model: st.model }); delete streams[convId]; }
-    else { throw new Error('empty response from Grok'); }
+    if (clean.trim()) {
+      conv.messages.push({ role: 'assistant', content: clean, model: st.model });
+      persistImageMsg(convId, 'assistant', clean, null, st.model);
+      delete streams[convId];
+    } else { throw new Error('empty response from Grok'); }
   } catch (e) {
     if (e.name === 'AbortError') {
       if (reply.trim()) conv.messages.push({ role: 'assistant', content: stripJsonBlock(reply) + '\n\n_(stopped)_', model: st.model });
