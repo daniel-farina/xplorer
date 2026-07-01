@@ -19,7 +19,7 @@
       233520945), Windows NUC (must first fix the tree state — vtgh.h ANCHOR failure = revert not
       reaching pristine; investigate `git status` clean but content differs → try `git checkout -f
       origin/main -- .` or re-fetch).
-- [ ] P4. DRAFT release 0.8.11: 3-OS artifacts, gh release create --draft. NO publish.
+- [x] P4. DRAFT release 0.8.11 — CREATED: 3-OS artifacts, gh release create --draft. NO publish.
 - [ ] P5. Soak/bug/perf pass (rest of the 8h): gateway soak (repeat stress bursts, image searches,
       schedules), known perf items (sidebar chat 12s floor — render thought stream; bg-tab slow
       load >40s), leak checks (session store growth w/ thumbnails), fix + commit as found.
@@ -65,3 +65,8 @@
   Windows apply still CRLF-poisons ~67 files per run (check NUC python <3.10? LF-hook fallback) but the
   in-script repair self-heals each run. Linux artifact LOCAL+verified (dist/v0.8.11); droplet destroyed.
   Watchers: NUC completion (bezfxqqm0); mac arm64 mid-build.
+- 21:1x P4 DONE: mac ARM64_EXIT=0 + X64_EXIT=0 (signed+notarized, idempotent apply proven back-to-back).
+  Release-binary QA on the arm64 artifact: gateway/search/pending-image/region-search all green.
+  DRAFT release v0.8.11 created (untagged draft, NOT published): 8 assets (mac arm64+x86_64 dmg/zip/sha,
+  linux tar.gz+sha). Windows asset appended when the NUC build (started 15:51) completes.
+  Remaining: P5 soak/perf for the rest of the window.
