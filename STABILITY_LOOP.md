@@ -45,3 +45,8 @@
   was restored; also update-index --really-refresh does NOT detect the stale files — only rm+checkout -f
   per file works (proven on vtgh.h). repair3 (fixed parse) launched; NUC went unresponsive under the
   full-tree checkout (or the ssh timeout killed it) — re-verify next tick.
+- 19:2x iter3: LINUX SMOKE ✓ on the packaged v0.8.11 build (xvfb): gateway 9334 up, /search 200,
+  auth 200/401 correct, pending-image + region-search 200, conv create/append 200. Note: grok config
+  NOT self-provisioned — expected (PR #13 provisioner deliberately excluded from this release; user
+  reviews it). Mac arm64 still compiling. NUC unresponsive since repair3 (full-tree checkout heavy or
+  ssh-kill mid-run); keep pinging.
