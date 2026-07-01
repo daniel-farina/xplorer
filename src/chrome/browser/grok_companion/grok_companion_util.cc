@@ -551,7 +551,18 @@ class GrokRegionCapture {
         base::CreateDirectory(f.DirName());
         base::WriteFile(f, base::Base64Encode(*png));
       }
-      OpenGrokSidePanelAt(browser_, "/?imagesearch=1");
+      // Open (or re-show) the panel WITHOUT navigating: a reload would kill any
+      // in-flight image-search stream already running in the page (only the
+      // newest search would survive). The chat page polls /api/pending-image
+      // and picks this capture up. Only navigate when the panel is parked on a
+      // different page (e.g. /schedules), where no poller runs.
+      OpenGrokSidePanel(browser_);
+      content::WebContents* live = LiveCompanionContents().get();
+      if (live && live->GetLastCommittedURL().path() != "/") {
+        content::NavigationController::LoadURLParams params(GetCompanionURL());
+        params.transition_type = ui::PAGE_TRANSITION_AUTO_TOPLEVEL;
+        live->GetController().LoadURLWithParams(params);
+      }
     }
     delete this;
   }
@@ -576,7 +587,7 @@ void GrokImageSearchForTab(BrowserWindowInterface* browser) {
   tabs::TabInterface* tab = browser->GetActiveTabInterface();
   content::WebContents* wc = tab ? tab->GetContents() : nullptr;
   if (!wc) {
-    OpenGrokSidePanelAt(browser, "/?imagesearch=1");
+    OpenGrokSidePanel(browser);  // nothing to capture; just show the panel
     return;
   }
   new GrokRegionCapture(browser, wc);  // self-owned; deletes itself when done

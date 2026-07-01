@@ -699,7 +699,8 @@ function downscaleDataUrl(dataUrl, max = 240) {
 // forced onto grok-composer-2.5-fast (the only vision-capable model). The query is
 // phrased to answer directly from the image, sidestepping the mode=images system
 // prompt's "web search for similar images" instruction that grok-composer can't do.
-async function runImageSearch() {
+async function runImageSearch(shot) {
+  if (!shot || !shot.image) return;
   if (!(await ensureGrokReady())) return;
   // Image search always opens a FRESH chat — never hijack the current one.
   const conv = await api('/api/conversations', { method: 'POST', body: '{}' });
@@ -708,31 +709,13 @@ async function runImageSearch() {
   activeId = convId;
   conv.messages = conv.messages || [];
 
-  const st = { aborter: new AbortController(), running: true, reply: '', status: 'Capturing this tab…', thinking: '', error: null, model: 'grok-composer-2.5-fast' };
+  const st = { aborter: new AbortController(), running: true, reply: '', status: 'Grok is looking at the image…', thinking: '', error: null, model: 'grok-composer-2.5-fast' };
   streams[convId] = st;
   renderConvList();
   if (convId === activeId) { renderMessages(conv); setComposerRunning(); }
   updateActiveBadge();
 
-  let shot, region = false;
-  try {
-    // Prefer a region the native Lens menu drag-selected (one-shot); otherwise
-    // capture the whole tab (the sidebar-button path).
-    const pending = await api('/api/pending-image').catch(() => null);
-    if (pending && pending.image) { shot = pending; region = true; }
-    else { shot = await api('/api/screenshot', { method: 'POST', body: '{}' }); }
-    if (!shot || !shot.image) throw new Error(shot?.error || 'capture failed');
-  } catch (e) {
-    st.running = false;
-    st.error = { msg: 'Could not capture the tab: ' + (e.message || ''), text: '' };
-    if (convId === activeId) renderMessages(conv);
-    renderConvList(); updateActiveBadge();
-    return;
-  }
-
-  const userContent = region
-    ? '\u{1F5BC}\u{FE0F} Search this selection with Grok'
-    : '\u{1F5BC}\u{FE0F} Search this tab’s image with Grok' + (shot.title ? ' — ' + shot.title : '');
+  const userContent = '\u{1F5BC}\u{FE0F} Search this selection with Grok';
   const thumb = await downscaleDataUrl(
     'data:' + (shot.mime_type || 'image/png') + ';base64,' + shot.image);
   conv.messages.push({ role: 'user', content: userContent, image: thumb });
@@ -976,9 +959,9 @@ $('#composer').onsubmit = (e) => {
 $('#new-chat').onclick = newChat;
 document.getElementById('img-search')?.addEventListener('click', () => {
   // Trigger the same native region drag-select as the Lens menu — the user drags
-  // an area on the page; the selection is written to a pending image and the side
-  // panel re-opens (?imagesearch=1) to run Grok vision on it. Avoids the
-  // whole-tab /api/screenshot path (which could hang).
+  // an area on the page; the selection lands in the one-shot pending image, which
+  // checkPendingImageSearch() polls up (no panel reload, so running searches
+  // keep streaming).
   api('/api/region-search', { method: 'POST', body: '{}' }).catch(() => {});
 });
 
@@ -1102,13 +1085,27 @@ initModels().then(() => refresh().then(() => {
   }
   startRemotePoll();
   consumePendingApp();
-  if (urlParams.get('imagesearch')) {
-    // Native "Search this tab with Image Search" (Lens) routed here by
-    // grok_companion::GrokImageSearchForTab — capture the active tab + Grok vision.
-    history.replaceState(null, '', location.pathname);  // consume the one-shot trigger
-    runImageSearch();
-  }
 }));
+
+// ---- Grok image search pickup: the native drag-select (menu or the sidebar
+// button via /api/region-search) writes a one-shot pending image; poll for it
+// instead of the old ?imagesearch=1 panel NAVIGATION, which reloaded this page
+// and killed every in-flight stream (only the newest search survived).
+let pendingImagePollBusy = false;
+async function checkPendingImageSearch() {
+  if (pendingImagePollBusy || document.visibilityState !== 'visible') return;
+  pendingImagePollBusy = true;
+  try {
+    const pending = await api('/api/pending-image').catch(() => null);
+    if (pending && pending.image) runImageSearch(pending);  // not awaited: searches run concurrently
+  } finally {
+    pendingImagePollBusy = false;
+  }
+}
+setInterval(checkPendingImageSearch, 1200);
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') checkPendingImageSearch();
+});
 
 // Cross-platform "update available" banner (no-op on macOS, where Sparkle's
 // native dialog handles it). The gateway only checks upstream every ~6h, so a

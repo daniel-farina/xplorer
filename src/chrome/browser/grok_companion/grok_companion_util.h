@@ -139,8 +139,10 @@ void OpenGrokSidePanelAt(BrowserWindowInterface* browser,
                          const std::string& path);
 
 // XPLORER: replaces Chrome's Google Lens "Search this tab with Image Search" —
-// opens the Grok side panel at the image-search entry (?imagesearch=1), which
-// screenshots the active tab and runs a Grok vision analysis.
+// runs a native region drag-select on the active tab, stashes the selection as
+// the gateway's one-shot pending image, and shows the Grok side panel (no
+// navigation/reload — the chat page polls the pending image up and runs the
+// vision search, so already-running searches keep streaming).
 void GrokImageSearchForTab(BrowserWindowInterface* browser);
 
 // Register the Grok side panel entry on the global side panel registry.
