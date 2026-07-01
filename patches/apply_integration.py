@@ -36,6 +36,18 @@ def edit(path: Path, anchor: str, insertion: str, before: bool = False):
     if insertion in text:
         print(f"  skip (already applied): {path}")
         return
+    # Second-chance idempotency: when edits to the same region interleave (one
+    # edit splices lines INTO another's inserted block), the verbatim check
+    # fails on re-apply even though the content is applied — and the anchor is
+    # already consumed, so re-running dies with ANCHOR NOT FOUND (the vtgh.h
+    # double-apply failure). If every line this edit ADDS (insertion minus
+    # anchor lines) is already in the file, treat it as applied.
+    anchor_lines = set(anchor.splitlines())
+    added = [l for l in insertion.splitlines()
+             if l.strip() and l not in anchor_lines]
+    if added and all(l in text for l in added):
+        print(f"  skip (already applied, interleaved): {path}")
+        return
     idx = text.find(anchor)
     if idx < 0:
         sys.exit(f"ANCHOR NOT FOUND in {path}: {anchor!r} — upstream moved; "
@@ -99,7 +111,13 @@ def patch_xplorer_settings_access(src: Path):
     _g = re.sub(
         r'[ \t]*<message name="IDS_XPLORER_SETTINGS"[\s\S]*?</message>\n*',
         "", _g)
+    # Also heal any comment duplication a previous strip+re-add cycle left
+    # (the old insertion restated the anchor comment; re-applying could glue
+    # "<!-- About Page -->  <!-- About Page -->" onto one line).
+    _g = re.sub(r"(  <!-- About Page -->)([ \t]*<!-- About Page -->)+",
+                r"\1", _g)
     grdp.write_text(_g)
+    # Purely additive (before the anchor, which is NOT restated) — re-runnable.
     edit(
         grdp,
         "  <!-- About Page -->",
@@ -107,8 +125,8 @@ def patch_xplorer_settings_access(src: Path):
         'desc="App menu item to open Xplor companion settings" '
         'translateable="false">\n'
         "    Xplor settings\n"
-        "  </message>\n\n"
-        "  <!-- About Page -->",
+        "  </message>\n\n",
+        before=True,
     )
 
     app_menu = src / "chrome/browser/ui/toolbar/app_menu_model.cc"
@@ -1955,17 +1973,20 @@ def main(src: Path):
     # (Developer Build) ..."). Prepend the Xplorer product version so users see
     # OUR version first. NOTE: bump XPLORER_VERSION here per release (or wire it
     # to the release version later).
-    XPLORER_VERSION = "0.8.10"
+    XPLORER_VERSION = "0.8.11"
     ss = src / "chrome/app/settings_strings.grdp"
     sst = ss.read_text()
-    _ver_marker = "Xplor " + XPLORER_VERSION + " · Chromium"
+    # Insert "· Xplor" (not "· Chromium"): the broad grd rebrand replaces
+    # Chromium->Xplor on the NEXT apply, which used to invalidate the marker and
+    # make this edit stack a fresh prefix every run ("Xplor 0.8.10 · Xplor ...").
+    _ver_marker = "Xplor " + XPLORER_VERSION + " · Xplor"
     if _ver_marker not in sst:
-        # Bump-safe: matches a fresh checkout ("Version <ph>") OR an earlier
-        # patched version ("Xplorer 0.6.1 · Chromium <ph>") and rewrites it to
-        # the current version. (A plain string anchor breaks on version bumps
-        # because the prior patch already consumed "Version <ph>".)
+        # Bump-safe: matches a fresh checkout ("Version <ph>") OR any earlier
+        # patched form ("Xplor 0.6.1 · Chromium/Xplor <ph>", possibly stacked)
+        # and rewrites it to the current version.
         sst, _n = re.subn(
-            r'(?:Version|Xplor [0-9][0-9.]* · Chromium) '
+            r'(?:Xplor [0-9][0-9.]* · )*(?:Version|Xplor [0-9][0-9.]* · '
+            r'(?:Chromium|Xplor)|Xplor) '
             r'(<ph name="PRODUCT_VERSION">)',
             _ver_marker + r" \1",
             sst, count=1)
