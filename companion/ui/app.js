@@ -937,7 +937,13 @@ $('#composer').onsubmit = (e) => {
 };
 
 $('#new-chat').onclick = newChat;
-document.getElementById('img-search')?.addEventListener('click', () => runImageSearch());
+document.getElementById('img-search')?.addEventListener('click', () => {
+  // Trigger the same native region drag-select as the Lens menu — the user drags
+  // an area on the page; the selection is written to a pending image and the side
+  // panel re-opens (?imagesearch=1) to run Grok vision on it. Avoids the
+  // whole-tab /api/screenshot path (which could hang).
+  api('/api/region-search', { method: 'POST', body: '{}' }).catch(() => {});
+});
 
 stopBtn?.addEventListener('click', () => {
   if (activeId) stopChat(activeId);

@@ -3414,6 +3414,33 @@ bool GrokNative::TryHandleRequest(
     return true;
   }
 
+  // POST /api/region-search -> trigger the native Lens-style region drag-select
+  // on the active tab and route the selection to Grok vision (identical to the
+  // "Search this tab with Image Search" menu). Lets the sidebar image button
+  // select an area instead of grabbing the whole viewport.
+  if (info.method == "POST" && path == "/api/region-search") {
+    content::GetUIThreadTaskRunner({})->PostTask(
+        FROM_HERE, base::BindOnce([]() {
+          BrowserWindowInterface* target = nullptr;
+          for (BrowserWindowInterface* browser :
+               GetAllBrowserWindowInterfaces()) {
+            if (!target)
+              target = browser;
+            if (browser->GetTabStripModel() &&
+                browser->GetTabStripModel()->GetActiveWebContents()) {
+              target = browser;
+              break;
+            }
+          }
+          if (target)
+            grok_companion::GrokImageSearchForTab(target);
+        }));
+    base::DictValue out;
+    out.Set("ok", true);
+    SendJson(server, connection_id, net::HTTP_OK, std::move(out));
+    return true;
+  }
+
   if (info.method == "GET" && path == "/api/conversations") {
     SendJson(server, connection_id, net::HTTP_OK,
              EnrichSessionsWithRunning(LoadSessions()));
