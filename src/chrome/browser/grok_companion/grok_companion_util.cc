@@ -18,8 +18,12 @@
 #include "base/strings/escape.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/base64.h"
+#include "base/memory/raw_ptr.h"
 #include "chrome/browser/agent_gateway/agent_gateway.h"
 #include "chrome/browser/agent_gateway/xplorer_paths.h"
+#include "chrome/browser/image_editor/screenshot_flow.h"
+#include "ui/gfx/image/image.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_features.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
@@ -510,12 +514,59 @@ void OpenGrokSidePanelAt(BrowserWindowInterface* browser,
   contents->GetController().LoadURLWithParams(params);
 }
 
+namespace {
+// Owns a ScreenshotFlow for one region drag-select, then self-deletes. On a
+// successful selection it writes the region PNG (base64) to a one-shot pending
+// file the sidebar reads via GET /api/pending-image, and opens the Grok side
+// panel to run the vision search. On cancel/navigate it just cleans up.
+class GrokRegionCapture {
+ public:
+  GrokRegionCapture(BrowserWindowInterface* browser,
+                    content::WebContents* web_contents)
+      : browser_(browser),
+        flow_(std::make_unique<image_editor::ScreenshotFlow>(web_contents)) {
+    flow_->Start(base::BindOnce(&GrokRegionCapture::OnCaptured,
+                                base::Unretained(this)));
+  }
+  GrokRegionCapture(const GrokRegionCapture&) = delete;
+  GrokRegionCapture& operator=(const GrokRegionCapture&) = delete;
+
+ private:
+  void OnCaptured(const image_editor::ScreenshotCaptureResult& result) {
+    if (result.result_code ==
+            image_editor::ScreenshotCaptureResultCode::SUCCESS &&
+        !result.image.IsEmpty()) {
+      scoped_refptr<base::RefCountedMemory> png = result.image.As1xPNGBytes();
+      if (png && png->size()) {
+        base::FilePath f =
+            xplorer_paths::DataDir().AppendASCII("pending_image.b64");
+        base::CreateDirectory(f.DirName());
+        base::WriteFile(f, base::Base64Encode(*png));
+      }
+      OpenGrokSidePanelAt(browser_, "/?imagesearch=1");
+    }
+    delete this;
+  }
+  raw_ptr<BrowserWindowInterface> browser_;
+  std::unique_ptr<image_editor::ScreenshotFlow> flow_;
+};
+}  // namespace
+
 void GrokImageSearchForTab(BrowserWindowInterface* browser) {
-  // XPLORER: replaces Google Lens "Search this tab with Image Search". Opens the
-  // Grok side panel at the image-search entry; the sidebar screenshots the active
-  // tab and streams a Grok vision analysis (grok-composer). See app.js
-  // runImageSearch() and the ?imagesearch=1 one-shot trigger.
-  OpenGrokSidePanelAt(browser, "/?imagesearch=1");
+  // XPLORER: replaces Google Lens "Search this tab with Image Search" + the
+  // right-click "Search image with Google Lens". Reuse Chromium's ScreenshotFlow
+  // so the user drags a region on the live page; the selected region is sent to
+  // Grok vision (grok-composer) in the side panel. If the tab can't be resolved,
+  // fall back to a whole-tab capture in the sidebar.
+  if (!browser)
+    return;
+  tabs::TabInterface* tab = browser->GetActiveTabInterface();
+  content::WebContents* wc = tab ? tab->GetContents() : nullptr;
+  if (!wc) {
+    OpenGrokSidePanelAt(browser, "/?imagesearch=1");
+    return;
+  }
+  new GrokRegionCapture(browser, wc);  // self-owned; deletes itself when done
 }
 
 }  // namespace grok_companion

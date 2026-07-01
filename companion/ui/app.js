@@ -672,9 +672,13 @@ async function runImageSearch() {
   if (convId === activeId) { renderMessages(conv); setComposerRunning(); }
   updateActiveBadge();
 
-  let shot;
+  let shot, region = false;
   try {
-    shot = await api('/api/screenshot', { method: 'POST', body: '{}' });
+    // Prefer a region the native Lens menu drag-selected (one-shot); otherwise
+    // capture the whole tab (the sidebar-button path).
+    const pending = await api('/api/pending-image').catch(() => null);
+    if (pending && pending.image) { shot = pending; region = true; }
+    else { shot = await api('/api/screenshot', { method: 'POST', body: '{}' }); }
     if (!shot || !shot.image) throw new Error(shot?.error || 'capture failed');
   } catch (e) {
     st.running = false;
@@ -686,7 +690,9 @@ async function runImageSearch() {
 
   conv.messages.push({
     role: 'user',
-    content: '\u{1F5BC}\u{FE0F} Search this tab’s image with Grok' + (shot.title ? ' — ' + shot.title : ''),
+    content: region
+      ? '\u{1F5BC}\u{FE0F} Search this selection with Grok'
+      : '\u{1F5BC}\u{FE0F} Search this tab’s image with Grok' + (shot.title ? ' — ' + shot.title : ''),
     image: 'data:' + (shot.mime_type || 'image/png') + ';base64,' + shot.image,
   });
   st.status = 'Grok is looking at the image…';

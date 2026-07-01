@@ -3004,6 +3004,25 @@ bool GrokNative::TryHandleRequest(
     return true;
   }
 
+  if (info.method == "GET" && path == "/api/pending-image") {
+    // One-shot: a native region drag-select (GrokImageSearchForTab) wrote a
+    // base64 PNG here; return it and clear it so the sidebar runs vision on the
+    // selected region instead of the whole tab.
+    base::DictValue d;
+    base::FilePath f =
+        xplorer_paths::DataDir().AppendASCII("pending_image.b64");
+    std::string b64;
+    if (base::PathExists(f) && base::ReadFileToString(f, &b64) && !b64.empty()) {
+      d.Set("image", b64);
+      d.Set("mime_type", "image/png");
+      base::DeleteFile(f);
+    } else {
+      d.Set("image", base::Value());
+    }
+    SendJson(server, connection_id, net::HTTP_OK, std::move(d));
+    return true;
+  }
+
   // Grok Build install check — the companion UI shows an install splash before
   // creating/building apps if grok isn't runnable.
   if (info.method == "GET" && path == "/api/grok/status") {
