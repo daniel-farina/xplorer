@@ -57,3 +57,11 @@
   (interactive token, result 1) -> spawned via WMI Win32_Process Create (pid 105184) — watcher armed.
   P5 datapoint: session store healthy (67KB, thumbs avg 4KB — downscale works, no leak). Linux artifact
   (tar.gz+sha) pulling to dist/v0.8.11/ for the draft release.
+- 20:5x NUC BUILDING at last (build start 15:51 local). The launch gauntlet, for the record: schtasks
+  /it fails post-reboot (interactive token, result 1) -> WMI spawn worked but the ps1 had 4 PARSE ERRORS
+  (giant inline C++ anchor strings) so it died pre-log -> parse-safe rewrite (Select-String -Quiet) ->
+  ran but ABORTed on a FALSE POSITIVE (Select-String is case-INSENSITIVE; 'ANCHOR' matched a benign
+  cosmetic warning) -> -CaseSensitive 'ANCHOR NOT FOUND' -> repair 67 files, apply clean, BUILD RUNNING.
+  Windows apply still CRLF-poisons ~67 files per run (check NUC python <3.10? LF-hook fallback) but the
+  in-script repair self-heals each run. Linux artifact LOCAL+verified (dist/v0.8.11); droplet destroyed.
+  Watchers: NUC completion (bezfxqqm0); mac arm64 mid-build.
