@@ -1015,14 +1015,14 @@ void AppendParsedItems(const base::ListValue* src,
 
 const char* SearchPromptForMode(const std::string& mode, bool has_image) {
   if (mode == "images" && has_image) {
-    return "You are Grok Vision Search for Xplor. Analyze the attached "
-           "image; use web search for similar images. Give a short answer, "
-           "then end with ONLY a ```json code block:\n"
-           "{\"answer\":\"...\",\"images\":[{\"title\":\"...\",\"url\":"
-           "\"https://...\",\"thumbnail\":\"https://...\",\"source\":"
-           "\"...\"}],\"links\":[{\"title\":\"...\",\"url\":\"https://..."
-           ",\"snippet\":\"...\"}]}\n"
-           "Include up to 20 image results.";
+    // Pure vision describe. grok-composer (the only vision model) has NO web
+    // search, so any "find similar images"/JSON instruction makes it loop on
+    // tools forever. Keep it single-shot: look at the image, answer in prose.
+    return "You are Grok Vision for Xplor. Look ONLY at the attached image and "
+           "describe what it shows: identify the main subject and any notable "
+           "detail or on-screen text, then add brief useful context. Do NOT use "
+           "web search or any tools, and do NOT output JSON — answer directly "
+           "from the image in clear plain prose.";
   }
   if (mode == "images") {
     return "You are Grok Image Search for Xplor. Use web search for image "
@@ -1060,8 +1060,7 @@ base::CommandLine BuildGrokSearchCommand(const std::string& query,
                                          const SearchImageInput* image) {
   const bool has_image = image && !image->data.empty();
   std::string user_query =
-      query.empty() ? "Describe this image and find similar images online."
-                    : query;
+      query.empty() ? "Describe what is shown in this image." : query;
   std::string prompt = std::string(SearchPromptForMode(mode, has_image)) +
                        "\n\nQuery: " + user_query;
   base::CommandLine cmd(base::CommandLine::NO_PROGRAM);
@@ -1091,8 +1090,11 @@ base::CommandLine BuildGrokSearchCommand(const std::string& query,
   cmd.AppendArg("-m");
   cmd.AppendArg(model);
   cmd.AppendArg("--max-turns");
-  cmd.AppendArg(has_image ? "20" : "15");
-  if (mode == "imagine")
+  // Vision on an attached image is a single-shot describe — cap turns hard so
+  // grok-composer can't loop trying to "find similar images" (it has no web
+  // search); also disable web search outright for the image + imagine paths.
+  cmd.AppendArg(has_image ? "2" : "15");
+  if (mode == "imagine" || has_image)
     cmd.AppendArg("--disable-web-search");
   return cmd;
 }
