@@ -773,6 +773,17 @@ base::DictValue GetGrokInstallStatus() {
 }
 
 base::ListValue ListGrokModels() {
+  // "grok models" is a ~1s synchronous subprocess and /api/status calls this
+  // on every side-panel / search-page open (measured: status 0.99s vs <1ms for
+  // every other endpoint). The list only changes when the user reconfigures
+  // grok, so cache it for a few minutes. Handlers run on one gateway thread,
+  // so plain statics are fine.
+  static base::NoDestructor<base::ListValue> cached;
+  static base::TimeTicks cached_at;
+  if (!cached->empty() &&
+      base::TimeTicks::Now() - cached_at < base::Minutes(5)) {
+    return cached->Clone();
+  }
   base::CommandLine cmd(base::CommandLine::NO_PROGRAM);
   cmd.SetProgram(ResolveGrokBinary());
   cmd.AppendArg("models");
@@ -810,7 +821,11 @@ base::ListValue ListGrokModels() {
     m.Set("label", ModelDisplayName(id));
     models.Append(std::move(m));
   }
-  return models.empty() ? DefaultModelList() : std::move(models);
+  if (models.empty())
+    return DefaultModelList();
+  *cached = models.Clone();
+  cached_at = base::TimeTicks::Now();
+  return models;
 }
 
 struct SearchImageInput {
