@@ -64,6 +64,18 @@ region, else whole-tab (sidebar button). Compiled (framework Jul 1 12:58; `/api/
 test of the overlay. Note: right-click-on-an-`<img>` also drag-selects (hooking LensSearchController loses
 the specific image bitmap) — acceptable v1.
 
+## Post-test fixes (2026-07-01)
+- **Tool loop** (menu region-select captured but Grok hung "searching for similar Cybertruck photos /
+  checking the xplorer MCP path"): the `mode=images` system prompt told grok-composer to web-search + emit
+  20-image JSON with `--max-turns 20`; composer has no web search, so it looped forever. Fix: pure
+  single-shot vision prompt (no web/tools/JSON), `--max-turns 2`, `--disable-web-search`. Verified via the
+  gateway: clean prose, 0 tool events, no JSON block.
+- **Sidebar 🖼️ button**: was whole-tab `/api/screenshot` (hung at "Capturing this tab…") with no area
+  select. Now `POST /api/region-search` → `grok_companion::GrokImageSearchForTab` → the SAME native
+  ScreenshotFlow drag-select as the menu. Endpoint live (200). Both entry points unified.
+- **Output polish**: `stripJsonBlock()` drops any leaked JSON; neutral vision query; `.code-block`
+  `max-width:100%` so a long line can't blow out the panel.
+
 ## Files
 - `companion/ui/app.js` (`runImageSearch`, `renderMessages` thumbnail) · `companion/ui/index.html` (#img-search)
 - gateway: `agent_gateway/grok_native.cc` (screenshot 1991, ExtractSearchImage 2741, BuildGrokSearchCommand
