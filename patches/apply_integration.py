@@ -2292,6 +2292,56 @@ def main(src: Path):
         acp.write_text(ac)
         print(f"  edited: {acp}")
 
+    # XPLORER: route Chrome's Google Lens "Search this tab with Image Search" and
+    # the right-click "Search image with Google Lens" into Grok vision. Google Lens
+    # is disabled in this fork; replace the LensSearchController overlay entry
+    # points with grok_companion::GrokImageSearchForTab, which opens the Grok side
+    # panel — the sidebar then screenshots the active tab and runs a Grok vision
+    # analysis (grok-composer). Body-replaced via brace matching so the long method
+    # bodies don't have to be reproduced verbatim.
+    lsc = src / "chrome/browser/ui/lens/lens_search_controller.cc"
+    lt = lsc.read_text()
+    if "GrokImageSearchForTab" not in lt:
+        anchor_inc = '#include "chrome/browser/ui/lens/lens_search_controller.h"'
+        if anchor_inc not in lt:
+            raise SystemExit("XPLORER: lens_search_controller.cc include anchor missing")
+        lt = lt.replace(
+            anchor_inc,
+            anchor_inc +
+            '\n#include "chrome/browser/grok_companion/grok_companion_util.h"  // XPLORER'
+            '\n#include "components/tabs/public/tab_interface.h"  // XPLORER', 1)
+        grok_body = (
+            "\n  // XPLORER: Google Lens image search is disabled; route to Grok "
+            "vision.\n"
+            "  grok_companion::GrokImageSearchForTab(\n"
+            "      GetTabInterface() ? GetTabInterface()->GetBrowserWindowInterface()\n"
+            "                        : nullptr);\n}")
+        for sig in (
+            "void LensSearchController::OpenLensOverlay(\n"
+            "    lens::LensOverlayInvocationSource invocation_source,\n"
+            "    bool should_show_csb) {",
+            "void LensSearchController::OpenLensOverlayWithPendingRegion(\n"
+            "    lens::LensOverlayInvocationSource invocation_source,\n"
+            "    lens::mojom::CenterRotatedBoxPtr region,\n"
+            "    const SkBitmap& region_bitmap) {",
+        ):
+            i = lt.find(sig)
+            if i < 0:
+                raise SystemExit("XPLORER: lens overlay signature not found: " + sig[:48])
+            depth = 0
+            j = i + len(sig) - 1  # the opening '{'
+            while j < len(lt):
+                if lt[j] == "{":
+                    depth += 1
+                elif lt[j] == "}":
+                    depth -= 1
+                    if depth == 0:
+                        break
+                j += 1
+            lt = lt[:i] + sig + grok_body + lt[j + 1:]
+        lsc.write_text(lt)
+        print(f"  edited: {lsc}")
+
     # Arc-style vertical sidebar: "Tabs" section label + agent tab group.
     patch_vertical_sidebar(src)
 

@@ -602,6 +602,11 @@ std::string ResolveSearchModel(const std::string& mode,
   std::string model =
       request_model && !request_model->empty() ? *request_model
                                                : GetConfiguredSearchModel();
+  // XPLORER: only grok-composer has in-context vision; image search must use it
+  // regardless of the configured/default search model (grok-build is blind to
+  // images — it treats them as a missing file attachment and fails).
+  if (mode == "images")
+    return kComposerModel;
   if (SearchModeNeedsWebTools(mode) && model == kComposerModel)
     return kSearchModel;
   if (SearchModeNeedsWebTools(mode) && model == kDefaultModel)

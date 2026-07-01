@@ -510,4 +510,12 @@ void OpenGrokSidePanelAt(BrowserWindowInterface* browser,
   contents->GetController().LoadURLWithParams(params);
 }
 
+void GrokImageSearchForTab(BrowserWindowInterface* browser) {
+  // XPLORER: replaces Google Lens "Search this tab with Image Search". Opens the
+  // Grok side panel at the image-search entry; the sidebar screenshots the active
+  // tab and streams a Grok vision analysis (grok-composer). See app.js
+  // runImageSearch() and the ?imagesearch=1 one-shot trigger.
+  OpenGrokSidePanelAt(browser, "/?imagesearch=1");
+}
+
 }  // namespace grok_companion

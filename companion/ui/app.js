@@ -1044,6 +1044,12 @@ initModels().then(() => refresh().then(() => {
   }
   startRemotePoll();
   consumePendingApp();
+  if (urlParams.get('imagesearch')) {
+    // Native "Search this tab with Image Search" (Lens) routed here by
+    // grok_companion::GrokImageSearchForTab — capture the active tab + Grok vision.
+    history.replaceState(null, '', location.pathname);  // consume the one-shot trigger
+    runImageSearch();
+  }
 }));
 
 // Cross-platform "update available" banner (no-op on macOS, where Sparkle's
