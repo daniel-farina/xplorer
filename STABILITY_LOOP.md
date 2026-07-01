@@ -37,3 +37,11 @@
     XpRel0811 schtask re-running: repair -> apply -> build -> package v0.8.11.
   * macOS: release_arch.sh arm64 + x64 v0.8.11 running (sign+notarize; /tmp/mac_rel_0811.log).
   NEXT: collect all 3, then P4 gh release create v0.8.11 --draft (NO publish, NO appcast).
+- 18:5x iter2: LINUX ✓ compiled clean on release/0.8.11 (build_exit=0; region-search + vision prompt in
+  the binary) + packaged Xplor-linux-x64.tar.gz v0.8.11 (216M, on the droplet). MAC: first run failed —
+  release_arch applies on an ALREADY-APPLIED tree and the vtgh.h edits aren't re-runnable (interleaved
+  insertions break the idempotency check); reverted to pristine + relaunched, apply passed (0 anchor
+  failures), arm64 compiling. NUC: repair v2's file-list parse was broken (MatchInfo vs .Line) so nothing
+  was restored; also update-index --really-refresh does NOT detect the stale files — only rm+checkout -f
+  per file works (proven on vtgh.h). repair3 (fixed parse) launched; NUC went unresponsive under the
+  full-tree checkout (or the ssh timeout killed it) — re-verify next tick.
