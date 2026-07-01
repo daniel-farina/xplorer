@@ -44,6 +44,13 @@ function renderMessages(conv) {
       appendMsgMeta(div, m);
     } else {
       div.textContent = m.content || '';
+      if (m.image) {
+        const img = document.createElement('img');
+        img.src = m.image;
+        img.alt = 'captured tab';
+        img.style.cssText = 'display:block;max-width:220px;max-height:160px;margin-top:6px;border-radius:8px;border:1px solid rgba(127,127,127,.3);';
+        div.appendChild(img);
+      }
     }
     messagesEl.appendChild(div);
   }
@@ -639,6 +646,104 @@ async function sendMessage(text, { retry = false, convId = activeId } = {}) {
   }
 }
 
+// ---- Grok image search: capture the current tab, stream a Grok vision answer.
+// No rebuild — reuses POST /api/screenshot + POST /api/search/stream (mode=images)
+// forced onto grok-composer-2.5-fast (the only vision-capable model). The query is
+// phrased to answer directly from the image, sidestepping the mode=images system
+// prompt's "web search for similar images" instruction that grok-composer can't do.
+async function runImageSearch() {
+  if (!(await ensureGrokReady())) return;
+  // Reuse the active chat only if it's empty and idle; else start a fresh one.
+  let convId = activeId;
+  const cur = currentConv();
+  if (!convId || isRunning(convId) || (cur?.messages?.length)) {
+    const conv = await api('/api/conversations', { method: 'POST', body: '{}' });
+    conversations.unshift(conv);
+    convId = conv.id;
+    activeId = convId;
+  }
+  const conv = conversations.find((c) => c.id === convId);
+  if (!conv) return;
+  conv.messages = conv.messages || [];
+
+  const st = { aborter: new AbortController(), running: true, reply: '', status: 'Capturing this tab…', thinking: '', error: null, model: 'grok-composer-2.5-fast' };
+  streams[convId] = st;
+  renderConvList();
+  if (convId === activeId) { renderMessages(conv); setComposerRunning(); }
+  updateActiveBadge();
+
+  let shot;
+  try {
+    shot = await api('/api/screenshot', { method: 'POST', body: '{}' });
+    if (!shot || !shot.image) throw new Error(shot?.error || 'capture failed');
+  } catch (e) {
+    st.running = false;
+    st.error = { msg: 'Could not capture the tab: ' + (e.message || ''), text: '' };
+    if (convId === activeId) renderMessages(conv);
+    renderConvList(); updateActiveBadge();
+    return;
+  }
+
+  conv.messages.push({
+    role: 'user',
+    content: '\u{1F5BC}\u{FE0F} Search this tab’s image with Grok' + (shot.title ? ' — ' + shot.title : ''),
+    image: 'data:' + (shot.mime_type || 'image/png') + ';base64,' + shot.image,
+  });
+  st.status = 'Grok is looking at the image…';
+  if (convId === activeId) renderMessages(conv);
+
+  let reply = '';
+  try {
+    const res = await fetch('/api/search/stream', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        mode: 'images',
+        image: shot.image,
+        image_mime: shot.mime_type || 'image/png',
+        model: 'grok-composer-2.5-fast',
+        query: 'Describe exactly what is visible in this screenshot of my browser tab: what the page or app is, its main content, and any notable text or UI. Then add any useful context. Answer directly from the image; do NOT call any tools or web search.',
+      }),
+      signal: st.aborter.signal,
+    });
+    if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.error || res.statusText); }
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      let idx;
+      while ((idx = buffer.indexOf('\n')) >= 0) {
+        const line = buffer.slice(0, idx).trim();
+        buffer = buffer.slice(idx + 1);
+        if (!line) continue;
+        const evt = parseStreamLine(line);
+        if (!evt) continue;
+        if (evt.type === 'thought') { st.thinking += evt.data || ''; updateTail(convId); }
+        else if (evt.type === 'tool' || evt.type === 'tool_use') { st.status = 'Using ' + (evt.name || evt.tool || 'tool') + '…'; updateTail(convId); }
+        else if (evt.type === 'text') { reply += evt.data || ''; st.reply = reply; updateTail(convId); }
+        else if (evt.type === 'result') { if (evt.reply) { reply = evt.reply; st.reply = reply; } }
+        else if (evt.type === 'error') { throw new Error(evt.message || evt.error || 'image search failed'); }
+      }
+    }
+    if (reply.trim()) { conv.messages.push({ role: 'assistant', content: reply, model: st.model }); delete streams[convId]; }
+    else { throw new Error('empty response from Grok'); }
+  } catch (e) {
+    if (e.name === 'AbortError') {
+      if (reply.trim()) conv.messages.push({ role: 'assistant', content: reply.trim() + '\n\n_(stopped)_', model: st.model });
+      delete streams[convId];
+    } else {
+      st.error = { msg: e.message || 'image search failed', text: '' };
+    }
+  } finally {
+    if (streams[convId]) streams[convId].running = false;
+    updateActiveBadge(); renderConvList();
+    if (convId === activeId) { renderMessages(currentConv()); setComposerRunning(); }
+  }
+}
+
 // ---- Xplorer: message queue + per-chat info panel -------------------------
 function enqueueMessage(convId, text) {
   const t = (text || '').trim();
@@ -817,6 +922,7 @@ $('#composer').onsubmit = (e) => {
 };
 
 $('#new-chat').onclick = newChat;
+document.getElementById('img-search')?.addEventListener('click', () => runImageSearch());
 
 stopBtn?.addEventListener('click', () => {
   if (activeId) stopChat(activeId);
