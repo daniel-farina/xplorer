@@ -74,3 +74,8 @@
   sha VERIFIED (938865da…dec; the .sha file is CRLF so shasum -c needs tolerance — cosmetic).
   Draft release v0.8.11 now has ALL 10 ASSETS (mac arm64+x86_64 dmg/zip/sha, linux tar.gz+sha,
   windows zip+sha). draft:true throughout — NOT published. P1-P4 ALL COMPLETE; P5 soak continues.
+- 21:5x P5: WINDOWS packaged-zip SMOKE ALL GREEN (gateway/status/search 200/pending-image/region-search/
+  conv+append) -> all 3 platforms now smoke-tested on their actual release artifacts. Soak rounds 1-2:
+  0 anomalies. Mem healthy (main 311MB RSS). PERF finding FIXED (next build): /api/status was 0.99s —
+  ListGrokModels execs 'grok models' every call; now cached 5min (~1ms). Vision timing on release binary:
+  first token 18.1s, complete 21.9s (grok-composer inference-bound; acceptable v1).
