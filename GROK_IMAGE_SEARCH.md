@@ -53,6 +53,17 @@ system prompt (cosmetic).
 - Probes before coding: confirm the `WebContents` accessor on `LensSearchController`; verify multi-turn
   vision (does `-p -r <session>` retain the first-turn image?).
 
+## Phase 2 — native region drag-select  ✅ BUILT + macOS-TESTED (commit pending)
+Reuses Chromium's `image_editor::ScreenshotFlow` — the Lens menu now dims the page and lets the user drag
+a rectangle (like the original Lens), instead of grabbing the whole viewport. `GrokRegionCapture`
+(self-owned) runs the flow → encodes the region PNG (base64) → `~/.xplorer/pending_image.b64` → opens the
+side panel. New `GET /api/pending-image` serves+clears it (verified: empty→`{"image":null}`,
+with-file→returns 16-char payload + deletes the file); `app.js` `runImageSearch()` prefers the pending
+region, else whole-tab (sidebar button). Compiled (framework Jul 1 12:58; `/api/pending-image` +
+`pending_image.b64` both in binary). Added `//chrome/browser/image_editor` dep. PENDING: user click+drag
+test of the overlay. Note: right-click-on-an-`<img>` also drag-selects (hooking LensSearchController loses
+the specific image bitmap) — acceptable v1.
+
 ## Files
 - `companion/ui/app.js` (`runImageSearch`, `renderMessages` thumbnail) · `companion/ui/index.html` (#img-search)
 - gateway: `agent_gateway/grok_native.cc` (screenshot 1991, ExtractSearchImage 2741, BuildGrokSearchCommand
