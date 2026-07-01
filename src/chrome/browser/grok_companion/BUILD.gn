@@ -13,6 +13,7 @@ source_set("grok_companion") {
     "//base",
     "//chrome/common",
     "//chrome/browser/agent_gateway",
+    "//chrome/browser/image_editor",
     "//chrome/browser/profiles",
     "//chrome/browser/themes",
     "//chrome/browser/ui",

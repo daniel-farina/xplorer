@@ -44,6 +44,13 @@ function renderMessages(conv) {
       appendMsgMeta(div, m);
     } else {
       div.textContent = m.content || '';
+      if (m.image) {
+        const img = document.createElement('img');
+        img.src = m.image;
+        img.alt = 'captured tab';
+        img.style.cssText = 'display:block;max-width:220px;max-height:160px;margin-top:6px;border-radius:8px;border:1px solid rgba(127,127,127,.3);';
+        div.appendChild(img);
+      }
     }
     messagesEl.appendChild(div);
   }
@@ -639,6 +646,139 @@ async function sendMessage(text, { retry = false, convId = activeId } = {}) {
   }
 }
 
+// Strip the trailing ```json {...} block the mode=images system prompt appends —
+// the prose answer above it is what we show; the raw JSON only bloats + (as one
+// long line in a code block) blows out the panel width.
+function stripJsonBlock(s) {
+  const cut = (s || '').split(/```json/i)[0].trim();
+  return cut || (s || '').trim();
+}
+
+// Persist an image-search message server-side so the chat survives a
+// refresh/remote-poll — /api/search/stream doesn't write to the conversation.
+async function persistImageMsg(convId, role, content, image, model) {
+  const body = { role, content };
+  if (image) body.image = image;
+  if (model) body.model = model;
+  const payload = JSON.stringify(body);
+  // Retry a couple of times — under a burst (several image searches at once) a
+  // connection can be dropped, and a lost append means the chat vanishes on the
+  // next refresh.
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      await api('/api/conversations/' + convId + '/append', { method: 'POST', body: payload });
+      return;
+    } catch (e) {
+      await new Promise((r) => setTimeout(r, 250 * (attempt + 1)));
+    }
+  }
+}
+
+// Shrink a captured image to a small thumbnail (persisted with the user message
+// so the chat doesn't carry megabytes of base64 in the session store).
+function downscaleDataUrl(dataUrl, max = 240) {
+  return new Promise((resolve) => {
+    try {
+      const img = new Image();
+      img.onload = () => {
+        const s = Math.min(1, max / Math.max(img.width, img.height));
+        const w = Math.max(1, Math.round(img.width * s));
+        const h = Math.max(1, Math.round(img.height * s));
+        const c = document.createElement('canvas'); c.width = w; c.height = h;
+        c.getContext('2d').drawImage(img, 0, 0, w, h);
+        try { resolve(c.toDataURL('image/jpeg', 0.7)); } catch { resolve(dataUrl); }
+      };
+      img.onerror = () => resolve(dataUrl);
+      img.src = dataUrl;
+    } catch { resolve(dataUrl); }
+  });
+}
+
+// ---- Grok image search: capture the current tab, stream a Grok vision answer.
+// No rebuild — reuses POST /api/screenshot + POST /api/search/stream (mode=images)
+// forced onto grok-composer-2.5-fast (the only vision-capable model). The query is
+// phrased to answer directly from the image, sidestepping the mode=images system
+// prompt's "web search for similar images" instruction that grok-composer can't do.
+async function runImageSearch(shot) {
+  if (!shot || !shot.image) return;
+  if (!(await ensureGrokReady())) return;
+  // Image search always opens a FRESH chat — never hijack the current one.
+  const conv = await api('/api/conversations', { method: 'POST', body: '{}' });
+  conversations.unshift(conv);
+  const convId = conv.id;
+  activeId = convId;
+  conv.messages = conv.messages || [];
+
+  const st = { aborter: new AbortController(), running: true, reply: '', status: 'Grok is looking at the image…', thinking: '', error: null, model: 'grok-composer-2.5-fast' };
+  streams[convId] = st;
+  renderConvList();
+  if (convId === activeId) { renderMessages(conv); setComposerRunning(); }
+  updateActiveBadge();
+
+  const userContent = '\u{1F5BC}\u{FE0F} Search this selection with Grok';
+  const thumb = await downscaleDataUrl(
+    'data:' + (shot.mime_type || 'image/png') + ';base64,' + shot.image);
+  conv.messages.push({ role: 'user', content: userContent, image: thumb });
+  persistImageMsg(convId, 'user', userContent, thumb);  // persist so it survives refresh
+  st.status = 'Grok is looking at the image…';
+  if (convId === activeId) renderMessages(conv);
+
+  let reply = '';
+  try {
+    const res = await fetch('/api/search/stream', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        mode: 'images',
+        image: shot.image,
+        image_mime: shot.mime_type || 'image/png',
+        model: 'grok-composer-2.5-fast',
+        query: 'Describe exactly what is visible in this image: identify the main subject or content and any notable text or UI, then add any useful context. Answer directly from the image; do not call any tools or web search. Reply in plain prose — do NOT output JSON.',
+      }),
+      signal: st.aborter.signal,
+    });
+    if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.error || res.statusText); }
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      let idx;
+      while ((idx = buffer.indexOf('\n')) >= 0) {
+        const line = buffer.slice(0, idx).trim();
+        buffer = buffer.slice(idx + 1);
+        if (!line) continue;
+        const evt = parseStreamLine(line);
+        if (!evt) continue;
+        if (evt.type === 'thought') { st.thinking += evt.data || ''; updateTail(convId); }
+        else if (evt.type === 'tool' || evt.type === 'tool_use') { st.status = 'Using ' + (evt.name || evt.tool || 'tool') + '…'; updateTail(convId); }
+        else if (evt.type === 'text') { reply += evt.data || ''; st.reply = reply; updateTail(convId); }
+        else if (evt.type === 'result') { if (evt.reply) { reply = evt.reply; st.reply = reply; } }
+        else if (evt.type === 'error') { throw new Error(evt.message || evt.error || 'image search failed'); }
+      }
+    }
+    const clean = stripJsonBlock(reply);
+    if (clean.trim()) {
+      conv.messages.push({ role: 'assistant', content: clean, model: st.model });
+      persistImageMsg(convId, 'assistant', clean, null, st.model);
+      delete streams[convId];
+    } else { throw new Error('empty response from Grok'); }
+  } catch (e) {
+    if (e.name === 'AbortError') {
+      if (reply.trim()) conv.messages.push({ role: 'assistant', content: stripJsonBlock(reply) + '\n\n_(stopped)_', model: st.model });
+      delete streams[convId];
+    } else {
+      st.error = { msg: e.message || 'image search failed', text: '' };
+    }
+  } finally {
+    if (streams[convId]) streams[convId].running = false;
+    updateActiveBadge(); renderConvList();
+    if (convId === activeId) { renderMessages(currentConv()); setComposerRunning(); }
+  }
+}
+
 // ---- Xplorer: message queue + per-chat info panel -------------------------
 function enqueueMessage(convId, text) {
   const t = (text || '').trim();
@@ -817,6 +957,13 @@ $('#composer').onsubmit = (e) => {
 };
 
 $('#new-chat').onclick = newChat;
+document.getElementById('img-search')?.addEventListener('click', () => {
+  // Trigger the same native region drag-select as the Lens menu — the user drags
+  // an area on the page; the selection lands in the one-shot pending image, which
+  // checkPendingImageSearch() polls up (no panel reload, so running searches
+  // keep streaming).
+  api('/api/region-search', { method: 'POST', body: '{}' }).catch(() => {});
+});
 
 stopBtn?.addEventListener('click', () => {
   if (activeId) stopChat(activeId);
@@ -939,6 +1086,26 @@ initModels().then(() => refresh().then(() => {
   startRemotePoll();
   consumePendingApp();
 }));
+
+// ---- Grok image search pickup: the native drag-select (menu or the sidebar
+// button via /api/region-search) writes a one-shot pending image; poll for it
+// instead of the old ?imagesearch=1 panel NAVIGATION, which reloaded this page
+// and killed every in-flight stream (only the newest search survived).
+let pendingImagePollBusy = false;
+async function checkPendingImageSearch() {
+  if (pendingImagePollBusy || document.visibilityState !== 'visible') return;
+  pendingImagePollBusy = true;
+  try {
+    const pending = await api('/api/pending-image').catch(() => null);
+    if (pending && pending.image) runImageSearch(pending);  // not awaited: searches run concurrently
+  } finally {
+    pendingImagePollBusy = false;
+  }
+}
+setInterval(checkPendingImageSearch, 1200);
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') checkPendingImageSearch();
+});
 
 // Cross-platform "update available" banner (no-op on macOS, where Sparkle's
 // native dialog handles it). The gateway only checks upstream every ~6h, so a

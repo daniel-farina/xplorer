@@ -18,8 +18,12 @@
 #include "base/strings/escape.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/base64.h"
+#include "base/memory/raw_ptr.h"
 #include "chrome/browser/agent_gateway/agent_gateway.h"
 #include "chrome/browser/agent_gateway/xplorer_paths.h"
+#include "chrome/browser/image_editor/screenshot_flow.h"
+#include "ui/gfx/image/image.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_features.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
@@ -508,6 +512,85 @@ void OpenGrokSidePanelAt(BrowserWindowInterface* browser,
   content::NavigationController::LoadURLParams params(dest);
   params.transition_type = ui::PAGE_TRANSITION_AUTO_TOPLEVEL;
   contents->GetController().LoadURLWithParams(params);
+}
+
+namespace {
+// Owns a ScreenshotFlow for one region drag-select, then self-deletes. On a
+// successful selection it writes the region PNG (base64) to a one-shot pending
+// file the sidebar reads via GET /api/pending-image, and opens the Grok side
+// panel to run the vision search. On cancel/navigate it just cleans up.
+class GrokRegionCapture {
+ public:
+  // One drag-select at a time: a rapid second trigger (double-clicked button /
+  // menu while an overlay is up) would stack a second ScreenshotFlow overlay on
+  // the tab. The flag flips back in OnCaptured (select/escape/navigate all land
+  // there).
+  static bool active_;
+
+  GrokRegionCapture(BrowserWindowInterface* browser,
+                    content::WebContents* web_contents)
+      : browser_(browser),
+        flow_(std::make_unique<image_editor::ScreenshotFlow>(web_contents)) {
+    active_ = true;
+    flow_->Start(base::BindOnce(&GrokRegionCapture::OnCaptured,
+                                base::Unretained(this)));
+  }
+  GrokRegionCapture(const GrokRegionCapture&) = delete;
+  GrokRegionCapture& operator=(const GrokRegionCapture&) = delete;
+
+ private:
+  void OnCaptured(const image_editor::ScreenshotCaptureResult& result) {
+    active_ = false;
+    if (result.result_code ==
+            image_editor::ScreenshotCaptureResultCode::SUCCESS &&
+        !result.image.IsEmpty()) {
+      scoped_refptr<base::RefCountedMemory> png = result.image.As1xPNGBytes();
+      if (png && png->size()) {
+        base::FilePath f =
+            xplorer_paths::DataDir().AppendASCII("pending_image.b64");
+        base::CreateDirectory(f.DirName());
+        base::WriteFile(f, base::Base64Encode(*png));
+      }
+      // Open (or re-show) the panel WITHOUT navigating: a reload would kill any
+      // in-flight image-search stream already running in the page (only the
+      // newest search would survive). The chat page polls /api/pending-image
+      // and picks this capture up. Only navigate when the panel is parked on a
+      // different page (e.g. /schedules), where no poller runs.
+      OpenGrokSidePanel(browser_);
+      content::WebContents* live = LiveCompanionContents().get();
+      if (live && live->GetLastCommittedURL().path() != "/") {
+        content::NavigationController::LoadURLParams params(GetCompanionURL());
+        params.transition_type = ui::PAGE_TRANSITION_AUTO_TOPLEVEL;
+        live->GetController().LoadURLWithParams(params);
+      }
+    }
+    delete this;
+  }
+  raw_ptr<BrowserWindowInterface> browser_;
+  std::unique_ptr<image_editor::ScreenshotFlow> flow_;
+};
+
+// static
+bool GrokRegionCapture::active_ = false;
+}  // namespace
+
+void GrokImageSearchForTab(BrowserWindowInterface* browser) {
+  // XPLORER: replaces Google Lens "Search this tab with Image Search" + the
+  // right-click "Search image with Google Lens". Reuse Chromium's ScreenshotFlow
+  // so the user drags a region on the live page; the selected region is sent to
+  // Grok vision (grok-composer) in the side panel. If the tab can't be resolved,
+  // fall back to a whole-tab capture in the sidebar.
+  if (!browser)
+    return;
+  if (GrokRegionCapture::active_)
+    return;  // a drag-select overlay is already up; ignore the double-trigger
+  tabs::TabInterface* tab = browser->GetActiveTabInterface();
+  content::WebContents* wc = tab ? tab->GetContents() : nullptr;
+  if (!wc) {
+    OpenGrokSidePanel(browser);  // nothing to capture; just show the panel
+    return;
+  }
+  new GrokRegionCapture(browser, wc);  // self-owned; deletes itself when done
 }
 
 }  // namespace grok_companion

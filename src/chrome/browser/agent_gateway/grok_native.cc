@@ -602,6 +602,11 @@ std::string ResolveSearchModel(const std::string& mode,
   std::string model =
       request_model && !request_model->empty() ? *request_model
                                                : GetConfiguredSearchModel();
+  // XPLORER: only grok-composer has in-context vision; image search must use it
+  // regardless of the configured/default search model (grok-build is blind to
+  // images — it treats them as a missing file attachment and fails).
+  if (mode == "images")
+    return kComposerModel;
   if (SearchModeNeedsWebTools(mode) && model == kComposerModel)
     return kSearchModel;
   if (SearchModeNeedsWebTools(mode) && model == kDefaultModel)
@@ -1010,14 +1015,14 @@ void AppendParsedItems(const base::ListValue* src,
 
 const char* SearchPromptForMode(const std::string& mode, bool has_image) {
   if (mode == "images" && has_image) {
-    return "You are Grok Vision Search for Xplor. Analyze the attached "
-           "image; use web search for similar images. Give a short answer, "
-           "then end with ONLY a ```json code block:\n"
-           "{\"answer\":\"...\",\"images\":[{\"title\":\"...\",\"url\":"
-           "\"https://...\",\"thumbnail\":\"https://...\",\"source\":"
-           "\"...\"}],\"links\":[{\"title\":\"...\",\"url\":\"https://..."
-           ",\"snippet\":\"...\"}]}\n"
-           "Include up to 20 image results.";
+    // Pure vision describe. grok-composer (the only vision model) has NO web
+    // search, so any "find similar images"/JSON instruction makes it loop on
+    // tools forever. Keep it single-shot: look at the image, answer in prose.
+    return "You are Grok Vision for Xplor. Look ONLY at the attached image and "
+           "describe what it shows: identify the main subject and any notable "
+           "detail or on-screen text, then add brief useful context. Do NOT use "
+           "web search or any tools, and do NOT output JSON — answer directly "
+           "from the image in clear plain prose.";
   }
   if (mode == "images") {
     return "You are Grok Image Search for Xplor. Use web search for image "
@@ -1055,8 +1060,7 @@ base::CommandLine BuildGrokSearchCommand(const std::string& query,
                                          const SearchImageInput* image) {
   const bool has_image = image && !image->data.empty();
   std::string user_query =
-      query.empty() ? "Describe this image and find similar images online."
-                    : query;
+      query.empty() ? "Describe what is shown in this image." : query;
   std::string prompt = std::string(SearchPromptForMode(mode, has_image)) +
                        "\n\nQuery: " + user_query;
   base::CommandLine cmd(base::CommandLine::NO_PROGRAM);
@@ -1086,8 +1090,11 @@ base::CommandLine BuildGrokSearchCommand(const std::string& query,
   cmd.AppendArg("-m");
   cmd.AppendArg(model);
   cmd.AppendArg("--max-turns");
-  cmd.AppendArg(has_image ? "20" : "15");
-  if (mode == "imagine")
+  // Vision on an attached image is a single-shot describe — cap turns hard so
+  // grok-composer can't loop trying to "find similar images" (it has no web
+  // search); also disable web search outright for the image + imagine paths.
+  cmd.AppendArg(has_image ? "2" : "15");
+  if (mode == "imagine" || has_image)
     cmd.AppendArg("--disable-web-search");
   return cmd;
 }
@@ -2999,6 +3006,25 @@ bool GrokNative::TryHandleRequest(
     return true;
   }
 
+  if (info.method == "GET" && path == "/api/pending-image") {
+    // One-shot: a native region drag-select (GrokImageSearchForTab) wrote a
+    // base64 PNG here; return it and clear it so the sidebar runs vision on the
+    // selected region instead of the whole tab.
+    base::DictValue d;
+    base::FilePath f =
+        xplorer_paths::DataDir().AppendASCII("pending_image.b64");
+    std::string b64;
+    if (base::PathExists(f) && base::ReadFileToString(f, &b64) && !b64.empty()) {
+      d.Set("image", b64);
+      d.Set("mime_type", "image/png");
+      base::DeleteFile(f);
+    } else {
+      d.Set("image", base::Value());
+    }
+    SendJson(server, connection_id, net::HTTP_OK, std::move(d));
+    return true;
+  }
+
   // Grok Build install check — the companion UI shows an install splash before
   // creating/building apps if grok isn't runnable.
   if (info.method == "GET" && path == "/api/grok/status") {
@@ -3381,6 +3407,33 @@ bool GrokNative::TryHandleRequest(
           }
           if (target)
             grok_companion::OpenGrokSidePanel(target);
+        }));
+    base::DictValue out;
+    out.Set("ok", true);
+    SendJson(server, connection_id, net::HTTP_OK, std::move(out));
+    return true;
+  }
+
+  // POST /api/region-search -> trigger the native Lens-style region drag-select
+  // on the active tab and route the selection to Grok vision (identical to the
+  // "Search this tab with Image Search" menu). Lets the sidebar image button
+  // select an area instead of grabbing the whole viewport.
+  if (info.method == "POST" && path == "/api/region-search") {
+    content::GetUIThreadTaskRunner({})->PostTask(
+        FROM_HERE, base::BindOnce([]() {
+          BrowserWindowInterface* target = nullptr;
+          for (BrowserWindowInterface* browser :
+               GetAllBrowserWindowInterfaces()) {
+            if (!target)
+              target = browser;
+            if (browser->GetTabStripModel() &&
+                browser->GetTabStripModel()->GetActiveWebContents()) {
+              target = browser;
+              break;
+            }
+          }
+          if (target)
+            grok_companion::GrokImageSearchForTab(target);
         }));
     base::DictValue out;
     out.Set("ok", true);
@@ -3912,6 +3965,72 @@ bool GrokNative::TryHandleRequest(
     d.Set("ok", true);
     d.Set("stopped", stopped);
     SendJson(server, connection_id, net::HTTP_OK, std::move(d));
+    return true;
+  }
+
+  // POST /api/conversations/{id}/append -> persist a role/content message (+ an
+  // optional data-url thumbnail) WITHOUT running Grok. Image search renders its
+  // vision via /api/search/stream (which doesn't persist to the conversation), so
+  // it saves the exchange here — otherwise the chat is client-side only and
+  // vanishes on the next refresh/remote-poll.
+  if (info.method == "POST" && base::StartsWith(path, "/api/conversations/") &&
+      base::EndsWith(path, "/append")) {
+    const std::string prefix = "/api/conversations/";
+    std::string rest = path.substr(prefix.size());
+    const size_t slash = rest.find('/');
+    std::string conv_id =
+        slash == std::string::npos ? rest : rest.substr(0, slash);
+    auto body = base::JSONReader::ReadDict(info.data, base::JSON_PARSE_RFC);
+    const std::string* role = body ? body->FindString("role") : nullptr;
+    const std::string* content = body ? body->FindString("content") : nullptr;
+    if (!role || !content) {
+      base::DictValue err;
+      err.Set("error", "role and content required");
+      SendJson(server, connection_id, net::HTTP_BAD_REQUEST, std::move(err));
+      return true;
+    }
+    const std::string* img = body ? body->FindString("image") : nullptr;
+    const std::string* mdl = body ? body->FindString("model") : nullptr;
+    base::DictValue data = LoadSessions();
+    base::ListValue* convs = data.FindList("conversations");
+    base::DictValue* conv = nullptr;
+    if (convs) {
+      for (auto& v : *convs) {
+        if (!v.is_dict())
+          continue;
+        const std::string* cid = v.GetDict().FindString("id");
+        if (cid && *cid == conv_id) {
+          conv = &v.GetDict();
+          break;
+        }
+      }
+    }
+    if (!conv) {
+      base::DictValue err;
+      err.Set("error", "conversation not found");
+      SendJson(server, connection_id, net::HTTP_NOT_FOUND, std::move(err));
+      return true;
+    }
+    base::ListValue* msgs = conv->FindList("messages");
+    if (!msgs) {
+      conv->Set("messages", base::ListValue());
+      msgs = conv->FindList("messages");
+    }
+    const bool first = msgs->empty();
+    base::DictValue m;
+    m.Set("role", *role);
+    m.Set("content", *content);
+    if (img && !img->empty())
+      m.Set("image", *img);
+    if (mdl && !mdl->empty())
+      m.Set("model", *mdl);
+    msgs->Append(std::move(m));
+    if (*role == "user" && first)
+      TitleConversationFromFirstMessage(conv, conv_id, *content);
+    SaveSessions(data);
+    base::DictValue out;
+    out.Set("ok", true);
+    SendJson(server, connection_id, net::HTTP_OK, std::move(out));
     return true;
   }
 
