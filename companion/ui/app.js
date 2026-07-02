@@ -459,6 +459,25 @@ function setComposerRunning() {
   if (stopBtn) stopBtn.hidden = !isRunning(activeId);
 }
 
+// ---- Stall watchdog: when the Grok backend is unavailable (e.g. an xAI 503
+// outage) the grok process retries silently and the stream emits NOTHING — the
+// UI would show "Grok is thinking…" forever. Every stream stamps lastEventAt on
+// each event; if a running stream goes 6 minutes with no events at all, abort
+// it (the abort path kills the server-side process via /stop) and show a clear
+// retryable error instead of an infinite spinner.
+const STALL_MS = 6 * 60 * 1000;
+setInterval(() => {
+  const now = Date.now();
+  for (const [convId, st] of Object.entries(streams)) {
+    if (!st.running || st.remote || !st.lastEventAt) continue;
+    if (now - st.lastEventAt > STALL_MS) {
+      st.stalled = true;
+      if (st.aborter) st.aborter.abort();
+      api('/api/conversations/' + convId + '/stop', { method: 'POST' }).catch(() => {});
+    }
+  }
+}, 30000);
+
 // Kill an agent: abort the UI stream AND terminate the grok process on the gateway.
 async function stopChat(convId) {
   const st = streams[convId];
@@ -565,7 +584,7 @@ async function sendMessage(text, { retry = false, convId = activeId } = {}) {
     if (convId === activeId) input.value = '';
   }
 
-  const st = { aborter: new AbortController(), running: true, reply: '', status: 'Grok is thinking…', thinking: '', error: null, model };
+  const st = { aborter: new AbortController(), running: true, reply: '', status: 'Grok is thinking…', thinking: '', error: null, model, lastEventAt: Date.now() };
   streams[convId] = st;
   if (convId === activeId) { renderMessages(conv); setComposerRunning(); }
   updateActiveBadge();
@@ -599,6 +618,7 @@ async function sendMessage(text, { retry = false, convId = activeId } = {}) {
         if (!line) continue;
         const evt = parseStreamLine(line);
         if (!evt) continue;
+        st.lastEventAt = Date.now();
         if (evt.type === 'thought') {
           st.thinking += evt.data || '';
           updateTail(convId);
@@ -621,7 +641,9 @@ async function sendMessage(text, { retry = false, convId = activeId } = {}) {
     if (reply.trim()) { conv.messages.push({ role: 'assistant', content: reply, model }); delete streams[convId]; }
     else { throw new Error('empty response from Grok'); }
   } catch (e) {
-    if (e.name === 'AbortError') {
+    if (e.name === 'AbortError' && st.stalled) {
+      st.error = { msg: 'No response from Grok for 6 minutes — the Grok service may be temporarily unavailable. Try again in a bit.', text };
+    } else if (e.name === 'AbortError') {
       if (reply.trim()) conv.messages.push({ role: 'assistant', content: reply.trim() + '\n\n_(stopped)_', model });
       delete streams[convId];
     } else {
@@ -709,11 +731,20 @@ async function runImageSearch(shot) {
   activeId = convId;
   conv.messages = conv.messages || [];
 
-  const st = { aborter: new AbortController(), running: true, reply: '', status: 'Grok is looking at the image…', thinking: '', error: null, model: 'grok-composer-2.5-fast' };
+  const st = { aborter: new AbortController(), running: true, reply: '', status: 'Grok is looking at the image…', thinking: '', error: null, model: 'grok-composer-2.5-fast', lastEventAt: Date.now() };
   streams[convId] = st;
   renderConvList();
   if (convId === activeId) { renderMessages(conv); setComposerRunning(); }
   updateActiveBadge();
+
+  // Oversized bodies (>~2MB base64) are dropped at the gateway's receive buffer
+  // (connection reset, no clean error), so shrink big captures client-side first.
+  if (shot.image.length > 1800000) {
+    const scaled = await downscaleDataUrl(
+      'data:' + (shot.mime_type || 'image/png') + ';base64,' + shot.image, 1600);
+    const m = /^data:([^;]+);base64,(.*)$/.exec(scaled);
+    if (m && m[2].length < shot.image.length) { shot = { ...shot, image: m[2], mime_type: m[1] }; }
+  }
 
   const userContent = '\u{1F5BC}\u{FE0F} Search this selection with Grok';
   const thumb = await downscaleDataUrl(
@@ -752,6 +783,7 @@ async function runImageSearch(shot) {
         if (!line) continue;
         const evt = parseStreamLine(line);
         if (!evt) continue;
+        st.lastEventAt = Date.now();
         if (evt.type === 'thought') { st.thinking += evt.data || ''; updateTail(convId); }
         else if (evt.type === 'tool' || evt.type === 'tool_use') { st.status = 'Using ' + (evt.name || evt.tool || 'tool') + '…'; updateTail(convId); }
         else if (evt.type === 'text') { reply += evt.data || ''; st.reply = reply; updateTail(convId); }
@@ -766,7 +798,9 @@ async function runImageSearch(shot) {
       delete streams[convId];
     } else { throw new Error('empty response from Grok'); }
   } catch (e) {
-    if (e.name === 'AbortError') {
+    if (e.name === 'AbortError' && st.stalled) {
+      st.error = { msg: 'No response from Grok for 6 minutes — the Grok service may be temporarily unavailable. Try again in a bit.', text: '' };
+    } else if (e.name === 'AbortError') {
       if (reply.trim()) conv.messages.push({ role: 'assistant', content: stripJsonBlock(reply) + '\n\n_(stopped)_', model: st.model });
       delete streams[convId];
     } else {
