@@ -84,3 +84,9 @@
   release binary: create job -> run -> status ok -> conversation has the exact expected reply (SCHED-OK);
   cleaned up. Soak "1 anomaly" was my counter counting the DONE line — 0 real anomalies across rounds 1-2.
   Round 3 running.
+- 22:5x P5 findings (2 real, both FIXED in-branch): (1) xAI API 503 outage exposed the infinite
+  'Grok is thinking…' spinner — grok retries silently, no stream events; added a 6-min stall watchdog
+  (aborts + /stop + retryable error). NOTE: the earlier 'chat stalled' scare was THIS outage, not a
+  binary bug — direct CLI also 503s. (2) >2MB request bodies are dropped at the gateway receive buffer
+  (connection reset, no clean error) — big captures now downscale client-side before POST.
+  Error paths verified: bad token 401, malformed JSON 400. Soak rounds 1-3: 0 real anomalies.
