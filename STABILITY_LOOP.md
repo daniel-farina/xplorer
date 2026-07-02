@@ -79,3 +79,8 @@
   0 anomalies. Mem healthy (main 311MB RSS). PERF finding FIXED (next build): /api/status was 0.99s —
   ListGrokModels execs 'grok models' every call; now cached 5min (~1ms). Vision timing on release binary:
   first token 18.1s, complete 21.9s (grok-composer inference-bound; acceptable v1).
+- 22:2x P5 sweep: pages /apps /schedules /settings /search all 200. UPDATE CHECKER CORRECT on 0.8.11:
+  current 0.8.11 vs appcast 0.8.10 -> available:false (no downgrade offer). SCHEDULER end-to-end on the
+  release binary: create job -> run -> status ok -> conversation has the exact expected reply (SCHED-OK);
+  cleaned up. Soak "1 anomaly" was my counter counting the DONE line — 0 real anomalies across rounds 1-2.
+  Round 3 running.
