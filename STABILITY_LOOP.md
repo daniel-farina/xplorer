@@ -90,3 +90,6 @@
   binary bug — direct CLI also 503s. (2) >2MB request bodies are dropped at the gateway receive buffer
   (connection reset, no clean error) — big captures now downscale client-side before POST.
   Error paths verified: bad token 401, malformed JSON 400. Soak rounds 1-3: 0 real anomalies.
+- 23:2x xAI RECOVERED — chat re-verified end-to-end on the release binary (CHAT-OK, 80s; service
+  still warming). The stall was 100% the upstream outage. Watchdog UI staged into the QA bundle;
+  fresh soak round running. (One tick was lost to the Anthropic classifier outage — read-only.)
