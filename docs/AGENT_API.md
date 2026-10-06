@@ -7,10 +7,22 @@ Two endpoints, both loopback-only, both live the moment the browser starts:
 | 9333 | CDP (WebSocket) | Full Chrome DevTools Protocol — point Playwright, Puppeteer, or any CDP client at `ws://127.0.0.1:9333`. No launch flags needed. |
 | 9334 | HTTP + WS | High-level Agent API (below). One round trip per primitive. |
 
-**Auth:** `Authorization: Bearer <token>` where the token is in
-`<profile dir>/agent_token` (e.g. `~/Library/Application Support/Chromium/agent_token`)
-or `$XPLORER_TOKEN`. The server binds 127.0.0.1 only; the token defends
-against cross-origin/localhost-probing attacks from web pages.
+**Discovery:** read the `url` and `token` from `~/.xplorer/gateway.json`, written
+by the browser at startup. The HTTP port may differ from 9334 when that port is
+occupied, so use the discovered URL. The Python SDK and MCP server also accept
+the legacy `~/.xbrowser/gateway.json` location when the current file is absent.
+SDK discovery happens when `Browser()` is constructed; recreate it after a
+gateway restart or port change. Discovered SDK URLs must be HTTP origins at
+`127.0.0.1`, `localhost`, or `[::1]`, with an optional port. Trailing slashes are
+removed; credentials, other paths, queries, and fragments are rejected.
+
+**Auth:** send `Authorization: Bearer <token>`. The Python SDK accepts an explicit
+`token` argument first, then a non-empty `$XPLORER_TOKEN`, then the discovered
+token. An explicit `port` overrides the discovered URL. Supplying both a port
+and a token (explicitly or through the environment) skips discovery. A manual
+token without a discovery file retains port 9334. The SDK does not forward its
+bearer token on HTTP redirects. The server binds 127.0.0.1 only;
+the token defends against cross-origin/localhost-probing attacks from web pages.
 
 ## HTTP routes
 
