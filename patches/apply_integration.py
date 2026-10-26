@@ -2715,9 +2715,9 @@ def patch_vertical_sidebar(src: Path):
     )
 
 
-# Release version. chrome/VERSION PATCH = MIN*100 + PAT (0.8.15 -> 815) so the
+# Release version. chrome/VERSION PATCH = MIN*100 + PAT (0.8.16 -> 816) so the
 # Windows installer and Sparkle (CFBundleVersion) see every release as newer.
-RELEASE_VERSION = "0.8.15"
+RELEASE_VERSION = "0.8.16"
 
 # Every Chromium-file edit, captured from the reference macOS tree as one patch
 # against the pin (after apply.sh's copy steps). The anchor edits below drifted
