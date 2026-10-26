@@ -7799,12 +7799,14 @@ diff --git a/chrome/installer/mini_installer/chrome.release b/chrome/installer/m
 index 173c859014..5cbaf1275c 100644
 --- a/chrome/installer/mini_installer/chrome.release
 +++ b/chrome/installer/mini_installer/chrome.release
-@@ -8,6 +8,8 @@
+@@ -8,6 +8,10 @@
  #
  chrome.exe: %(ChromeDir)s\
  chrome_proxy.exe: %(ChromeDir)s\
 +# XPLORER: companion UI in the version dir (gateway UiDir/DIR_MODULE).
 +companion\ui\*.*: %(VersionDir)s\companion\ui\
++# XPLORER: bundled MCP servers for the grok provisioner (SdkDir/DIR_MODULE).
++sdk\*.py: %(VersionDir)s\sdk\
  #
  # Chrome version dir assembly manifest.
  # The name of this file must match the name of the version dir, so we cannot

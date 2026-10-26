@@ -81,6 +81,10 @@ try {
     # UiDir() resolves it; without it the installed app's /search etc. 401).
     robocopy (Join-Path $Xplorer "companion\ui") (Join-Path $outPath "companion\ui") /E /NFL /NDL /NJH /NJS /NP | Out-Null
     if ($LASTEXITCODE -ge 8) { throw "robocopy failed staging companion\ui for installer (exit $LASTEXITCODE)" }
+    # Same for the MCP servers (sdk\*.py): chrome.release ships them to
+    # <VersionDir>\sdk, where the grok provisioner's SdkDir() (DIR_MODULE) looks.
+    robocopy (Join-Path $Xplorer "sdk") (Join-Path $outPath "sdk") *.py /NFL /NDL /NJH /NJS /NP | Out-Null
+    if ($LASTEXITCODE -ge 8) { throw "robocopy failed staging sdk for installer (exit $LASTEXITCODE)" }
     $global:LASTEXITCODE = 0
     Write-Host "autoninja -C out\$OutDir mini_installer ..."
     & autoninja -C "out\$OutDir" mini_installer
