@@ -1,0 +1,53 @@
+# Xplorer — active ungoogled-chromium degoogling series
+#
+# Vendored from ungoogled-chromium 149.0.7827.155-1
+#   (git 2a53b77d33b055a4a41139007fb60b6ec1960a48, https://github.com/ungoogled-software/ungoogled-chromium)
+# Upstream is BSD-3-Clause; see ./LICENSE.ungoogled. Patches are vendored VERBATIM
+# (byte-identical to upstream) so they diff cleanly against future ungoogled refreshes.
+#
+# These patches REMOVE Google phone-home / telemetry / tracking channels only. They were
+# each verified to apply cleanly to Xplorer's pinned Chromium 151.0.7897.0 tree (AFTER
+# Xplorer's own overlay) via `git apply --check`. They are applied by scripts/apply_ungoogled.sh,
+# which runs AFTER patches/apply_integration.py so Xplorer's Grok + branding edits stay
+# authoritative; application is best-effort (a drifted patch is logged, not fatal).
+#
+# DELIBERATELY EXCLUDED (see docs/UNGOOGLED.md): domain substitution (qjz9zk), binary
+# pruning, and every patch touching default search / new-tab / branding (they fight
+# Xplorer's Grok-as-default-search and Xplorer branding). Patches that do not apply to 151
+# or carry capability tradeoffs live in quarantine.series and are NOT applied.
+#
+# NOTE: a few of these change behavior, not just telemetry — flagged [BEHAVIORAL] below.
+
+# --- inox-patchset (Google phone-home removal) ---
+core/inox-patchset/0003-disable-autofill-download-manager.patch   # no autofill crowdsourcing upload to Google
+core/inox-patchset/0015-disable-update-pings.patch                # empty updater Update/Ping URLs
+core/inox-patchset/0021-disable-rlz.patch                         # compile out RLZ search-attribution tracking
+
+# --- iridium-browser (SafeBrowsing reporting removal; SB itself stays compiled in) ---
+core/iridium-browser/safe_browsing-disable-incident-reporting.patch          # no SB incident-report upload
+core/iridium-browser/safe_browsing-disable-reporting-of-safebrowsing-over.patch  # no client-side phishing verdict upload
+
+# --- ungoogled-chromium core ---
+core/ungoogled-chromium/disable-crash-reporter.patch              # no crash-dump upload to Google
+core/ungoogled-chromium/disable-fonts-googleapis-references.patch # drop fonts.googleapis.com references
+core/ungoogled-chromium/disable-gaia.patch                       # [BEHAVIORAL] no browser-level Google sign-in / sync
+core/ungoogled-chromium/disable-gcm.patch                        # disable Google Cloud Messaging (push)
+core/ungoogled-chromium/disable-network-time-tracker.patch       # no time.google network-time ping
+core/ungoogled-chromium/disable-untraceable-urls.patch           # blank RLZ financial-ping endpoint
+core/ungoogled-chromium/disable-webrtc-log-uploader.patch        # no WebRTC log upload to Google
+core/ungoogled-chromium/doh-changes.patch                        # [BEHAVIORAL] neutral DoH defaults (no Google auto-DoH)
+core/ungoogled-chromium/disable-mei-preload.patch                # drop Google Media-Engagement preload data
+core/ungoogled-chromium/remove-f1-shortcut.patch                 # F1 no longer opens support.google.com
+core/ungoogled-chromium/disable-domain-reliability.patch         # no Google Domain Reliability uploads
+core/ungoogled-chromium/disable-profile-avatar-downloading.patch # no profile-avatar fetch from Google
+
+# --- bromite ---
+core/bromite/disable-fetching-field-trials.patch                 # never fetch variations/field-trials from Google
+
+# --- extra: fingerprinting / discovery / nags ---
+extra/inox-patchset/0019-disable-battery-status-service.patch    # remove Battery Status API (fingerprinting surface)
+extra/debian/disable/google-api-warning.patch                    # suppress "Google API keys are missing" nag (Xplorer ships empty keys)
+extra/inox-patchset/0013-disable-missing-key-warning.patch       # suppress the missing-API-key warning (companion to above)
+extra/ungoogled-chromium/default-webrtc-ip-handling-policy.patch # [BEHAVIORAL] default WebRTC IP policy that avoids local-IP leak
+extra/ungoogled-chromium/disable-dial-repeating-discovery.patch  # stop repeating DIAL/Cast discovery
+extra/ungoogled-chromium/disable-intranet-redirect-detector.patch # stop random-hostname captive-portal DNS probes

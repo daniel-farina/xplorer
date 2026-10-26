@@ -51,6 +51,7 @@ launch flags, no setup dance — and the app keeps itself current with in‑app 
 - [Project layout](#project-layout)
 - [Contributing](#contributing)
 - [Star history](#star-history)
+- [Acknowledgements](#acknowledgements)
 - [License](#license)
 
 ---
@@ -373,6 +374,17 @@ If Xplor is useful to you, please **[give it a ⭐ on GitHub](https://github.com
     </picture>
   </a>
 </p>
+
+---
+
+## Acknowledgements
+
+Xplorer's privacy hardening borrows degoogling patches from the
+[ungoogled-chromium](https://github.com/ungoogled-software/ungoogled-chromium) project (and
+the upstream patch sets it builds on) to strip Google phone‑home and telemetry from the
+Chromium base. Those patches are BSD‑3‑Clause licensed; see
+[`docs/UNGOOGLED.md`](docs/UNGOOGLED.md) for what we use and what we intentionally leave out.
+With thanks to the maintainers.
 
 ---
 

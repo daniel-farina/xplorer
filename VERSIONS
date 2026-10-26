@@ -1,0 +1,10 @@
+# Upstream version pins for the Xplorer overlay. Keep this in sync when bumping Chromium
+# or refreshing the vendored ungoogled patches. Grep-friendly; not parsed by the build.
+
+chromium  = 151.0.7897.0       # git cd1d42cba19c64f3386d5dfa1475d620b6efb6a4
+ungoogled = 149.0.7827.155-1   # git 2a53b77d33b055a4a41139007fb60b6ec1960a48 — source of patches/ungoogled/
+
+# NOTE: ungoogled-chromium has NO 150 or 151 release yet (it trails Chromium stable), so our
+# Chromium pin is ~2 milestones AHEAD of ungoogled. The vendored degoogling patches were
+# selected/validated against 151 by hand. When ungoogled ships a >=150 tag, refresh from it.
+# See docs/UNGOOGLED.md ("Keeping it updated").

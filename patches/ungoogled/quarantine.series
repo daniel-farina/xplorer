@@ -1,0 +1,30 @@
+# Xplorer — quarantined ungoogled-chromium patches (vendored but NOT applied)
+#
+# Same provenance as series (ungoogled-chromium 149.0.7827.155-1). These are kept in-repo
+# so they can be rebased and graduated into series once they apply to our Chromium pin,
+# but scripts/apply_ungoogled.sh does NOT apply them. Each line notes WHY it is quarantined.
+#
+# Two reasons appear:
+#   [DRIFT]      = fails `git apply --check` against our 151 tree (ungoogled targets 149;
+#                  needs a hand re-anchor now, or graduate when ungoogled ships a 150/151 tag).
+#   [TRADEOFF]   = applies fine, but changes a capability we deliberately keep; opt in knowingly.
+#   [COUPLED]    = only meaningful together with a GN flag we are holding back (safe_browsing_mode=0).
+
+# SafeBrowsing build-out stubs — required ONLY if you set safe_browsing_mode=0 in args.gn.
+# Both currently fail on 151. Until they are rebased, do NOT set safe_browsing_mode=0 or the
+# link will break. (Runtime SB *reporting* is already removed by the two iridium patches in series.)
+core/inox-patchset/0001-fix-building-without-safebrowsing.patch      # [DRIFT][COUPLED]
+core/ungoogled-chromium/fix-building-without-safebrowsing.patch      # [DRIFT][COUPLED]
+
+# High-value degoogling that needs a 151 re-anchor:
+core/ungoogled-chromium/disable-privacy-sandbox.patch               # [DRIFT] remove Google Privacy Sandbox ad APIs
+core/ungoogled-chromium/toggle-translation-via-switch.patch         # [DRIFT] gate translate.googleapis behind a flag
+core/ungoogled-chromium/remove-unused-preferences-fields.patch      # [DRIFT]
+core/ungoogled-chromium/disable-google-host-detection.patch         # [DRIFT] kills X-Client-Data header; RECONCILE: touches suggest plumbing near Grok omnibox — verify before graduating
+extra/ungoogled-chromium/disable-fedcm-by-default.patch             # [DRIFT] FedCM off by default
+extra/inox-patchset/0006-modify-default-prefs.patch                # [DRIFT] privacy-leaning default prefs
+
+# Capability tradeoffs (apply cleanly, but we keep the capability by default):
+core/inox-patchset/0005-disable-default-extensions.patch            # [DRIFT][TRADEOFF] removes bundled Google apps
+core/ungoogled-chromium/extensions-manifestv2.patch                # [DRIFT][TRADEOFF] re-enables MV2 extensions
+core/ungoogled-chromium/disable-webstore-urls.patch                # [TRADEOFF] removes Chrome Web Store access — conflicts with Xplorer's "every extension runs"; enable only if you want full Web Store removal
