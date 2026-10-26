@@ -4227,26 +4227,31 @@ diff --git a/chrome/browser/chrome_browser_main.cc b/chrome/browser/chrome_brows
 index 86f985f073..1cca9eb4ab 100644
 --- a/chrome/browser/chrome_browser_main.cc
 +++ b/chrome/browser/chrome_browser_main.cc
-@@ -3,6 +3,8 @@
+@@ -3,6 +3,9 @@
  // found in the LICENSE file.
  
  #include "chrome/browser/chrome_browser_main.h"
 +#include "chrome/browser/agent_gateway/agent_gateway.h"  // XPLORER
++#include "chrome/browser/agent_gateway/grok_provisioner.h"  // XPLORER
 +
  
  #include <memory>
  #include <string>
-@@ -1693,6 +1695,9 @@ void ChromeBrowserMainParts::PreBrowserStart() {
+@@ -1693,6 +1696,13 @@ void ChromeBrowserMainParts::PreBrowserStart() {
  
  void ChromeBrowserMainParts::PostBrowserStart() {
    TRACE_EVENT0("startup", "ChromeBrowserMainParts::PostBrowserStart");
++  // XPLORER: provision ~/.grok/config.toml on first run (bundled xplorer MCP
++  // server) so the sidebar agent works on machines without ~/.grok set up.
++  // Runs before the gateway starts; never clobbers an existing user config.
++  agent_gateway::ProvisionGrok();
 +  // XPLORER: start the AI-native agent gateway (HTTP 9334).
 +  agent_gateway::AgentGateway::Start(0);
 +
    for (auto& chrome_extra_part : chrome_extra_parts_) {
      chrome_extra_part->PostBrowserStart();
    }
-@@ -2215,6 +2220,11 @@ void ChromeBrowserMainParts::PostMainMessageLoopRun() {
+@@ -2215,6 +2225,11 @@ void ChromeBrowserMainParts::PostMainMessageLoopRun() {
    // disconnects DBus services in its PostDestroyThreads.
    UpgradeDetector::GetInstance()->Shutdown();
  

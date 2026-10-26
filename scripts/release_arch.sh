@@ -48,6 +48,14 @@ mkdir -p "$(dirname "$UI_DST")"
 rm -rf "$UI_DST"
 cp -R "$XPLORER/companion/ui" "$UI_DST"
 
+# XPLOR: bundle the MCP servers (sdk/*.py) so the grok provisioner can write a
+# ~/.grok/config.toml pointing at them on machines without a dev checkout.
+echo "==> [$ARCH] Bundling sdk (MCP servers for the grok provisioner)"
+SDK_DST="$APP/Contents/Resources/sdk"
+rm -rf "$SDK_DST"
+mkdir -p "$SDK_DST"
+cp "$XPLORER/sdk"/*.py "$SDK_DST/" 2>/dev/null || true
+
 # Stage Sparkle.framework into the bundle BEFORE signing so it is covered by the
 # signature. ditto preserves the Versions/Current symlink layout that a plain
 # cp -R would mangle.
