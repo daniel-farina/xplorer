@@ -161,6 +161,15 @@ else
   echo "WARN: companion UI not found at $UI_SRC — UI routes will 401." >&2
 fi
 
+# --- MCP servers (sdk/*.py) so the grok provisioner finds them on a packaged
+# build (DIR_EXE/sdk, mirrored under Resources/ like the companion UI). ---
+SDK_SRC="$XPLORER/sdk"
+if [ -d "$SDK_SRC" ]; then
+  mkdir -p "$ROOT/sdk" "$ROOT/Resources/sdk"
+  cp "$SDK_SRC"/*.py "$ROOT/sdk/" 2>/dev/null || true
+  cp "$SDK_SRC"/*.py "$ROOT/Resources/sdk/" 2>/dev/null || true
+fi
+
 # --- xplorer launcher wrapper ----------------------------------------------
 # Small POSIX-sh wrapper: resolves its own real dir (following symlinks), points
 # the gateway at the bundled companion UI, and execs the real chrome binary,
