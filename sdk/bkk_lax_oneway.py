@@ -55,9 +55,7 @@ def main() -> int:
     day_label = tomorrow.strftime("%-d")  # e.g. "13"
     month_year = tomorrow.strftime("%B %Y")  # e.g. "June 2026"
 
-    b = Browser(token=open(
-        __import__("pathlib").Path.home() / "Library/Application Support/Chromium/Default/agent_token"
-    ).read().strip())
+    b = Browser()
     b.open("https://www.google.com/travel/flights?hl=en&curr=USD")
     tab = b.tabs()[-1]["id"]
     p = Page(b, tab)
